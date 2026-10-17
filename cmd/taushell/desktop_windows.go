@@ -34,10 +34,12 @@ var frontendAssets embed.FS
 var sessionIDPattern = regexp.MustCompile(`[^a-z0-9]+`)
 
 type App struct {
-	manager         *sessionhost.Manager
-	ctx             context.Context
-	configDirectory string
-	webViewVersion  string
+	manager                *sessionhost.Manager
+	ctx                    context.Context
+	configDirectory        string
+	webViewVersion         string
+	showMessageDialog      func(context.Context, runtime.MessageDialogOptions) (string, error)
+	forcedShutdownWarnings []string
 }
 
 type ToolStatus struct {
@@ -77,13 +79,20 @@ func runDesktop() error {
 		return fmt.Errorf("initialize session manager: %w", err)
 	}
 	runErr := wails.Run(&options.App{
-		Title:         "TauShell",
-		Width:         1180,
-		Height:        780,
-		MinWidth:      760,
-		MinHeight:     520,
-		AssetServer:   &assetserver.Options{Assets: assetFS},
-		Bind:          []interface{}{application},
+		Title:       "TauShell",
+		Width:       1180,
+		Height:      780,
+		MinWidth:    760,
+		MinHeight:   520,
+		AssetServer: &assetserver.Options{Assets: assetFS},
+		Bind:        []interface{}{application},
+		OnNavigationStarting: func(_ context.Context, targetURL string) bool {
+			if isBundledAppNavigation(targetURL) {
+				return true
+			}
+			fmt.Fprintln(os.Stderr, "taushell: blocked WebView navigation outside the bundled app origin")
+			return false
+		},
 		OnStartup:     application.startup,
 		OnBeforeClose: application.beforeClose,
 		OnShutdown:    application.shutdown,
@@ -240,12 +249,15 @@ func (application *App) StopSession(id string) error {
 func (application *App) beforeClose(ctx context.Context) bool {
 	sessions, err := application.manager.List(ctx)
 	if err != nil {
-		_, _ = runtime.MessageDialog(ctx, runtime.MessageDialogOptions{
+		_, dialogErr := application.messageDialog(ctx, runtime.MessageDialogOptions{
 			Type:    runtime.ErrorDialog,
 			Title:   "Unable to check active sessions",
 			Message: err.Error(),
 			Buttons: []string{"Keep TauShell open"},
 		})
+		if dialogErr != nil {
+			fmt.Fprintf(os.Stderr, "taushell: report active sessions check failure: %v\n", dialogErr)
+		}
 		return true
 	}
 	active := make([]string, 0)
@@ -255,9 +267,9 @@ func (application *App) beforeClose(ctx context.Context) bool {
 		}
 	}
 	if len(active) == 0 {
-		return false
+		return application.reportForcedShutdowns(ctx, nil)
 	}
-	choice, err := runtime.MessageDialog(ctx, runtime.MessageDialogOptions{
+	choice, err := application.messageDialog(ctx, runtime.MessageDialogOptions{
 		Type:          runtime.QuestionDialog,
 		Title:         "Sessions are still running",
 		Message:       fmt.Sprintf("%d session(s) are running in TauShell. Closing will interrupt them. Stop the sessions and close TauShell?", len(active)),
@@ -271,18 +283,29 @@ func (application *App) beforeClose(ctx context.Context) bool {
 	stopCtx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()
 	if err := application.manager.StopAll(stopCtx); err != nil {
-		_, _ = runtime.MessageDialog(ctx, runtime.MessageDialogOptions{
+		_, dialogErr := application.messageDialog(ctx, runtime.MessageDialogOptions{
 			Type:    runtime.ErrorDialog,
 			Title:   "Unable to stop all sessions",
 			Message: err.Error(),
 			Buttons: []string{"Keep TauShell open"},
 		})
+		if dialogErr != nil {
+			fmt.Fprintf(os.Stderr, "taushell: report session shutdown failure: %v\n", dialogErr)
+		}
 		return true
 	}
 	stopped, err := application.manager.List(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "taushell: verify stopped sessions: %v\n", err)
-		return false
+		_, dialogErr := application.messageDialog(ctx, runtime.MessageDialogOptions{
+			Type:    runtime.ErrorDialog,
+			Title:   "Unable to verify stopped sessions",
+			Message: err.Error(),
+			Buttons: []string{"Keep TauShell open"},
+		})
+		if dialogErr != nil {
+			fmt.Fprintf(os.Stderr, "taushell: report stopped-session verification failure: %v\n", dialogErr)
+		}
+		return true
 	}
 	forced := make([]string, 0)
 	for _, current := range stopped {
@@ -290,18 +313,32 @@ func (application *App) beforeClose(ctx context.Context) bool {
 			forced = append(forced, current.Name)
 		}
 	}
-	if len(forced) > 0 {
-		_, err := runtime.MessageDialog(ctx, runtime.MessageDialogOptions{
-			Type:    runtime.WarningDialog,
-			Title:   "Some sessions required force termination",
-			Message: fmt.Sprintf("TauShell force-terminated these session process trees after graceful interruption timed out:\n\n%s", strings.Join(forced, "\n")),
-			Buttons: []string{"Continue closing"},
-		})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "taushell: report forced session shutdown: %v\n", err)
-			return false
-		}
+	return application.reportForcedShutdowns(ctx, forced)
+}
+
+func (application *App) messageDialog(ctx context.Context, options runtime.MessageDialogOptions) (string, error) {
+	if application.showMessageDialog != nil {
+		return application.showMessageDialog(ctx, options)
 	}
+	return runtime.MessageDialog(ctx, options)
+}
+
+func (application *App) reportForcedShutdowns(ctx context.Context, names []string) bool {
+	application.forcedShutdownWarnings = append(application.forcedShutdownWarnings, names...)
+	if len(application.forcedShutdownWarnings) == 0 {
+		return false
+	}
+	_, err := application.messageDialog(ctx, runtime.MessageDialogOptions{
+		Type:    runtime.WarningDialog,
+		Title:   "Some sessions required force termination",
+		Message: fmt.Sprintf("TauShell force-terminated these session process trees because graceful interruption did not stop them:\n\n%s", strings.Join(application.forcedShutdownWarnings, "\n")),
+		Buttons: []string{"Continue closing"},
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "taushell: report forced session shutdown: %v\n", err)
+		return true
+	}
+	application.forcedShutdownWarnings = nil
 	return false
 }
 

@@ -50,7 +50,7 @@ type Snapshot struct {
 
 type managedSession struct {
 	config      session.Config
-	process     *conpty.Process
+	process     sessionProcess
 	done        chan struct{}
 	mu          sync.RWMutex
 	stopMu      sync.Mutex
@@ -60,10 +60,26 @@ type managedSession struct {
 	hasResumeID bool
 }
 
+type sessionProcess interface {
+	PID() int
+	Output() *os.File
+	Write([]byte) error
+	Resize(int, int) error
+	Interrupt() error
+	Terminate() error
+	CloseConsole()
+	Wait(time.Duration) (bool, uint32, error)
+	Close() error
+}
+
+type processFactory func(int, int, string, string, ...string) (sessionProcess, error)
+
 type Manager struct {
 	configDirectory string
 	store           *session.Store
+	closeStore      func() error
 	emit            func(Event)
+	startProcess    processFactory
 	mu              sync.Mutex
 	shutdownMu      sync.Mutex
 	sessions        map[string]*managedSession
@@ -82,8 +98,12 @@ func New(configDirectory, databasePath string, emit func(Event)) (*Manager, erro
 	return &Manager{
 		configDirectory: configDirectory,
 		store:           store,
+		closeStore:      store.Close,
 		emit:            emit,
-		sessions:        make(map[string]*managedSession),
+		startProcess: func(columns, rows int, executable, directory string, args ...string) (sessionProcess, error) {
+			return conpty.Start(columns, rows, executable, directory, args...)
+		},
+		sessions: make(map[string]*managedSession),
 	}, nil
 }
 
@@ -179,7 +199,7 @@ func (manager *Manager) start(ctx context.Context, id string, restoring, fresh b
 	if columns < 2 || rows < 2 {
 		columns, rows = 80, 24
 	}
-	process, err := conpty.Start(columns, rows, powershell, config.WorkingDir,
+	process, err := manager.startProcess(columns, rows, powershell, config.WorkingDir,
 		"-NoLogo", "-NoProfile", "-Command", command)
 	if err != nil {
 		finishErr := manager.store.Finish(ctx, id, session.StatusFailed, err.Error())
@@ -289,9 +309,11 @@ func (manager *Manager) Close(ctx context.Context) error {
 		return nil
 	}
 	manager.closed = true
-	manager.storeClosed = true
+	closeErr := manager.closeStore()
+	if closeErr == nil {
+		manager.storeClosed = true
+	}
 	manager.mu.Unlock()
-	closeErr := manager.store.Close()
 	return closeErr
 }
 
@@ -515,10 +537,10 @@ func outcome(exitCode uint32, forced bool, runErr, closeErr error) (session.Runt
 		return session.StatusFailed, errors.Join(runErr, closeErr).Error()
 	case closeErr != nil:
 		return session.StatusFailed, closeErr.Error()
+	case forced:
+		return session.StatusStopped, "Graceful interrupt failed or timed out; session process tree was force-terminated."
 	case exitCode != 0:
 		return session.StatusFailed, fmt.Sprintf("PowerShell exited with code %d", exitCode)
-	case forced:
-		return session.StatusStopped, "Graceful interrupt timed out; session process tree was force-terminated."
 	default:
 		return session.StatusStopped, ""
 	}

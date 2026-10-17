@@ -36,16 +36,36 @@ interaction decisions and feasibility gate are in
   are running.
 - `frontend/` contains the React launcher, session creation form, Home tool
   inventory, local tab-order/selection storage, xterm.js panes, and typed
-  frontend bridge declarations. Built assets are embedded from
-  `cmd/taushell/frontend/dist/`; build the frontend before Go compilation.
+  frontend bridge declarations. Start and restore now open and size the
+  xterm.js pane before launching the harness so initial output has a mounted
+  terminal to receive it. Choosing to keep a live tab in the background keeps
+  its xterm pane mounted, so its buffer continues receiving output and the
+  screen is reused when the session is reopened. Built assets are embedded
+  from `cmd/taushell/frontend/dist/`; build the frontend before Go compilation.
 - `internal/sessionhost/manager_windows.go` owns the desktop session lifecycle:
   session listing, start/restore/fresh, ConPTY output events, terminal input
-  and resize, exit supervision, and bounded graceful/forced shutdown.
+  and resize, exit supervision, and bounded graceful/forced shutdown. Fake
+  process tests now cover concurrent session I/O and resize, graceful and
+  forced shutdown, cleanup, restore failure without losing the saved harness
+  session ID, manager-close idempotence, supervisor completion, and retry after
+  stop timeout or database-close failure. A running runtime record without a
+  process ID and an abandoned `starting` record are reconciled to failed
+  without discarding their harness resume IDs. A live recorded process owned
+  by another window remains marked running but not `RunningHere`. Manager-close
+  tests also verify the output pipe handles close and manager supervisor
+  goroutines return to their baseline. Desktop close-path tests keep the window
+  open when listing sessions fails and retry a forced-stop notice if its native
+  dialog fails.
 - `internal/session/` validates strict YAML, safely creates session files,
   stores runtime state, and generates new harness IDs for fresh starts.
   `launch_args` is ordered and adapter-managed identity flags are rejected.
 - `internal/conpty/`, `internal/harness/`, and `internal/terminal/` provide the
   shared process, adapter, and standalone CLI hosting behavior.
+  ConPTY lifecycle tests verify that termination followed by `Close` clears
+  every owned process, job, console, and pipe field and that a second close is
+  safe. A process-wide handle-count stress test was inconclusive because the
+  Go test process's handle count also rose during ordinary child-process runs;
+  this does not establish a ConPTY leak or prove its absence.
 - TUI-specific Bubble Tea, ultraviolet, and x/vt modules were removed by
   `go mod tidy`. The checked-in `cmd/taushell/frontend/dist/` directory is
   required by Go's `embed` directive; it is generated from `frontend/`.
@@ -67,8 +87,54 @@ go build -tags production -o taushell.exe ./cmd/taushell
 The production-tagged executable was smoke-launched and opened a responsive
 TauShell window using the installed WebView2 Runtime. This verifies host
 startup and local embedded asset loading only. The Windows tests include the
-existing ConPTY/CLI tests, YAML and runtime-store tests, and a session-output
-test that verifies base64 transport preserves raw terminal bytes.
+existing ConPTY/CLI tests, YAML and runtime-store tests, a session-output test
+that verifies base64 transport preserves raw terminal bytes, and manager tests
+for concurrent independent I/O/resize, process exit, graceful and forced
+shutdown, restore failure, and cleanup.
+
+The navigation guard is also verified separately: a temporary production-mode
+Wails host attempted a top-level navigation to a reserved `.invalid` origin,
+and WebView2 raised `NavigationStarting` and cancelled it. That temporary
+smoke host and its logs were removed; the check is not yet a checked-in
+repeatable integration test. The host allows only the configured top-level
+`http://wails.localhost` origin. Frame navigation and negative bridge-dispatch
+tests remain open; Wails' origin validator is still an independent guard on
+bound methods.
+
+A browser-canvas interaction smoke with a mocked Wails bridge confirmed that
+closing a live tab to the background retains the same xterm instance, buffers
+output received while hidden, restores that output when the session is opened
+again, and routes keyboard input to the reopened session. This tests frontend
+state handling only; it does not verify xterm behavior inside Wails or the
+ConPTY/PowerShell data path.
+
+The same browser-only smoke exercised split UTF-8/emoji chunks, ANSI color,
+alternate-screen switching, device-status query replies, mouse-tracking input
+encoding, and fit-driven resize forwarding. These checks are not a substitute
+for a repeatable full-screen fixture through the production WebView2/ConPTY
+path.
+
+The latest repeat of `npm run build`, `go test -count=1 ./...`, `go vet ./...`,
+and the production-tagged build passed using a temporary Go 1.27.2 toolchain.
+The frontend output has a non-failing Vite warning because its 566 kB JavaScript
+chunk exceeds the default 500 kB advisory threshold. The Go archive SHA-256 was
+verified against the recorded official value, and both archive and extracted
+toolchain were removed afterward. `go.exe` is not currently discoverable on
+this checkout's PATH; the older machine-specific handoff path below names
+`C:\Users\Mike\...`, while this host profile is `C:\Users\Ira`. Use an installed
+Go 1.26+ toolchain or redownload and verify the official archive before
+repeating Go checks. Node.js/npm and the required WebView2 Runtime were
+available.
+
+This verification used Windows 10 Pro 22H2 (build 19045), Go 1.27.2,
+PowerShell 7.6.7, GitHub Copilot CLI 1.0.99-2, and WebView2 Runtime
+155.0.4283.60. Claude Code 2.1.302 was installed after the user confirmed the
+verified `Anthropic.ClaudeCode` winget package. An existing npm-installed
+Claude Code 2.1.133 is earlier on PATH, so `claude` currently resolves to that
+version while the winget executable is at its package path. Neither CLI has
+passed provider-backed hosted-terminal testing. The Go toolchain used for
+this run was downloaded to the system temp directory and its official archive
+SHA-256 was verified; it was not installed system-wide.
 
 ## Do not overstate current readiness
 
@@ -79,24 +145,35 @@ security has passed.
 
 Known gaps and risks:
 
-- Test xterm input/output, split UTF-8 sequences, ANSI, terminal queries,
-  alternate screen, cursor movement, resize, mouse modes, and Unicode/emoji
-  against a controllable full-screen fixture, then perform non-destructive
-  Claude Code and Copilot CLI walkthroughs on Windows 10.
-- Terminal output events can arrive before a newly-started session's xterm
-  instance is mounted. Review startup ordering and add a bounded per-session
-  output queue or initialize the terminal before process launch so initial
-  prompts/output cannot be lost.
-- Add lifecycle tests for concurrent fake sessions, independent input/output,
-  process exit, restore failure, graceful interruption, forced termination,
-  app-close error handling, and goroutine/handle cleanup. The manager currently
-  has no broad lifecycle integration test suite.
-- Explicitly verify that external navigation cannot access Wails-bound methods.
-  The app binds a small typed API, but external-navigation and origin behavior
-  have not been tested or explicitly restricted in the app configuration.
+- **Feasibility blocker:** test xterm input/output, split UTF-8 sequences, ANSI,
+  terminal queries, alternate screen, cursor movement, resize, mouse modes,
+  and Unicode/emoji against a controllable full-screen fixture, then perform
+  non-destructive Claude Code and Copilot CLI walkthroughs on Windows 10.
+  Existing ConPTY byte tests and the browser-only mocked-bridge xterm smoke do
+  not validate the production WebView2/ConPTY path end to end.
+- Add native ConPTY handle-leak checks and UI-level shutdown tests. The close path
+  now reports session-list, stop, and post-stop verification failures without
+  allowing the window to close; forced-stop notices remain pending and retry
+  after a native-dialog failure. Extend stale-runtime recovery tests beyond a
+  missing-PID running record, an abandoned startup, and a live other-window
+  process.
+- The ConPTY job-cleanup test now launches a direct child fixture and verifies
+  that inherited job members are terminated. A PowerShell `Start-Process`
+  experiment produced a child outside the TauShell job; that detached launch
+  survived `TerminateJobObject`. The agreed boundary is to manage only
+  processes in TauShell's job and document that detached shell/broker launches
+  are unmanaged; do not guess at process ancestry or terminate unrelated
+  processes.
+- The Windows host now blocks top-level navigation outside
+  `http://wails.localhost` in WebView2's native `NavigationStarting` event,
+  before the destination loads. A small repository-local Wails/WebView2 fork
+  exposes this callback; Wails' existing origin validation remains enabled
+  as a separate guard on bound-method dispatch. Origin-policy unit tests,
+  a production host smoke test, and a production-mode WebView2 smoke that
+  attempted a `.invalid` external navigation all passed on this machine.
 - Exercise the missing-WebView2 native prompt and download handoff. Current
-  runtime detection and prompt exist, but the missing-runtime path has not been
-  tested in a clean environment.
+  runtime detection and prompt exist, but this machine has WebView2 installed
+  and the missing-runtime path has not been tested in a clean environment.
 - Tool detection is implemented, but first-run PowerShell setup, version
   support ranges, capability probes, winget consent/install actions, and
   vendor-link fallback are not.
@@ -104,9 +181,10 @@ Known gaps and risks:
   templates, editable YAML preview, effective-argv preview, recent folders,
   and offer-to-start-after-creation are incomplete.
 - Tabs and selected tab persist in WebView local storage. They do not
-  auto-launch sessions. Keyboard tab navigation, tab overflow controls, and
-  explicit restoration of presentation state under different WebView profile
-  conditions remain unverified.
+  auto-launch sessions. In-process background tabs retain their xterm buffer.
+  Keyboard tab navigation, tab overflow controls, persisted presentation state
+  under different WebView profile conditions, and the background terminal path
+  through the real Wails/ConPTY host remain unverified.
 - Start Fresh is explicitly confirmed in the UI and rotates the persisted
   harness ID. Confirm failure/retry behavior with each adapter; Claude Code
   provider-backed restore remains unverified. A disposable Copilot CLI
@@ -115,21 +193,49 @@ Known gaps and risks:
   Evaluate event volume and backpressure with long-running/high-output
   harnesses; do not switch to text decoding in Go.
 
+### Gotchas and settled boundaries
+
+- The repository-local Wails fork is wired through two `go.mod` replacements:
+  Wails v2.16.0 and its nested go-webview2 v1.0.22 source. When refreshing
+  either upstream dependency, preserve both licenses and reapply the narrow
+  native `NavigationStarting` callback patch documented in
+  `third_party/wails/TAUSHELL_PATCHES.md`; changing only the top-level Wails
+  copy will not update the WebView2 event wrapper.
+- Navigation policy currently covers top-level navigation only. The app
+  cancels destinations outside exactly `http://wails.localhost`; it does not
+  open external links in a browser. Do not widen allowed origins to make a
+  dev server or external link work. Keep bridge-origin validation enabled,
+  and add explicit frame/bridge tests before claiming the surface is secure.
+- Multiple Claude Code versions exist on the machine: npm Claude Code 2.1.133
+  is earlier on PATH than the winget 2.1.302 binary. Do not silently change
+  PATH; use the explicit winget path for any authorized 2.1.302 check.
+- PowerShell `Start-Process` can detach a child outside the ConPTY job.
+  TauShell intentionally manages only job members and must not infer ancestry
+  or kill detached processes.
+- The temporary WebView2 navigation smoke proved event cancellation, not
+  full xterm behavior, frame isolation, or provider restore. It was not kept
+  in the repository.
+- A process-wide Windows handle-count stress check is noisy in this Go test
+  process: the count rose during both ordinary child-process runs and ConPTY
+  runs, so it cannot distinguish runtime/thread retention from a native handle
+  leak. ConPTY tests currently assert explicit `Close` success, cleared owned
+  resource fields, idempotent close, and manager pipe/supervisor cleanup; a
+  dedicated native leak check remains open.
+
 ## Recommended next actions
 
-1. Close the terminal startup-output race and write session-manager lifecycle
-   tests using fake harness executables and temporary session stores.
-2. Complete Step 1's terminal fixture tests, both harness walkthroughs, runtime
-   missing-path check, resize/input checks, and local-origin/bridge security
-   verification. Record exact Windows/WebView2/harness versions and outcomes
-   in the UI design document. If either harness is unreliable, stop and
-   present evidence and alternatives before expanding the UI.
-3. Complete the setup/install and session-template/preview behavior only after
-   the feasibility gate is accepted.
-4. Run `npm ci`, `npm run build`, `go test -count=1 ./...`, `go vet ./...`, and
+1. Complete the Step 1 terminal fixture and non-destructive walkthroughs for
+   both harnesses on Windows 10, resolving the Claude PATH ambiguity first.
+   A clean missing-WebView2 environment is unavailable on this machine; do
+   not treat host startup or compile-only checks as the feasibility gate.
+2. Continue independent shutdown/recovery coverage with native ConPTY
+   handle-leak and UI-level shutdown checks; keep setup/install and
+   session-template implementation behind the feasibility gate, as required
+   by the implementation plan.
+3. Run `npm ci`, `npm run build`, `go test -count=1 ./...`, `go vet ./...`, and
    a production-tagged build after code changes. Re-run the executable startup
    smoke test when changing host/runtime code.
-5. Keep README, V2 architecture/schema/backlog, and this handoff aligned with
+4. Keep README, V2 architecture/schema/backlog, and this handoff aligned with
    observed behavior. Do not mark a feasibility item complete based on a
    compile-only check.
 

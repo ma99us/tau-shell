@@ -25,6 +25,7 @@ function App() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [tabs, setTabs] = useState<Tab[]>(readTabs);
+  const [backgroundTerminalIds, setBackgroundTerminalIds] = useState<string[]>([]);
   const [selected, setSelected] = useState(localStorage.getItem(savedSelectionKey) ?? "");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [closeRequest, setCloseRequest] = useState<Session | null>(null);
@@ -38,6 +39,8 @@ function App() {
         status ? Promise.resolve(status) : app().GetSystemStatus(),
       ]);
       setSessions(nextSessions);
+      setBackgroundTerminalIds((current) => current.filter((id) =>
+        nextSessions.some((session) => session.id === id && session.runningHere)));
       setTabs((current) => current
         .filter((tab) => nextSessions.some((session) => session.id === tab.id))
         .map((tab) => ({ ...tab, name: nextSessions.find((session) => session.id === tab.id)!.name })));
@@ -54,6 +57,9 @@ function App() {
     events().EventsOnMultiple("session-event", (event: SessionEvent) => {
       if (event.kind === "state" && event.session) {
         setSessions((current) => current.map((session) => session.id === event.sessionId ? event.session! : session));
+        if (!event.session.runningHere) {
+          setBackgroundTerminalIds((current) => current.filter((id) => id !== event.sessionId));
+        }
         terminalInstances.get(event.sessionId)?.writeln(`\r\n[session ${event.session.status}${event.session.lastError ? `: ${event.session.lastError}` : ""}]\r\n`);
       } else if (event.kind === "output" && event.dataBase64) {
         const encoded = atob(event.dataBase64);
@@ -72,6 +78,7 @@ function App() {
 
   const openTab = (session: Session) => {
     setTabs((current) => current.some((tab) => tab.id === session.id) ? current : [...current, { id: session.id, name: session.name }]);
+    setBackgroundTerminalIds((current) => current.filter((id) => id !== session.id));
     setSelected(session.id);
   };
 
@@ -79,14 +86,13 @@ function App() {
     setBusy(true);
     setError("");
     try {
-      const terminal = terminalInstances.get(session.id);
-      const columns = terminal?.cols ?? 80;
-      const rows = terminal?.rows ?? 24;
+      openTab(session);
+      const terminal = await waitForTerminal(session.id);
       const started = mode === "restore"
-        ? await app().RestoreSession(session.id, columns, rows)
+        ? await app().RestoreSession(session.id, terminal.cols, terminal.rows)
         : mode === "fresh"
-          ? await app().StartFresh(session.id, columns, rows)
-          : await app().StartSession(session.id, columns, rows);
+          ? await app().StartFresh(session.id, terminal.cols, terminal.rows)
+          : await app().StartSession(session.id, terminal.cols, terminal.rows);
       openTab(started);
       await refresh();
     } catch (err) {
@@ -96,10 +102,15 @@ function App() {
     }
   };
 
-  const removeTab = (id: string) => {
+  const removeTab = (id: string, retainRunningTerminal = false) => {
     setTabs((current) => current.filter((tab) => tab.id !== id));
+    setBackgroundTerminalIds((current) => {
+      if (!retainRunningTerminal) return current.filter((terminalId) => terminalId !== id);
+      return current.includes(id) ? current : [...current, id];
+    });
     if (selected === id) setSelected(tabs.find((tab) => tab.id !== id)?.id ?? "");
   };
+  const keepTerminalInBackground = (id: string) => removeTab(id, true);
   const closeTab = (id: string) => {
     const session = sessions.find((current) => current.id === id);
     if (session?.runningHere) setCloseRequest(session);
@@ -118,6 +129,7 @@ function App() {
       setBusy(false);
     }
   };
+  const terminalIds = Array.from(new Set([...tabs.map((tab) => tab.id), ...backgroundTerminalIds]));
 
   return (
     <div className="app">
@@ -153,9 +165,16 @@ function App() {
             <div className={`home-container ${selected ? "hidden" : ""}`}>
               <Home sessions={sessions} status={status} busy={busy} onNew={() => setDialogOpen(true)} onLaunch={launch} />
             </div>
-            {tabs.map((tab) => <div className={`terminal-tab-content ${selected === tab.id ? "" : "hidden"}`} key={tab.id}>
-              <TerminalPane session={sessions.find((session) => session.id === tab.id)} visible={selected === tab.id} busy={busy} onLaunch={launch} onError={setError} />
-            </div>)}
+            {terminalIds.map((id) => {
+              const tab = tabs.find((current) => current.id === id);
+              const session = sessions.find((current) => current.id === id);
+              if (!tab && !session?.runningHere) return null;
+              return (
+                <div className={`terminal-tab-content ${tab && selected === id ? "" : "hidden"}`} key={id}>
+                  <TerminalPane session={session} visible={Boolean(tab && selected === id)} busy={busy} onLaunch={launch} onError={setError} />
+                </div>
+              );
+            })}
           </section>
         </main>
       </div>
@@ -165,7 +184,7 @@ function App() {
         <p className="muted">Stop its PowerShell and harness process, or keep it running in the background?</p>
         <div className="modal-actions">
           <button className="secondary-button" onClick={() => setCloseRequest(null)}>Cancel</button>
-          <button className="secondary-button" onClick={() => { removeTab(closeRequest.id); setCloseRequest(null); }}>Keep running</button>
+          <button className="secondary-button" onClick={() => { keepTerminalInBackground(closeRequest.id); setCloseRequest(null); }}>Keep running</button>
           <button className="primary-button" disabled={busy} onClick={() => void stopAndCloseTab(closeRequest)}>{busy ? "Stopping..." : "Stop and close"}</button>
         </div>
       </div></div>}
@@ -220,6 +239,45 @@ function ToolRow({ name, tool }: { name: string; tool?: SystemStatus["powershell
 
 const terminalInstances = new Map<string, Terminal>();
 const fitInstances = new Map<string, FitAddon>();
+const terminalReadyWaiters = new Map<string, Set<(terminal: Terminal) => void>>();
+
+function waitForTerminal(id: string): Promise<Terminal> {
+  const terminal = terminalInstances.get(id);
+  if (terminal) return Promise.resolve(terminal);
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const waiters = terminalReadyWaiters.get(id) ?? new Set<(terminal: Terminal) => void>();
+    terminalReadyWaiters.set(id, waiters);
+
+    const removeWaiter = () => {
+      waiters.delete(onReady);
+      if (waiters.size === 0 && terminalReadyWaiters.get(id) === waiters) terminalReadyWaiters.delete(id);
+    };
+    const onReady = (ready: Terminal) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      removeWaiter();
+      resolve(ready);
+    };
+    const timeout = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      removeWaiter();
+      reject(new Error(`Terminal for session "${id}" did not initialize.`));
+    }, 5000);
+    waiters.add(onReady);
+  });
+}
+
+function notifyTerminalReady(id: string, terminal: Terminal) {
+  const waiters = terminalReadyWaiters.get(id);
+  if (!waiters) return;
+  terminalReadyWaiters.delete(id);
+  waiters.forEach((resolve) => resolve(terminal));
+}
+
 function TerminalPane({ session, visible, busy, onLaunch, onError }: {
   session?: Session;
   visible: boolean;
@@ -228,6 +286,8 @@ function TerminalPane({ session, visible, busy, onLaunch, onError }: {
   onError: (error: string) => void;
 }) {
   const container = useRef<HTMLDivElement>(null);
+  const runningRef = useRef(session?.runningHere ?? false);
+  runningRef.current = session?.runningHere ?? false;
   useEffect(() => {
     if (!session || !container.current) return;
     let terminal = terminalInstances.get(session.id);
@@ -245,10 +305,15 @@ function TerminalPane({ session, visible, busy, onLaunch, onError }: {
       terminal.open(container.current);
     }
     const resize = () => {
-      try { fit.fit(); void app().ResizeTerminal(session.id, terminal!.cols, terminal!.rows).catch((err) => onError(String(err))); } catch { /* hidden terminal has no measurable rows */ }
+      try {
+        fit.fit();
+        if (runningRef.current) void app().ResizeTerminal(session.id, terminal!.cols, terminal!.rows).catch((err) => onError(String(err)));
+      } catch { /* hidden terminal has no measurable rows */ }
     };
     const observer = new ResizeObserver(resize);
     observer.observe(container.current);
+    resize();
+    notifyTerminalReady(session.id, terminal);
     return () => { observer.disconnect(); terminal?.dispose(); terminalInstances.delete(session.id); fitInstances.delete(session.id); };
   }, [session?.id]);
   useEffect(() => {
@@ -257,9 +322,12 @@ function TerminalPane({ session, visible, busy, onLaunch, onError }: {
     const fit = fitInstances.get(session.id);
     if (!terminal || !fit) return;
     requestAnimationFrame(() => {
-      try { fit.fit(); void app().ResizeTerminal(session.id, terminal.cols, terminal.rows).catch((err) => onError(String(err))); } catch { /* terminal is not measurable yet */ }
+      try {
+        fit.fit();
+        if (session.runningHere) void app().ResizeTerminal(session.id, terminal.cols, terminal.rows).catch((err) => onError(String(err)));
+      } catch { /* terminal is not measurable yet */ }
     });
-  }, [visible, session?.id]);
+  }, [visible, session?.id, session?.runningHere]);
   if (!session) return <div className="terminal-missing">Session configuration is unavailable.</div>;
   return <div className="terminal-view"><div className="terminal-toolbar"><span className={`status-dot ${session.runningHere ? "online" : ""}`} />{session.id} | {session.tool} | {session.workingDir}<span className="terminal-status">{session.runningHere ? "Connected" : session.status || "Not started"}</span>{!session.runningHere && <button className="primary-button terminal-action" disabled={busy} onClick={() => onLaunch(session, session.hasResumeId ? "restore" : "start")}>{session.hasResumeId ? "Restore" : "Start"}</button>}</div><div className="terminal-container" ref={container} /></div>;
 }

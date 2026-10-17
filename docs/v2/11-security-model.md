@@ -1,7 +1,5 @@
 # Security Model
 
-# Security Model
-
 ## Principles
 
 - Least privilege and local-first operation.
@@ -40,7 +38,8 @@ Wails exposes a deliberately small set of typed methods for session listing,
 creation, lifecycle, terminal input/output, resize, and directory selection.
 Session IDs and arguments are validated by the session layer, and the
 renderer is not given arbitrary process launch, filesystem path access, or
-environment values. The current implementation has not yet verified external
-navigation restrictions or bridge-origin behavior. Before treating the UI as
-security-reviewed, ensure untrusted pages cannot reach the bound methods and
-add tests or a reproducible manual check for that boundary.
+environment values. The Windows WebView2 host cancels top-level navigations
+outside `http://wails.localhost` before they load, and Wails independently
+validates the origin of calls into bound methods. Keep both controls enabled:
+origin validation protects the bridge, while the navigation guard keeps
+untrusted pages out of the desktop surface.

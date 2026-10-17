@@ -103,6 +103,16 @@ func TestProcessCanResizeAndTerminate(t *testing.T) {
 	if !exited {
 		t.Fatal("PowerShell remained alive after job termination")
 	}
+	if err := process.Close(); err != nil {
+		t.Fatalf("close ConPTY resources: %v", err)
+	}
+	if process.console != 0 || process.process != 0 || process.job != 0 || process.input != nil || process.output != nil {
+		t.Fatalf("Close left process resources assigned: console=%v process=%v job=%v input=%v output=%v",
+			process.console, process.process, process.job, process.input, process.output)
+	}
+	if err := process.Close(); err != nil {
+		t.Fatalf("second close: %v", err)
+	}
 }
 
 func TestProcessForwardsUTF8Input(t *testing.T) {
@@ -189,21 +199,15 @@ func TestProcessForwardsUTF8Input(t *testing.T) {
 }
 
 func TestTerminateStopsChildProcesses(t *testing.T) {
-	powershell, err := exec.LookPath("pwsh.exe")
+	directory := t.TempDir()
+	pidFile := filepath.Join(directory, "child.pid")
+	t.Setenv("TAUSHELL_CONPTY_TREE_FIXTURE", "1")
+	t.Setenv("TAUSHELL_CONPTY_CHILD_PID_FILE", pidFile)
+	executable, err := os.Executable()
 	if err != nil {
-		t.Skip("PowerShell 7 is unavailable")
+		t.Fatal(err)
 	}
-	commandPrompt, err := exec.LookPath("cmd.exe")
-	if err != nil {
-		t.Skip("Command Prompt is unavailable")
-	}
-	pidFile := filepath.Join(t.TempDir(), "child.pid")
-	command := fmt.Sprintf(
-		"$child = Start-Process -FilePath '%s' -ArgumentList '/c ping -n 31 127.0.0.1 > nul' -PassThru; [System.IO.File]::WriteAllText('%s', [string]$child.Id); Start-Sleep -Seconds 30",
-		strings.ReplaceAll(commandPrompt, "'", "''"),
-		strings.ReplaceAll(pidFile, "'", "''"),
-	)
-	process, err := Start(80, 24, powershell, t.TempDir(), "-NoLogo", "-NoProfile", "-Command", command)
+	process, err := Start(80, 24, executable, directory, "-test.run=^TestProcessTreeChildFixture$")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,7 +227,7 @@ func TestTerminateStopsChildProcesses(t *testing.T) {
 		time.Sleep(25 * time.Millisecond)
 	}
 	if childPID == 0 {
-		t.Fatal("PowerShell did not start its child process within the test timeout")
+		t.Fatal("fixture did not start its child process within the test timeout")
 	}
 	alive, err := isProcessAlive(uint32(childPID))
 	if err != nil {
@@ -256,6 +260,21 @@ func TestTerminateStopsChildProcesses(t *testing.T) {
 		time.Sleep(25 * time.Millisecond)
 	}
 	t.Fatalf("child process %d remained alive after its job was terminated", childPID)
+}
+
+func TestProcessTreeChildFixture(t *testing.T) {
+	if os.Getenv("TAUSHELL_CONPTY_TREE_FIXTURE") != "1" {
+		return
+	}
+	pidFile := os.Getenv("TAUSHELL_CONPTY_CHILD_PID_FILE")
+	command := exec.Command("cmd.exe", "/c", "ping -n 31 127.0.0.1 > nul")
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(pidFile, []byte(strconv.Itoa(command.Process.Pid)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(30 * time.Second)
 }
 
 func isProcessAlive(processID uint32) (bool, error) {

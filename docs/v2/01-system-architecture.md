@@ -24,9 +24,13 @@ is mounted per open tab and receives ConPTY output as base64-encoded bytes;
 input (including binary terminal input) and measured resize are sent only to
 the session represented by that terminal. The app stores open tab IDs and
 selection in WebView local storage; it does not start sessions automatically
-on startup. Full-screen harness behavior, terminal query/input modes, mouse
-support, resize fidelity, and output delivery under load still require
-end-to-end testing.
+on startup. Choosing to keep a live session in the background retains its
+xterm instance in the current app process so it continues consuming output and
+can reopen the same screen. A browser-only mocked-bridge smoke exercised
+background output, split UTF-8/emoji, ANSI, alternate screen, terminal queries,
+mouse reporting, resize, and input. It does not verify those behaviors through
+the production Wails/WebView2/ConPTY path, and output delivery under load still
+requires end-to-end testing.
 
 The desktop app checks the Evergreen WebView2 Runtime before creating its
 window and can direct the user to Microsoft's download page when the runtime
@@ -37,9 +41,10 @@ confirmed installation flows are not implemented yet.
 ## Boundaries
 
 - **Desktop host:** Wails window lifecycle, embedded local web assets, runtime
-  prerequisite check, and a small typed set of bound UI operations. Explicit
-  external-navigation restrictions and bridge behavior across navigation
-  origins have not yet been verified.
+  prerequisite check, and a small typed set of bound UI operations. The
+  top-level external-navigation restriction has policy tests and a temporary
+  production WebView2 cancellation smoke; cross-origin bridge denial has not
+  been separately exercised.
 - **Session manager:** session configuration, start/restore/stop, process state,
   runtime persistence, and shutdown.
 - **Harness adapters:** executable/version detection, capability probes, and

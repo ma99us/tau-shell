@@ -66,15 +66,35 @@ maintenance, and Windows 10 compatibility must pass the feasibility gates in
 ### Current feasibility evidence
 
 The initial implementation uses Wails v2.16.0, React 19, and xterm.js 6 with
-all frontend assets bundled into the Windows executable. On the current Windows
-10 development machine, the frontend and Go packages build, tests and `go vet`
-pass, and a production-tagged executable opens its TauShell window against the
-installed Evergreen WebView2 Runtime. This confirms only the host startup and
-local asset path. The Go-to-UI lifecycle bridge, interactive xterm input/output,
-resize, terminal queries, mouse behavior, alternate-screen/full-screen
-rendering, and Claude Code/Copilot CLI compatibility have not passed
-end-to-end testing. Wails/React/xterm.js therefore remain provisional, and
-Step 1 is still open.
+all frontend assets bundled into the Windows executable. On Windows 10 Pro
+22H2 (build 19045), with Go 1.27.2, PowerShell 7.6.7, GitHub Copilot CLI
+1.0.99-2, and Evergreen WebView2 Runtime 155.0.4283.60, frontend/Go tests and
+`go vet` pass and a production-tagged executable opens its TauShell window.
+Automated session-manager tests now cover concurrent output/input/resize,
+process exit, restore failure, graceful and forced stop, and process cleanup.
+This confirms the host startup, local asset path, and those process-level
+behaviors only. The installed Claude Code 2.1.302 CLI help documents
+`--session-id` and `--resume`; GitHub Copilot CLI 1.0.99-2 help documents the
+same flags. This confirms CLI-level options only. The existing npm-installed
+Claude Code 2.1.133 is found first on the current PATH, and neither Claude
+version has passed a provider-backed hosted-terminal test.
+A browser-canvas interaction smoke with a mocked bridge exercised xterm.js
+split UTF-8/emoji writes, ANSI color, alternate-screen switching, device-status
+query replies, mouse-tracking input encoding, resizing, and keyboard input.
+This verifies browser-side xterm behavior only; it does not exercise the
+frontend bridge, WebView2, ConPTY, or PowerShell as a complete terminal path.
+The actual frontend bridge and either harness's compatibility inside the
+hosted terminal have not passed end-to-end testing. Wails/React/xterm.js
+therefore remain provisional, and Step 1 is still open.
+
+Wails v2.16.0 validates both the top-level and sender origins against its
+default `http://wails.localhost` origin before dispatching bound methods; the
+application does not add any `BindingsAllowedOrigins`. The repository-local
+Wails/WebView2 host extension also cancels top-level navigations outside that
+origin in WebView2's native `NavigationStarting` event, before they load.
+Origin-policy tests, a production host smoke, and a production-mode WebView2
+attempted external-navigation smoke pass on the current machine. This does not
+close the separate xterm/harness feasibility gate.
 
 The current Bubble Tea screen and its in-process VT renderer are not the GUI
 architecture. Use the TUI only as a behavioral reference or as a source of
@@ -263,8 +283,13 @@ chooser.
 Quitting TauShell while sessions are running requires confirmation. On
 confirmation, TauShell attempts graceful interruption, waits briefly, then
 force-terminates remaining process trees. It visibly reports when forced
-termination was needed. On cancellation, the window and all sessions remain
-available. TauShell must not silently orphan managed harness processes.
+termination was needed. TauShell's process job manages PowerShell and child
+processes that inherit that job. A child launched outside the job through shell
+or broker semantics (for example, PowerShell `Start-Process`) is detached and
+is not managed or guaranteed to stop with TauShell; that limitation must be
+documented, not addressed by guessing at process ancestry and terminating
+possibly unrelated processes. On cancellation, the window and all managed
+sessions remain available.
 
 ## 10. Future widgets and extensibility
 

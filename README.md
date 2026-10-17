@@ -19,17 +19,28 @@ Start Fresh actions, ConPTY input/output/resize wiring, and a shutdown
 confirmation path. The session manager is UI-independent, and harness IDs and
 runtime metadata remain outside session YAML.
 
+Keeping a live session in the background retains its xterm instance and buffer
+until the app closes; sessions are never auto-launched after restart. Browser
+smokes with a mocked bridge exercised background output and xterm handling for
+split UTF-8/emoji, ANSI, alternate screen, terminal queries, mouse reporting,
+resize, and keyboard input. The production WebView2/ConPTY path has not passed
+those end-to-end checks.
+
 **The desktop feasibility gate is not yet complete.** The Go package and
-frontend compile and their current tests pass, but the hosted window and
-terminal have not yet been validated end-to-end with both Claude Code and
-Copilot CLI on the supported Windows 10 environments. Missing-runtime behavior,
-installer/setup flows, detailed terminal protocol behavior, and verified
-provider-backed Claude Code restore remain outstanding. Treat the UI as an
-early implementation, not a verified release.
+frontend compile and their current tests pass, but neither supported harness
+has passed a hosted-terminal walkthrough on the target Windows environment.
+Missing-runtime behavior, installer/setup flows, full terminal protocol
+compatibility, and provider-backed Claude Code restore remain outstanding.
+Treat the UI as an early implementation, not a verified release. Top-level
+navigation outside the bundled `http://wails.localhost` origin is blocked and
+smoke-tested; frame navigation and cross-origin bridge denial are not separately
+tested.
 
 Implemented: PowerShell 7 hosted through ConPTY; human-edited YAML with separate SQLite runtime state; built-in Claude Code and Copilot CLI command adapters; UTF-8/code-page setup; and desktop close confirmation with graceful interruption followed by bounded force termination.
 
-Automated Windows ConPTY tests now verify PowerShell output/exit codes, resizing, and that forced termination stops child processes.
+Automated Windows ConPTY tests verify PowerShell output/exit codes, resizing,
+and that forced termination stops direct job-child fixtures. Shell/broker
+launches detached outside TauShell's Job Object remain unmanaged.
 
 Remaining work includes end-to-end WebView2/xterm.js testing with both
 harnesses, terminal protocol/Unicode/ANSI validation, prerequisite setup and

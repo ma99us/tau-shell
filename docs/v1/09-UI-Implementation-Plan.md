@@ -62,33 +62,56 @@ and tests demonstrated to be UI-independent and correct for the GUI.
 
 - **Step 1 (feasibility): open.** A production-tagged Wails host opens with
   bundled React/xterm.js assets on the current Windows 10 development machine.
-  This validates the host startup only. No complete Go bridge, terminal
-  interaction, fake full-screen terminal fixture, missing-runtime exercise, or
-  Claude Code/Copilot CLI terminal walkthrough has passed.
+  A production-mode WebView2 smoke confirmed that navigation to an external
+  `.invalid` origin is cancelled. A browser-only xterm smoke with a mocked
+  bridge exercised split UTF-8/emoji, ANSI, alternate screen, terminal queries,
+  mouse reporting, resize, and input; it is not evidence for the actual
+  WebView2/ConPTY path. A controllable full-screen fixture, missing-runtime
+  exercise, and Claude Code/Copilot CLI hosted-terminal walkthroughs have not
+  passed.
 - **Step 2 (host and bridge): partial.** The no-argument Windows entry point,
   bundled local asset server, WebView2 registry precheck, typed bound methods,
-  and standalone CLI path exist. External navigation restrictions and
-  origin-bound bridge behavior have not been explicitly verified.
+  standalone CLI path, and top-level local-origin navigation guard exist.
+  The external navigation denial is smoke-verified; untrusted-origin bridge
+  dispatch has not been separately exercised.
 - **Step 3 (discovery/install): partial.** Home can display executable lookup
   and `--version` output for PowerShell 7, Claude Code, and Copilot CLI.
   Minimum/tested ranges, capability probes, setup flows, winget consent, and
   installation are not implemented.
 - **Step 4 (session manager): foundation implemented.** Process lifecycle has
   been extracted from the TUI, and start/restore/fresh, input, resize, output
-  events, and bounded stop operations are wired. Automated coverage for
-  concurrent fake sessions, process failure/restore, and graceful/forced
-  shutdown is still needed.
+  events, and bounded stop operations are wired. Windows fake-process tests
+  cover concurrent independent I/O/resize, process exit, restore failure,
+  graceful/forced shutdown, cleanup, supervisor and pipe-handle completion,
+  and retry after stop or database-close failure. Recovery tests cover an
+  abandoned startup, a running record without a process ID, and a live session
+  owned by another window. App-close error handling now keeps the window open
+  when session checks or forced-shutdown reporting fail. Process tests verify
+  explicit ConPTY resource clearing and idempotent close; a dedicated native
+  handle-leak check and hosted-terminal integration remain open.
 - **Step 5 (launcher/tabs): partial.** Home, session creation, tabs, terminal
   panes, and stop-or-background tab close are implemented. Tab IDs and
   selection are stored in WebView local storage and are not auto-launched.
-  YAML preview/editing, generated harness defaults, recent folders, keyboard
-  navigation, overflow controls, and robust terminal-session reconnect are
-  missing.
+  Choosing to keep a live session in the background keeps its xterm instance
+  mounted and reuses its screen when reopened; a browser interaction smoke
+  with a mocked bridge verified that output received while hidden appears on
+  reopen and input routes to the reopened session. The actual Wails/ConPTY path
+  remains unverified. YAML preview/editing, generated harness defaults,
+  recent folders, keyboard navigation, overflow controls, and persisted-tab
+  restoration under a real WebView profile remain missing.
 - **Step 6 (persistence/shutdown): partial.** Tab metadata persists separately
   from YAML/runtime state. App close confirms before stopping, and stop results
-  that report forced termination receive an additional native notice. Restart
-  reconciliation, reliable shutdown under failures, and UI behavior tests
+  that report forced termination receive an additional native notice. Manager
+  tests verify stale running state without a process ID and abandoned startup
+  are marked failed without losing their resume IDs, while a live process in
+  another window remains running but is not marked local. Manager tests cover
+  retrying after stop timeouts and database-close errors; close-path tests
+  verify the window remains open when session listing fails and a forced-stop
+  notice is retried after its native dialog fails. Broader restart
+  reconciliation, UI-level shutdown, and real WebView profile restoration
   remain outstanding.
+  Detached shell/broker processes that escape TauShell's job are intentionally
+  unmanaged.
 
 ### Step 1 — WebView2 host and embedded-terminal feasibility
 
