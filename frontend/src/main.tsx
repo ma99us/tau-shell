@@ -1,0 +1,301 @@
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { createRoot } from "react-dom/client";
+import { FitAddon } from "@xterm/addon-fit";
+import { Terminal } from "@xterm/xterm";
+import "@xterm/xterm/css/xterm.css";
+import { app, events, Session, SessionEvent, SystemStatus } from "./bridge";
+import "./style.css";
+
+type Tab = { id: string; name: string };
+const savedTabsKey = "taushell.tabs.v1";
+const savedSelectionKey = "taushell.selected-tab.v1";
+
+function readTabs(): Tab[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(savedTabsKey) ?? "[]");
+    return Array.isArray(parsed)
+      ? parsed.filter((tab): tab is Tab => typeof tab?.id === "string" && typeof tab?.name === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function App() {
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [status, setStatus] = useState<SystemStatus | null>(null);
+  const [tabs, setTabs] = useState<Tab[]>(readTabs);
+  const [selected, setSelected] = useState(localStorage.getItem(savedSelectionKey) ?? "");
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [closeRequest, setCloseRequest] = useState<Session | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const refresh = async () => {
+    try {
+      const [nextSessions, nextStatus] = await Promise.all([
+        app().GetSessions(),
+        status ? Promise.resolve(status) : app().GetSystemStatus(),
+      ]);
+      setSessions(nextSessions);
+      setTabs((current) => current
+        .filter((tab) => nextSessions.some((session) => session.id === tab.id))
+        .map((tab) => ({ ...tab, name: nextSessions.find((session) => session.id === tab.id)!.name })));
+      setSelected((current) => nextSessions.some((session) => session.id === current) ? current : "");
+      setStatus(nextStatus);
+      setError("");
+    } catch (err) {
+      setError(String(err));
+    }
+  };
+
+  useEffect(() => {
+    void refresh();
+    events().EventsOnMultiple("session-event", (event: SessionEvent) => {
+      if (event.kind === "state" && event.session) {
+        setSessions((current) => current.map((session) => session.id === event.sessionId ? event.session! : session));
+        terminalInstances.get(event.sessionId)?.writeln(`\r\n[session ${event.session.status}${event.session.lastError ? `: ${event.session.lastError}` : ""}]\r\n`);
+      } else if (event.kind === "output" && event.dataBase64) {
+        const encoded = atob(event.dataBase64);
+        const bytes = new Uint8Array(encoded.length);
+        for (let index = 0; index < encoded.length; index++) bytes[index] = encoded.charCodeAt(index);
+        terminalInstances.get(event.sessionId)?.write(bytes);
+      }
+    }, -1);
+    return () => events().EventsOff("session-event");
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(savedTabsKey, JSON.stringify(tabs));
+    localStorage.setItem(savedSelectionKey, selected);
+  }, [tabs, selected]);
+
+  const openTab = (session: Session) => {
+    setTabs((current) => current.some((tab) => tab.id === session.id) ? current : [...current, { id: session.id, name: session.name }]);
+    setSelected(session.id);
+  };
+
+  const launch = async (session: Session, mode: "start" | "restore" | "fresh") => {
+    setBusy(true);
+    setError("");
+    try {
+      const terminal = terminalInstances.get(session.id);
+      const columns = terminal?.cols ?? 80;
+      const rows = terminal?.rows ?? 24;
+      const started = mode === "restore"
+        ? await app().RestoreSession(session.id, columns, rows)
+        : mode === "fresh"
+          ? await app().StartFresh(session.id, columns, rows)
+          : await app().StartSession(session.id, columns, rows);
+      openTab(started);
+      await refresh();
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeTab = (id: string) => {
+    setTabs((current) => current.filter((tab) => tab.id !== id));
+    if (selected === id) setSelected(tabs.find((tab) => tab.id !== id)?.id ?? "");
+  };
+  const closeTab = (id: string) => {
+    const session = sessions.find((current) => current.id === id);
+    if (session?.runningHere) setCloseRequest(session);
+    else removeTab(id);
+  };
+  const stopAndCloseTab = async (session: Session) => {
+    setBusy(true);
+    try {
+      await app().StopSession(session.id);
+      removeTab(session.id);
+      setCloseRequest(null);
+      await refresh();
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="app">
+      <header className="topbar">
+        <div className="brand"><span className="brand-mark">T</span><span>TauShell</span></div>
+        <div className="window-caption">Local AI sessions</div>
+        <button className="icon-button" title="Refresh" onClick={() => void refresh()}>R</button>
+      </header>
+      <div className="workspace">
+        <aside className="sidebar">
+          <div className="sidebar-heading">SESSIONS <button className="add-button" onClick={() => setDialogOpen(true)}>+</button></div>
+          <button className={`nav-row ${selected ? "" : "active"}`} onClick={() => setSelected("")}>Home</button>
+          {sessions.map((session) => (
+            <button className={`session-row ${selected === session.id ? "active" : ""}`} key={session.id} onClick={() => openTab(session)}>
+              <span className={`status-dot ${session.runningHere ? "online" : ""}`} />
+              <span className="session-row-text"><strong>{session.name}</strong><small>{session.tool === "claude-code" ? "Claude Code" : "GitHub Copilot CLI"}</small></span>
+            </button>
+          ))}
+          <div className="sidebar-foot">Local machine only</div>
+        </aside>
+        <main className="main">
+          <div className="tabs">
+            <button className={`tab home-tab ${selected === "" ? "active" : ""}`} onClick={() => setSelected("")}>Home</button>
+            {tabs.map((tab) => (
+              <div className={`tab ${selected === tab.id ? "active" : ""}`} key={tab.id}>
+                <button className="tab-label" onClick={() => setSelected(tab.id)}>{tab.name}</button>
+                <button className="tab-close" aria-label={`Close ${tab.name}`} onClick={() => closeTab(tab.id)}>x</button>
+              </div>
+            ))}
+          </div>
+          {error && <div className="error-banner">{error}<button onClick={() => setError("")}>Dismiss</button></div>}
+          <section className="main-content">
+            <div className={`home-container ${selected ? "hidden" : ""}`}>
+              <Home sessions={sessions} status={status} busy={busy} onNew={() => setDialogOpen(true)} onLaunch={launch} />
+            </div>
+            {tabs.map((tab) => <div className={`terminal-tab-content ${selected === tab.id ? "" : "hidden"}`} key={tab.id}>
+              <TerminalPane session={sessions.find((session) => session.id === tab.id)} visible={selected === tab.id} busy={busy} onLaunch={launch} onError={setError} />
+            </div>)}
+          </section>
+        </main>
+      </div>
+      {dialogOpen && <CreateSession onClose={() => setDialogOpen(false)} onCreated={(session) => { setSessions((current) => [...current, session]); setDialogOpen(false); }} onError={setError} />}
+      {closeRequest && <div className="modal-backdrop"><div className="modal confirm-modal">
+        <div className="modal-heading"><div><p className="eyebrow">CLOSE SESSION TAB</p><h2>{closeRequest.name} is running</h2></div></div>
+        <p className="muted">Stop its PowerShell and harness process, or keep it running in the background?</p>
+        <div className="modal-actions">
+          <button className="secondary-button" onClick={() => setCloseRequest(null)}>Cancel</button>
+          <button className="secondary-button" onClick={() => { removeTab(closeRequest.id); setCloseRequest(null); }}>Keep running</button>
+          <button className="primary-button" disabled={busy} onClick={() => void stopAndCloseTab(closeRequest)}>{busy ? "Stopping..." : "Stop and close"}</button>
+        </div>
+      </div></div>}
+    </div>
+  );
+}
+
+function Home({ sessions, status, busy, onNew, onLaunch }: {
+  sessions: Session[];
+  status: SystemStatus | null;
+  busy: boolean;
+  onNew: () => void;
+  onLaunch: (session: Session, mode: "start" | "restore" | "fresh") => void;
+}) {
+  const [freshSession, setFreshSession] = useState<Session | null>(null);
+  return (
+    <>
+    <div className="home">
+      <div className="hero">
+        <div><p className="eyebrow">LOCAL SESSION WORKSPACE</p><h1>Pick up where you left off.</h1><p className="muted">Keep your PowerShell AI harness sessions organized, resumable, and close at hand.</p></div>
+        <button className="primary-button" onClick={onNew}>Create session</button>
+      </div>
+      <div className="section-title"><div><h2>Your sessions</h2><p className="muted">Sessions are never started automatically.</p></div></div>
+      {sessions.length === 0 ? <div className="empty-card"><div className="empty-icon">+</div><h3>No sessions yet</h3><p>Create a session to connect a project folder to Claude Code or GitHub Copilot CLI.</p><button className="primary-button" onClick={onNew}>Create your first session</button></div> :
+        <div className="session-grid">{sessions.map((session) => <article className="session-card" key={session.id}>
+          <div className="card-top"><div className="tool-icon">{session.tool === "claude-code" ? "C" : "G"}</div><span className={`state-pill ${session.runningHere ? "running" : ""}`}>{session.runningHere ? "Running" : session.status}</span></div>
+          <h3>{session.name}</h3><p className="path">{session.workingDir}</p><p className="session-meta">{session.id} | {session.tool}</p>
+          {session.lastError && <p className="card-error">{session.lastError}</p>}
+          <div className="card-actions">
+            {session.runningHere ? <button className="primary-button" onClick={() => onLaunch(session, "start")}>Open terminal</button> :
+              session.hasResumeId ? <><button className="primary-button" disabled={busy} onClick={() => onLaunch(session, "restore")}>Restore</button><button className="text-button" disabled={busy} onClick={() => setFreshSession(session)}>Start fresh</button></> :
+                <button className="primary-button" disabled={busy} onClick={() => onLaunch(session, "start")}>Start</button>}
+          </div>
+        </article>)}</div>}
+      <div className="tools-panel"><div><h2>Installed tools</h2><p className="muted">Detected on this machine</p></div><div className="tool-list">
+        <ToolRow name="PowerShell 7" tool={status?.powershell} /><ToolRow name="Claude Code" tool={status?.claudeCode} /><ToolRow name="GitHub Copilot CLI" tool={status?.copilotCLI} />
+      </div></div>
+    </div>
+    {freshSession && <div className="modal-backdrop"><div className="modal confirm-modal">
+      <div className="modal-heading"><div><p className="eyebrow">START FRESH</p><h2>Begin a new harness conversation?</h2></div></div>
+      <p className="muted">This replaces the saved resume ID for <strong>{freshSession.name}</strong>. Its previous harness conversation will no longer be restored by TauShell.</p>
+      <div className="modal-actions"><button className="secondary-button" onClick={() => setFreshSession(null)}>Cancel</button><button className="primary-button" disabled={busy} onClick={() => { onLaunch(freshSession, "fresh"); setFreshSession(null); }}>Start fresh</button></div>
+    </div></div>}
+    </>
+  );
+}
+
+function ToolRow({ name, tool }: { name: string; tool?: SystemStatus["powershell"] }) {
+  const label = tool?.installed ? tool.version || "Installed" : tool ? "Not found" : "Checking...";
+  return <div className="tool-row" title={tool?.error}><span className={`status-dot ${tool?.installed ? "online" : ""}`} /><strong>{name}</strong><span>{label}</span></div>;
+}
+
+const terminalInstances = new Map<string, Terminal>();
+const fitInstances = new Map<string, FitAddon>();
+function TerminalPane({ session, visible, busy, onLaunch, onError }: {
+  session?: Session;
+  visible: boolean;
+  busy: boolean;
+  onLaunch: (session: Session, mode: "start" | "restore" | "fresh") => void;
+  onError: (error: string) => void;
+}) {
+  const container = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!session || !container.current) return;
+    let terminal = terminalInstances.get(session.id);
+    const fit = new FitAddon();
+    fitInstances.set(session.id, fit);
+    if (!terminal) {
+      terminal = new Terminal({ convertEol: false, cursorBlink: true, fontFamily: "Cascadia Code, Consolas, monospace", fontSize: 14, theme: { background: "#0c0e12", foreground: "#d8dce5", cursor: "#a4e1c0" } });
+      terminal.loadAddon(fit);
+      terminal.open(container.current);
+      terminalInstances.set(session.id, terminal);
+      terminal.onData((data) => { void app().WriteTerminal(session.id, data).catch((err) => onError(String(err))); });
+      terminal.onBinary((data) => { void app().WriteTerminalBinary(session.id, btoa(data)).catch((err) => onError(String(err))); });
+    } else {
+      terminal.loadAddon(fit);
+      terminal.open(container.current);
+    }
+    const resize = () => {
+      try { fit.fit(); void app().ResizeTerminal(session.id, terminal!.cols, terminal!.rows).catch((err) => onError(String(err))); } catch { /* hidden terminal has no measurable rows */ }
+    };
+    const observer = new ResizeObserver(resize);
+    observer.observe(container.current);
+    return () => { observer.disconnect(); terminal?.dispose(); terminalInstances.delete(session.id); fitInstances.delete(session.id); };
+  }, [session?.id]);
+  useEffect(() => {
+    if (!visible || !session) return;
+    const terminal = terminalInstances.get(session.id);
+    const fit = fitInstances.get(session.id);
+    if (!terminal || !fit) return;
+    requestAnimationFrame(() => {
+      try { fit.fit(); void app().ResizeTerminal(session.id, terminal.cols, terminal.rows).catch((err) => onError(String(err))); } catch { /* terminal is not measurable yet */ }
+    });
+  }, [visible, session?.id]);
+  if (!session) return <div className="terminal-missing">Session configuration is unavailable.</div>;
+  return <div className="terminal-view"><div className="terminal-toolbar"><span className={`status-dot ${session.runningHere ? "online" : ""}`} />{session.id} | {session.tool} | {session.workingDir}<span className="terminal-status">{session.runningHere ? "Connected" : session.status || "Not started"}</span>{!session.runningHere && <button className="primary-button terminal-action" disabled={busy} onClick={() => onLaunch(session, session.hasResumeId ? "restore" : "start")}>{session.hasResumeId ? "Restore" : "Start"}</button>}</div><div className="terminal-container" ref={container} /></div>;
+}
+
+function CreateSession({ onClose, onCreated, onError }: {
+  onClose: () => void;
+  onCreated: (session: Session) => void;
+  onError: (error: string) => void;
+}) {
+  const [name, setName] = useState("");
+  const [tool, setTool] = useState<Session["tool"]>("claude-code");
+  const [workingDir, setWorkingDir] = useState("");
+  const [launchArgs, setLaunchArgs] = useState("");
+  const [saving, setSaving] = useState(false);
+  const chooseDirectory = async () => {
+    try { const path = await app().SelectWorkingDirectory(); if (path) setWorkingDir(path); } catch (err) { onError(String(err)); }
+  };
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      const session = await app().CreateSession(name, tool, workingDir, launchArgs.split(/\r?\n/).map((arg) => arg.trim()).filter(Boolean));
+      onCreated(session);
+    } catch (err) { onError(String(err)); } finally { setSaving(false); }
+  };
+  return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="modal">
+    <div className="modal-heading"><div><p className="eyebrow">NEW WORKSPACE</p><h2>Create a session</h2></div><button className="icon-button" onClick={onClose}>x</button></div>
+    <form onSubmit={(event) => void submit(event)}>
+      <label>Session name<input required autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. API refactor" /></label>
+      <label>AI harness<select value={tool} onChange={(event) => setTool(event.target.value as Session["tool"])}><option value="claude-code">Claude Code</option><option value="copilot-cli">GitHub Copilot CLI</option></select></label>
+      <label>Project folder<div className="folder-row"><input required value={workingDir} onChange={(event) => setWorkingDir(event.target.value)} placeholder="Choose a local project folder" /><button type="button" className="secondary-button" onClick={() => void chooseDirectory()}>Browse</button></div></label>
+      <label>Additional launch arguments <span className="optional">(optional, one per line)</span><textarea rows={3} value={launchArgs} onChange={(event) => setLaunchArgs(event.target.value)} placeholder="--model&#10;sonnet" /></label>
+      <p className="form-note">A YAML session definition is saved locally. No session starts until you choose Start.</p>
+      <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button" disabled={saving}>{saving ? "Creating..." : "Create session"}</button></div>
+    </form>
+  </div></div>;
+}
+
+createRoot(document.getElementById("root")!).render(<App />);

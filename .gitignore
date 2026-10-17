@@ -1,0 +1,5 @@
+/spikes/
+/frontend/node_modules/
+/frontend/tsconfig.tsbuildinfo
+docs\.todo
+/docs/.todo

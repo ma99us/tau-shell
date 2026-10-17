@@ -1,20 +1,41 @@
 # YAML Schema
 
+Phase 1 uses one human-edited YAML file per TauShell session, stored under `~/.tau_shell/sessions/`. YAML describes the intended session; mutable process and harness runtime state belongs in SQLite.
+
 ```yaml
-id: backend
+id: backend-agent
 name: Backend Agent
-tool: claude
-auto_restore: true
+tool: claude-code
 working_dir: D:/Projects/App
 
 environment:
-  OPENAI_API_KEY:
-    secret: openai-main
+  NODE_NO_WARNINGS: "1"
 
 powershell:
   utf8: true
 
-actions:
-  startup:
-    - claude --resume
+# Ordered, optional arguments for the selected harness:
+launch_args:
+  - --model
+  - sonnet
 ```
+
+`id` is TauShell's stable session identifier. The harness session UUID is generated and persisted separately before first launch so TauShell can resume the intended conversation by ID. Do not add a `--continue`/“most recent” restore command to YAML.
+
+The current implementation rejects unknown fields and validates the required
+values, supported tool identifiers, working-directory existence, environment
+variable names, UTF-8 setting, and filename/ID match before launch.
+`launch_args` is implemented as an ordered list of discrete harness arguments,
+not a shell command string. The list applies to both start and restore;
+harness adapters supply the mode-specific managed session flags. TauShell
+rejects arguments that would override its managed session/resume identity.
+The desktop form accepts additional arguments one per line, but does not yet
+show a complete editable YAML preview or generate harness-specific argument
+defaults. TauShell treats saved YAML as the user's explicit configuration and
+does not add a separate launch confirmation for configured arguments.
+
+Do not store secret values in YAML; secret-reference support requires a
+separately designed secret provider and is outside the current Phase 1 scope.
+This schema may evolve with explicit compatibility handling.
+
+The isolated [`spikes/session-config/`](../../spikes/session-config/) prototype records the earlier validation of strict YAML parsing and the separate runtime-state boundary.

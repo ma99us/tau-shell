@@ -1,0 +1,77 @@
+package harness
+
+import (
+	"reflect"
+	"strings"
+	"testing"
+
+	"github.com/ma99us/tau-shell/internal/session"
+)
+
+func TestHarnessArgumentsUseExplicitIDs(t *testing.T) {
+	for _, test := range []struct {
+		harness session.Harness
+		start   []string
+		resume  []string
+	}{
+		{session.ClaudeCode, []string{"--session-id", "explicit-id"}, []string{"--resume", "explicit-id"}},
+		{session.CopilotCLI, []string{"--session-id", "explicit-id"}, []string{"--resume", "explicit-id"}},
+	} {
+		adapter, err := For(test.harness)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(adapter.StartArgs("explicit-id"), test.start) {
+			t.Fatalf("%s start arguments = %#v", test.harness, adapter.StartArgs("explicit-id"))
+		}
+		if !reflect.DeepEqual(adapter.ResumeArgs("explicit-id"), test.resume) {
+			t.Fatalf("%s resume arguments = %#v", test.harness, adapter.ResumeArgs("explicit-id"))
+		}
+		for _, arg := range adapter.ResumeArgs("explicit-id") {
+			if arg == "--continue" {
+				t.Fatalf("%s must not resume an ambiguous most-recent session", test.harness)
+			}
+		}
+	}
+}
+
+func TestWindowsHarnessLookupUsesPATHEXTResolution(t *testing.T) {
+	for harnessID, executable := range map[session.Harness]string{
+		session.ClaudeCode: "claude",
+		session.CopilotCLI: "copilot",
+	} {
+		adapter, err := For(harnessID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := adapter.(cliAdapter).executable; got != executable {
+			t.Errorf("%s lookup name = %q, want %q", harnessID, got, executable)
+		}
+	}
+}
+
+func TestPowerShellInvocationQuotesValuesAndSetsSessionEnvironment(t *testing.T) {
+	command := PowerShellInvocation(
+		"C:\\Program Files\\Agent\\agent.exe",
+		[]string{"--session-id", "session-id", "space ' quote"},
+		map[string]string{"MESSAGE": "O'Brien; Remove-Item *"},
+		true,
+	)
+	for _, expected := range []string{
+		"$env:MESSAGE = 'O''Brien; Remove-Item *'",
+		"'C:\\Program Files\\Agent\\agent.exe'",
+		"'space '' quote'",
+		"chcp 65001",
+	} {
+		if !strings.Contains(command, expected) {
+			t.Errorf("PowerShell command missing %q: %s", expected, command)
+		}
+	}
+}
+
+func TestPowerShellInvocationCanLeaveBootstrapEncodingAlone(t *testing.T) {
+	command := PowerShellInvocation("copilot.exe", []string{"--resume", "id"}, nil, false)
+	if strings.Contains(command, "chcp") || strings.Contains(command, "Encoding") {
+		t.Fatalf("unexpected encoding setup in command: %s", command)
+	}
+}

@@ -1,5 +1,11 @@
 # Session Restoration
 
+> **Historical draft; superseded for the current UI by
+> [08-UI-Design.md](./08-UI-Design.md).** Startup restores the previous tab
+> layout and selection only; it does not recreate or resume harness processes.
+> Starting or restoring a harness requires an explicit user action. See also
+> [docs/v2/04-session-restoration.md](../v2/04-session-restoration.md).
+
 ## Stored State
 
 - Session definition

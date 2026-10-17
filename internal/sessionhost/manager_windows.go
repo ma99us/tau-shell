@@ -1,0 +1,532 @@
+package sessionhost
+
+import (
+	"context"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sync"
+	"time"
+
+	"github.com/ma99us/tau-shell/internal/conpty"
+	"github.com/ma99us/tau-shell/internal/harness"
+	"github.com/ma99us/tau-shell/internal/session"
+)
+
+const (
+	startupRecoveryDelay = time.Minute
+	interruptWait        = 3 * time.Second
+	terminateWait        = 5 * time.Second
+)
+
+type EventKind string
+
+const (
+	EventOutput EventKind = "output"
+	EventState  EventKind = "state"
+)
+
+type Event struct {
+	Kind       EventKind `json:"kind"`
+	SessionID  string    `json:"sessionId"`
+	DataBase64 string    `json:"dataBase64,omitempty"`
+	Session    Snapshot  `json:"session,omitempty"`
+}
+
+type Snapshot struct {
+	ID          string                `json:"id"`
+	Name        string                `json:"name"`
+	Tool        session.Harness       `json:"tool"`
+	WorkingDir  string                `json:"workingDir"`
+	Status      session.RuntimeStatus `json:"status"`
+	LastError   string                `json:"lastError,omitempty"`
+	RunningHere bool                  `json:"runningHere"`
+	HasResumeID bool                  `json:"hasResumeId"`
+}
+
+type managedSession struct {
+	config      session.Config
+	process     *conpty.Process
+	done        chan struct{}
+	mu          sync.RWMutex
+	stopMu      sync.Mutex
+	status      session.RuntimeStatus
+	detail      string
+	forced      bool
+	hasResumeID bool
+}
+
+type Manager struct {
+	configDirectory string
+	store           *session.Store
+	emit            func(Event)
+	mu              sync.Mutex
+	shutdownMu      sync.Mutex
+	sessions        map[string]*managedSession
+	closed          bool
+	storeClosed     bool
+}
+
+func New(configDirectory, databasePath string, emit func(Event)) (*Manager, error) {
+	if err := os.MkdirAll(filepath.Dir(databasePath), 0o700); err != nil {
+		return nil, fmt.Errorf("create TauShell data directory: %w", err)
+	}
+	store, err := session.OpenStore(databasePath)
+	if err != nil {
+		return nil, err
+	}
+	return &Manager{
+		configDirectory: configDirectory,
+		store:           store,
+		emit:            emit,
+		sessions:        make(map[string]*managedSession),
+	}, nil
+}
+
+func (manager *Manager) List(ctx context.Context) ([]Snapshot, error) {
+	configs, err := session.ListConfigs(manager.configDirectory)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]Snapshot, 0, len(configs))
+	for _, config := range configs {
+		runtime, err := manager.recoverRuntime(ctx, config.ID)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, Snapshot{
+			ID:          config.ID,
+			Name:        config.Name,
+			Tool:        config.Tool,
+			WorkingDir:  config.WorkingDir,
+			Status:      runtime.Status,
+			LastError:   runtime.LastError,
+			HasResumeID: runtime.HarnessSessionID != "",
+		})
+	}
+	manager.mu.Lock()
+	for index := range result {
+		if current := manager.sessions[result[index].ID]; current != nil {
+			result[index] = current.snapshot()
+		}
+	}
+	manager.mu.Unlock()
+	return result, nil
+}
+
+func (manager *Manager) Start(ctx context.Context, id string, restoring bool, columns, rows int) (Snapshot, error) {
+	return manager.start(ctx, id, restoring, false, columns, rows)
+}
+
+func (manager *Manager) StartFresh(ctx context.Context, id string, columns, rows int) (Snapshot, error) {
+	return manager.start(ctx, id, false, true, columns, rows)
+}
+
+func (manager *Manager) start(ctx context.Context, id string, restoring, fresh bool, columns, rows int) (Snapshot, error) {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	if manager.closed {
+		return Snapshot{}, errors.New("session manager is shutting down")
+	}
+	if current := manager.sessions[id]; current != nil {
+		if current.isRunning() {
+			return current.snapshot(), nil
+		}
+	}
+
+	config, err := session.FindConfig(manager.configDirectory, id)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	adapter, err := harness.For(config.Tool)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	harnessExecutable, err := adapter.FindExecutable()
+	if err != nil {
+		return Snapshot{}, err
+	}
+	powershell, err := exec.LookPath("pwsh.exe")
+	if err != nil {
+		return Snapshot{}, fmt.Errorf("PowerShell 7 (pwsh.exe) is required and must be on PATH: %w", err)
+	}
+	runtime, err := manager.recoverRuntime(ctx, id)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	if runtime.Status == session.StatusRunning || runtime.Status == session.StatusStarting {
+		return Snapshot{}, fmt.Errorf("session %q is active in another TauShell process", id)
+	}
+	if fresh {
+		runtime, err = manager.store.BeginFresh(ctx, id, config.Tool)
+	} else {
+		runtime, err = manager.store.Begin(ctx, id, config.Tool, restoring)
+	}
+	if err != nil {
+		return Snapshot{}, err
+	}
+	args := append([]string(nil), config.LaunchArgs...)
+	if restoring {
+		args = append(args, adapter.ResumeArgs(runtime.HarnessSessionID)...)
+	} else {
+		args = append(args, adapter.StartArgs(runtime.HarnessSessionID)...)
+	}
+	command := harness.PowerShellInvocation(harnessExecutable, args, config.Environment, config.UTF8Enabled())
+	if columns < 2 || rows < 2 {
+		columns, rows = 80, 24
+	}
+	process, err := conpty.Start(columns, rows, powershell, config.WorkingDir,
+		"-NoLogo", "-NoProfile", "-Command", command)
+	if err != nil {
+		finishErr := manager.store.Finish(ctx, id, session.StatusFailed, err.Error())
+		return Snapshot{}, errors.Join(err, finishErr)
+	}
+	if err := manager.store.MarkRunning(ctx, id, process.PID()); err != nil {
+		_ = process.Terminate()
+		closeErr := process.Close()
+		finishErr := manager.store.Finish(ctx, id, session.StatusFailed, err.Error())
+		return Snapshot{}, errors.Join(fmt.Errorf("persist launched session: %w", err), closeErr, finishErr)
+	}
+	current := &managedSession{
+		config:      config,
+		process:     process,
+		done:        make(chan struct{}),
+		status:      session.StatusRunning,
+		hasResumeID: runtime.HarnessSessionID != "",
+	}
+	manager.sessions[id] = current
+	manager.publish(Event{Kind: EventState, SessionID: id, Session: current.snapshot()})
+	go manager.supervise(current)
+	return current.snapshot(), nil
+}
+
+func (manager *Manager) Write(id string, input []byte) error {
+	if len(input) > 64*1024 {
+		return errors.New("terminal input exceeds the 64 KiB limit")
+	}
+	current := manager.get(id)
+	if current == nil || !current.isRunning() {
+		return fmt.Errorf("session %q is not running in this TauShell window", id)
+	}
+	if err := current.process.Write(input); err != nil {
+		return fmt.Errorf("write terminal input for %q: %w", id, err)
+	}
+	return nil
+}
+
+func (manager *Manager) Resize(id string, columns, rows int) error {
+	if columns < 2 || rows < 2 || columns > 32767 || rows > 32767 {
+		return fmt.Errorf("invalid terminal dimensions %dx%d", columns, rows)
+	}
+	current := manager.get(id)
+	if current == nil || !current.isRunning() {
+		return fmt.Errorf("session %q is not running in this TauShell window", id)
+	}
+	if err := current.process.Resize(columns, rows); err != nil {
+		return fmt.Errorf("resize session %q: %w", id, err)
+	}
+	return nil
+}
+
+func (manager *Manager) Stop(ctx context.Context, id string) error {
+	current := manager.get(id)
+	if current == nil || !current.isRunning() {
+		return nil
+	}
+	return manager.stop(ctx, current)
+}
+
+func (manager *Manager) StopAll(ctx context.Context) error {
+	manager.shutdownMu.Lock()
+	defer manager.shutdownMu.Unlock()
+	manager.mu.Lock()
+	manager.closed = true
+	sessions := make([]*managedSession, 0, len(manager.sessions))
+	for _, current := range manager.sessions {
+		if current.isRunning() {
+			sessions = append(sessions, current)
+		}
+	}
+	manager.mu.Unlock()
+
+	var wait sync.WaitGroup
+	errorsOut := make(chan error, len(sessions))
+	for _, current := range sessions {
+		wait.Add(1)
+		go func(current *managedSession) {
+			defer wait.Done()
+			if err := manager.stop(ctx, current); err != nil {
+				errorsOut <- err
+			}
+		}(current)
+	}
+	wait.Wait()
+	close(errorsOut)
+	var stopErr error
+	for err := range errorsOut {
+		stopErr = errors.Join(stopErr, err)
+	}
+	if stopErr != nil {
+		manager.mu.Lock()
+		manager.closed = false
+		manager.mu.Unlock()
+	}
+	return stopErr
+}
+
+func (manager *Manager) Close(ctx context.Context) error {
+	stopErr := manager.StopAll(ctx)
+	if stopErr != nil {
+		return stopErr
+	}
+	manager.mu.Lock()
+	if manager.storeClosed {
+		manager.mu.Unlock()
+		return nil
+	}
+	manager.closed = true
+	manager.storeClosed = true
+	manager.mu.Unlock()
+	closeErr := manager.store.Close()
+	return closeErr
+}
+
+func (manager *Manager) stop(ctx context.Context, current *managedSession) error {
+	current.stopMu.Lock()
+	defer current.stopMu.Unlock()
+	if !current.isRunning() {
+		return nil
+	}
+	if err := current.process.Interrupt(); err != nil {
+		if !current.isRunning() {
+			return nil
+		}
+		current.markForced()
+		if terminateErr := current.process.Terminate(); terminateErr != nil {
+			return errors.Join(fmt.Errorf("interrupt session %q: %w", current.config.ID, err),
+				fmt.Errorf("force-terminate session %q: %w", current.config.ID, terminateErr))
+		}
+		return waitForSession(ctx, current, terminateWait)
+	}
+	if waitErr := waitForSession(ctx, current, interruptWait); waitErr == nil {
+		return nil
+	} else if ctx.Err() != nil {
+		return waitErr
+	}
+	if !current.isRunning() {
+		return nil
+	}
+	current.markForced()
+	if err := current.process.Terminate(); err != nil {
+		return fmt.Errorf("force-terminate session %q: %w", current.config.ID, err)
+	}
+	return waitForSession(ctx, current, terminateWait)
+}
+
+func waitForSession(ctx context.Context, current *managedSession, timeout time.Duration) error {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-current.done:
+		return nil
+	case <-timer.C:
+		return fmt.Errorf("session %q did not stop within %s", current.config.ID, timeout)
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (manager *Manager) supervise(current *managedSession) {
+	outputDone := make(chan error, 1)
+	go func() {
+		_, err := io.Copy(sessionOutputWriter{manager: manager, id: current.config.ID}, current.process.Output())
+		outputDone <- err
+	}()
+
+	var exitCode uint32
+	var waitErr error
+	outputRead := false
+	for {
+		exited, code, err := current.process.Wait(100 * time.Millisecond)
+		if err != nil {
+			waitErr = fmt.Errorf("wait for session %q: %w", current.config.ID, err)
+			break
+		}
+		if exited {
+			exitCode = code
+			break
+		}
+		select {
+		case err := <-outputDone:
+			outputRead = true
+			if err == nil {
+				waitErr = errors.New("ConPTY output closed while PowerShell was still running")
+			} else if !errors.Is(err, os.ErrClosed) {
+				waitErr = fmt.Errorf("read session %q output: %w", current.config.ID, err)
+			}
+			if terminateErr := current.process.Terminate(); terminateErr != nil {
+				waitErr = errors.Join(waitErr, terminateErr)
+			}
+		default:
+		}
+		if waitErr != nil {
+			break
+		}
+	}
+	if waitErr != nil {
+		if err := current.process.Terminate(); err != nil {
+			waitErr = errors.Join(waitErr, fmt.Errorf("terminate failed session %q: %w", current.config.ID, err))
+		}
+		exited, code, err := current.process.Wait(terminateWait)
+		if err != nil {
+			waitErr = errors.Join(waitErr, err)
+		} else if exited {
+			exitCode = code
+		} else {
+			waitErr = errors.Join(waitErr, fmt.Errorf("session %q did not exit after termination", current.config.ID))
+		}
+	}
+	current.process.CloseConsole()
+	if !outputRead {
+		if err := <-outputDone; err != nil && !errors.Is(err, os.ErrClosed) {
+			waitErr = errors.Join(waitErr, fmt.Errorf("read session %q output: %w", current.config.ID, err))
+		}
+	}
+	closeErr := current.process.Close()
+	status, detail := outcome(exitCode, current.wasForced(), waitErr, closeErr)
+	if err := manager.store.Finish(context.Background(), current.config.ID, status, detail); err != nil {
+		status = session.StatusFailed
+		detail = errors.Join(optionalError(detail), err).Error()
+	}
+	current.mu.Lock()
+	current.status = status
+	current.detail = detail
+	current.mu.Unlock()
+	close(current.done)
+	manager.publish(Event{Kind: EventState, SessionID: current.config.ID, Session: current.snapshot()})
+}
+
+type sessionOutputWriter struct {
+	manager *Manager
+	id      string
+}
+
+func (writer sessionOutputWriter) Write(data []byte) (int, error) {
+	writer.manager.publish(Event{
+		Kind:       EventOutput,
+		SessionID:  writer.id,
+		DataBase64: base64.StdEncoding.EncodeToString(data),
+	})
+	return len(data), nil
+}
+
+func (manager *Manager) recoverRuntime(ctx context.Context, id string) (session.Runtime, error) {
+	for attempt := 0; attempt < 3; attempt++ {
+		runtime, err := manager.store.Runtime(ctx, id)
+		if err != nil {
+			return session.Runtime{}, err
+		}
+		switch runtime.Status {
+		case session.StatusStarting:
+			if time.Since(runtime.UpdatedAt) < startupRecoveryDelay {
+				return runtime, nil
+			}
+		case session.StatusRunning:
+			alive, err := session.IsProcessAlive(runtime.ProcessID)
+			if err != nil {
+				return session.Runtime{}, err
+			}
+			if alive {
+				return runtime, nil
+			}
+		default:
+			return runtime, nil
+		}
+		detail := "TauShell exited unexpectedly; use restore to resume the saved harness session."
+		if runtime.Status == session.StatusStarting {
+			detail = "TauShell stopped while starting the session; use start or restore to retry."
+		}
+		updated, err := manager.store.FailIfCurrent(ctx, runtime, detail)
+		if err != nil {
+			return session.Runtime{}, err
+		}
+		if updated {
+			runtime.Status = session.StatusFailed
+			runtime.ProcessID = 0
+			runtime.LastError = detail
+			return runtime, nil
+		}
+	}
+	return session.Runtime{}, fmt.Errorf("session %q runtime state changed repeatedly during recovery; retry the command", id)
+}
+
+func (manager *Manager) get(id string) *managedSession {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	return manager.sessions[id]
+}
+
+func (manager *Manager) publish(event Event) {
+	if manager.emit != nil {
+		manager.emit(event)
+	}
+}
+
+func (current *managedSession) snapshot() Snapshot {
+	current.mu.RLock()
+	defer current.mu.RUnlock()
+	return Snapshot{
+		ID:          current.config.ID,
+		Name:        current.config.Name,
+		Tool:        current.config.Tool,
+		WorkingDir:  current.config.WorkingDir,
+		Status:      current.status,
+		LastError:   current.detail,
+		RunningHere: current.status == session.StatusRunning,
+		HasResumeID: current.hasResumeID,
+	}
+}
+
+func (current *managedSession) isRunning() bool {
+	current.mu.RLock()
+	defer current.mu.RUnlock()
+	return current.status == session.StatusRunning || current.status == session.StatusStarting
+}
+
+func (current *managedSession) markForced() {
+	current.mu.Lock()
+	current.forced = true
+	current.mu.Unlock()
+}
+
+func (current *managedSession) wasForced() bool {
+	current.mu.RLock()
+	defer current.mu.RUnlock()
+	return current.forced
+}
+
+func outcome(exitCode uint32, forced bool, runErr, closeErr error) (session.RuntimeStatus, string) {
+	switch {
+	case runErr != nil:
+		return session.StatusFailed, errors.Join(runErr, closeErr).Error()
+	case closeErr != nil:
+		return session.StatusFailed, closeErr.Error()
+	case exitCode != 0:
+		return session.StatusFailed, fmt.Sprintf("PowerShell exited with code %d", exitCode)
+	case forced:
+		return session.StatusStopped, "Graceful interrupt timed out; session process tree was force-terminated."
+	default:
+		return session.StatusStopped, ""
+	}
+}
+
+func optionalError(detail string) error {
+	if detail == "" {
+		return nil
+	}
+	return errors.New(detail)
+}

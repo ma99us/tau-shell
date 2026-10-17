@@ -1,5 +1,14 @@
 # Configuration Specification
 
+> **Historical draft:** This is not the current Phase 1 schema. Use
+> [docs/v2/18-yaml-schema.md](../v2/18-yaml-schema.md) and
+> [docs/v2/10-environment-management.md](../v2/10-environment-management.md).
+> In particular, `auto_restore`, arbitrary startup commands, and secret
+> interpolation in YAML are not current Phase 1 behavior. The planned
+> `launch_args` list for editable harness CLI options is documented in the
+> current [YAML schema](../v2/18-yaml-schema.md); it is not the same as a
+> free-form startup command.
+
 Root Folder:
 
 ```text
