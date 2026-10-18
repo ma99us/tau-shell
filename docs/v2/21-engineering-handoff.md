@@ -236,12 +236,15 @@ Known gaps and risks:
 - The temporary WebView2 navigation smoke proved event cancellation, not
   full xterm behavior, frame isolation, or provider restore. It was not kept
   in the repository.
-- A process-wide Windows handle-count stress check is noisy in this Go test
-  process: the count rose during both ordinary child-process runs and ConPTY
-  runs, so it cannot distinguish runtime/thread retention from a native handle
-  leak. ConPTY tests currently assert explicit `Close` success, cleared owned
-  resource fields, idempotent close, and manager pipe/supervisor cleanup; a
-  dedicated native leak check remains open.
+- A process-wide Windows handle-count stress check is noisy in the Go test
+  process. An isolated comparison rose by 59 handles across 20 ConPTY
+  Start/Wait/Close cycles and by 41 handles across 20 ordinary PowerShell
+  launches in its control process. The difference is not reliable enough to
+  attribute to ConPTY, so the experiment was discarded as a regression test;
+  it neither proves nor disproves a native handle leak. Existing tests assert
+  explicit `Close` success, cleared owned resource fields, idempotent close,
+  and manager pipe/supervisor cleanup. A reliable native leak check remains
+  open.
 
 ## Recommended next actions
 
