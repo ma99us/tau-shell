@@ -91,6 +91,52 @@ func TestCreateSessionReturnsSavedSessionWithoutListing(t *testing.T) {
 	}
 }
 
+func TestCreateSessionRejectsInvalidConfig(t *testing.T) {
+	application := &App{
+		configDirectory: filepath.Join(t.TempDir(), "sessions"),
+	}
+
+	_, err := application.CreateSession("API refactor", string(session.ClaudeCode), t.TempDir(), []string{"--session-id=override"})
+	if err == nil || !strings.Contains(err.Error(), "launch_args cannot override TauShell-managed --session-id") {
+		t.Fatalf("CreateSession error = %v, want reserved launch argument validation error", err)
+	}
+	if _, err := os.Stat(filepath.Join(application.configDirectory, "api-refactor.yaml")); !os.IsNotExist(err) {
+		t.Fatalf("invalid session config file stat error = %v, want file not to exist", err)
+	}
+}
+
+func TestCreateSessionRejectsDuplicateIDWithoutOverwriting(t *testing.T) {
+	configDirectory := filepath.Join(t.TempDir(), "sessions")
+	workingDirectory := t.TempDir()
+	original := session.Config{
+		ID:         "api-refactor",
+		Name:       "Original session",
+		Tool:       session.ClaudeCode,
+		WorkingDir: workingDirectory,
+	}
+	configPath, err := session.SaveConfig(configDirectory, original)
+	if err != nil {
+		t.Fatalf("save original config: %v", err)
+	}
+	before, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read original config: %v", err)
+	}
+
+	application := &App{configDirectory: configDirectory}
+	_, err = application.CreateSession("API refactor", string(session.CopilotCLI), workingDirectory, []string{"--agent", "new"})
+	if err == nil || !strings.Contains(err.Error(), "create session config") {
+		t.Fatalf("CreateSession error = %v, want duplicate session-file error", err)
+	}
+	after, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read config after duplicate create: %v", err)
+	}
+	if string(after) != string(before) {
+		t.Fatalf("duplicate session creation modified config:\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+}
+
 func TestBeforeCloseKeepsWindowOpenWhenSessionCheckFails(t *testing.T) {
 	root := t.TempDir()
 	configDirectory := filepath.Join(root, "sessions")

@@ -36,7 +36,9 @@ interaction decisions and feasibility gate are in
   are running. Session creation returns its never-started snapshot from the
   validated configuration after saving, without rereading the full session
   list; an unrelated listing failure can no longer make a successful save look
-  like a failed create.
+  like a failed create. Desktop tests cover the returned snapshot, persisted
+  launch arguments, no-list behavior, invalid configuration, and duplicate-ID
+  rejection without overwriting an existing YAML file.
 - `frontend/` contains the React launcher, session creation form, Home tool
   inventory, local tab-order/selection storage, xterm.js panes, and typed
   frontend bridge declarations. Start and restore now open and size the
