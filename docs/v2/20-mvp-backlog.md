@@ -32,9 +32,12 @@
 - **Session authoring:** generate harness-specific editable YAML defaults,
   preview and validate effective discrete argv before saving, and offer to
   start after creation.
-- **Workspace UX:** add recent folders, keyboard tab navigation and overflow
-  handling; verify persisted-tab restoration across app restarts and confirm
-  background terminal behavior through the actual Wails/ConPTY path.
+- **Workspace UX:** verify recent folder suggestions and keyboard-only tab
+  navigation/overflow controls in the desktop host, persisted-tab restoration
+  across app restarts, and background terminal behavior through the actual
+  Wails/ConPTY path. Basic accessible tab navigation and horizontal overflow
+  controls are implemented in the frontend. The session form suggests up to
+  five recently used folders, persisted in WebView local storage.
 - **Shutdown/recovery:** add native ConPTY handle-leak checks and UI-level
   shutdown tests; broaden stale-runtime reconciliation coverage beyond the
   tested abandoned-starting, missing-PID, and live-other-window cases.

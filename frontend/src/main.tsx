@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
@@ -9,6 +9,18 @@ import "./style.css";
 type Tab = { id: string; name: string };
 const savedTabsKey = "taushell.tabs.v1";
 const savedSelectionKey = "taushell.selected-tab.v1";
+const recentFoldersKey = "taushell.recent-folders.v1";
+
+function readRecentFolders(): string[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(recentFoldersKey) ?? "[]");
+    return Array.isArray(parsed)
+      ? parsed.filter((folder): folder is string => typeof folder === "string" && folder.length > 0).slice(0, 5)
+      : [];
+  } catch {
+    return [];
+  }
+}
 
 function readTabs(): Tab[] {
   try {
@@ -25,8 +37,11 @@ function App() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [tabs, setTabs] = useState<Tab[]>(readTabs);
+  const [recentFolders, setRecentFolders] = useState<string[]>(readRecentFolders);
   const [backgroundTerminalIds, setBackgroundTerminalIds] = useState<string[]>([]);
   const [selected, setSelected] = useState(localStorage.getItem(savedSelectionKey) ?? "");
+  const [tabScroll, setTabScroll] = useState({ left: false, right: false });
+  const tabListRef = useRef<HTMLDivElement>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [closeRequest, setCloseRequest] = useState<Session | null>(null);
   const [error, setError] = useState("");
@@ -76,6 +91,55 @@ function App() {
     localStorage.setItem(savedSelectionKey, selected);
   }, [tabs, selected]);
 
+  useEffect(() => {
+    localStorage.setItem(recentFoldersKey, JSON.stringify(recentFolders));
+  }, [recentFolders]);
+
+  useEffect(() => {
+    const tabList = tabListRef.current;
+    if (!tabList) return;
+    const updateScrollState = () => setTabScroll({
+      left: tabList.scrollLeft > 0,
+      right: tabList.scrollLeft + tabList.clientWidth < tabList.scrollWidth - 1,
+    });
+    const observer = new ResizeObserver(updateScrollState);
+    observer.observe(tabList);
+    tabList.addEventListener("scroll", updateScrollState);
+    updateScrollState();
+    return () => {
+      observer.disconnect();
+      tabList.removeEventListener("scroll", updateScrollState);
+    };
+  }, [tabs]);
+
+  useEffect(() => {
+    const activeTab = document.getElementById(selected ? `tab-${selected}` : "tab-home");
+    activeTab?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [selected, tabs]);
+
+  const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const tabList = tabListRef.current;
+    if (!tabList) return;
+    const tabElements = Array.from(tabList.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+    const currentIndex = tabElements.indexOf(event.currentTarget);
+    const nextIndex = event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? tabElements.length - 1
+        : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + tabElements.length) % tabElements.length;
+    const nextTab = tabElements[nextIndex];
+    if (!nextTab) return;
+    nextTab.focus();
+    setSelected(nextTab.dataset.tabId ?? "");
+  };
+
+  const scrollTabs = (direction: -1 | 1) => {
+    const tabList = tabListRef.current;
+    if (tabList) tabList.scrollBy({ left: direction * Math.max(160, tabList.clientWidth * 0.75), behavior: "smooth" });
+  };
+
   const openTab = (session: Session) => {
     setTabs((current) => current.some((tab) => tab.id === session.id) ? current : [...current, { id: session.id, name: session.name }]);
     setBackgroundTerminalIds((current) => current.filter((id) => id !== session.id));
@@ -103,12 +167,17 @@ function App() {
   };
 
   const removeTab = (id: string, retainRunningTerminal = false) => {
+    const remainingTabs = tabs.filter((tab) => tab.id !== id);
     setTabs((current) => current.filter((tab) => tab.id !== id));
     setBackgroundTerminalIds((current) => {
       if (!retainRunningTerminal) return current.filter((terminalId) => terminalId !== id);
       return current.includes(id) ? current : [...current, id];
     });
-    if (selected === id) setSelected(tabs.find((tab) => tab.id !== id)?.id ?? "");
+    if (selected === id) {
+      const nextSelected = remainingTabs[0]?.id ?? "";
+      setSelected(nextSelected);
+      requestAnimationFrame(() => document.getElementById(nextSelected ? `tab-${nextSelected}` : "tab-home")?.focus());
+    }
   };
   const keepTerminalInBackground = (id: string) => removeTab(id, true);
   const closeTab = (id: string) => {
@@ -151,18 +220,42 @@ function App() {
           <div className="sidebar-foot">Local machine only</div>
         </aside>
         <main className="main">
-          <div className="tabs">
-            <button className={`tab home-tab ${selected === "" ? "active" : ""}`} onClick={() => setSelected("")}>Home</button>
-            {tabs.map((tab) => (
-              <div className={`tab ${selected === tab.id ? "active" : ""}`} key={tab.id}>
-                <button className="tab-label" onClick={() => setSelected(tab.id)}>{tab.name}</button>
-                <button className="tab-close" aria-label={`Close ${tab.name}`} onClick={() => closeTab(tab.id)}>x</button>
-              </div>
-            ))}
+          <div className="tab-strip">
+            <button className="tab-scroll-button" aria-label="Scroll tabs left" disabled={!tabScroll.left} onClick={() => scrollTabs(-1)}>&lt;</button>
+            <div className="tabs" role="tablist" aria-label="Workspace tabs" ref={tabListRef}>
+              <button
+                id="tab-home"
+                className={`tab home-tab ${selected === "" ? "active" : ""}`}
+                role="tab"
+                aria-selected={selected === ""}
+                aria-controls="panel-home"
+                data-tab-id=""
+                tabIndex={selected === "" ? 0 : -1}
+                onKeyDown={handleTabKeyDown}
+                onClick={() => setSelected("")}
+              >Home</button>
+              {tabs.map((tab) => (
+                <div className={`tab-item ${selected === tab.id ? "active" : ""}`} key={tab.id} role="presentation">
+                  <button
+                    id={`tab-${tab.id}`}
+                    className="tab tab-label"
+                    role="tab"
+                    aria-selected={selected === tab.id}
+                    aria-controls={`panel-${tab.id}`}
+                    data-tab-id={tab.id}
+                    tabIndex={selected === tab.id ? 0 : -1}
+                    onKeyDown={handleTabKeyDown}
+                    onClick={() => setSelected(tab.id)}
+                  >{tab.name}</button>
+                  <button className="tab-close" aria-label={`Close ${tab.name}`} onClick={() => closeTab(tab.id)}>x</button>
+                </div>
+              ))}
+            </div>
+            <button className="tab-scroll-button" aria-label="Scroll tabs right" disabled={!tabScroll.right} onClick={() => scrollTabs(1)}>&gt;</button>
           </div>
           {error && <div className="error-banner">{error}<button onClick={() => setError("")}>Dismiss</button></div>}
           <section className="main-content">
-            <div className={`home-container ${selected ? "hidden" : ""}`}>
+            <div id="panel-home" className={`home-container ${selected ? "hidden" : ""}`} role="tabpanel" aria-labelledby="tab-home" tabIndex={0}>
               <Home sessions={sessions} status={status} busy={busy} onNew={() => setDialogOpen(true)} onLaunch={launch} />
             </div>
             {terminalIds.map((id) => {
@@ -170,7 +263,7 @@ function App() {
               const session = sessions.find((current) => current.id === id);
               if (!tab && !session?.runningHere) return null;
               return (
-                <div className={`terminal-tab-content ${tab && selected === id ? "" : "hidden"}`} key={id}>
+                <div id={`panel-${id}`} className={`terminal-tab-content ${tab && selected === id ? "" : "hidden"}`} role="tabpanel" aria-labelledby={`tab-${id}`} tabIndex={0} key={id}>
                   <TerminalPane session={session} visible={Boolean(tab && selected === id)} busy={busy} onLaunch={launch} onError={setError} />
                 </div>
               );
@@ -178,7 +271,11 @@ function App() {
           </section>
         </main>
       </div>
-      {dialogOpen && <CreateSession onClose={() => setDialogOpen(false)} onCreated={(session) => { setSessions((current) => [...current, session]); setDialogOpen(false); }} onError={setError} />}
+      {dialogOpen && <CreateSession recentFolders={recentFolders} onClose={() => setDialogOpen(false)} onCreated={(session) => {
+        setSessions((current) => [...current, session]);
+        setRecentFolders((current) => [session.workingDir, ...current.filter((folder) => folder.toLowerCase() !== session.workingDir.toLowerCase())].slice(0, 5));
+        setDialogOpen(false);
+      }} onError={setError} />}
       {closeRequest && <div className="modal-backdrop"><div className="modal confirm-modal">
         <div className="modal-heading"><div><p className="eyebrow">CLOSE SESSION TAB</p><h2>{closeRequest.name} is running</h2></div></div>
         <p className="muted">Stop its PowerShell and harness process, or keep it running in the background?</p>
@@ -332,7 +429,8 @@ function TerminalPane({ session, visible, busy, onLaunch, onError }: {
   return <div className="terminal-view"><div className="terminal-toolbar"><span className={`status-dot ${session.runningHere ? "online" : ""}`} />{session.id} | {session.tool} | {session.workingDir}<span className="terminal-status">{session.runningHere ? "Connected" : session.status || "Not started"}</span>{!session.runningHere && <button className="primary-button terminal-action" disabled={busy} onClick={() => onLaunch(session, session.hasResumeId ? "restore" : "start")}>{session.hasResumeId ? "Restore" : "Start"}</button>}</div><div className="terminal-container" ref={container} /></div>;
 }
 
-function CreateSession({ onClose, onCreated, onError }: {
+function CreateSession({ recentFolders, onClose, onCreated, onError }: {
+  recentFolders: string[];
   onClose: () => void;
   onCreated: (session: Session) => void;
   onError: (error: string) => void;
@@ -358,7 +456,7 @@ function CreateSession({ onClose, onCreated, onError }: {
     <form onSubmit={(event) => void submit(event)}>
       <label>Session name<input required autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. API refactor" /></label>
       <label>AI harness<select value={tool} onChange={(event) => setTool(event.target.value as Session["tool"])}><option value="claude-code">Claude Code</option><option value="copilot-cli">GitHub Copilot CLI</option></select></label>
-      <label>Project folder<div className="folder-row"><input required value={workingDir} onChange={(event) => setWorkingDir(event.target.value)} placeholder="Choose a local project folder" /><button type="button" className="secondary-button" onClick={() => void chooseDirectory()}>Browse</button></div></label>
+      <label>Project folder<div className="folder-row"><input required list="recent-project-folders" value={workingDir} onChange={(event) => setWorkingDir(event.target.value)} placeholder="Choose a local project folder" /><datalist id="recent-project-folders">{recentFolders.map((folder) => <option key={folder} value={folder} />)}</datalist><button type="button" className="secondary-button" onClick={() => void chooseDirectory()}>Browse</button></div></label>
       <label>Additional launch arguments <span className="optional">(optional, one per line)</span><textarea rows={3} value={launchArgs} onChange={(event) => setLaunchArgs(event.target.value)} placeholder="--model&#10;sonnet" /></label>
       <p className="form-note">A YAML session definition is saved locally. No session starts until you choose Start.</p>
       <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button" disabled={saving}>{saving ? "Creating..." : "Create session"}</button></div>

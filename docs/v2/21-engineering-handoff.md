@@ -178,13 +178,17 @@ Known gaps and risks:
   support ranges, capability probes, winget consent/install actions, and
   vendor-link fallback are not.
 - Session creation saves validated YAML, but generated harness-specific
-  templates, editable YAML preview, effective-argv preview, recent folders,
-  and offer-to-start-after-creation are incomplete.
+  templates, editable YAML preview, effective-argv preview, and
+  offer-to-start-after-creation are incomplete. The session form now suggests
+  up to five recently created session folders, persisted in WebView local
+  storage.
 - Tabs and selected tab persist in WebView local storage. They do not
   auto-launch sessions. In-process background tabs retain their xterm buffer.
-  Keyboard tab navigation, tab overflow controls, persisted presentation state
-  under different WebView profile conditions, and the background terminal path
-  through the real Wails/ConPTY host remain unverified.
+  The tab strip now has tab semantics, arrow/Home/End keyboard selection,
+  active-tab scrolling, and horizontal overflow buttons. The complete
+  keyboard-only walkthrough, persisted presentation state under different
+  WebView profile conditions, and the background terminal path through the
+  real Wails/ConPTY host remain unverified.
 - Start Fresh is explicitly confirmed in the UI and rotates the persisted
   harness ID. Confirm failure/retry behavior with each adapter; Claude Code
   provider-backed restore remains unverified. A disposable Copilot CLI
@@ -232,6 +236,8 @@ Known gaps and risks:
    handle-leak and UI-level shutdown checks; keep setup/install and
    session-template implementation behind the feasibility gate, as required
    by the implementation plan.
+   The frontend tab strip's keyboard navigation and overflow controls are
+   implemented; verify them as part of the desktop-host keyboard walkthrough.
 3. Run `npm ci`, `npm run build`, `go test -count=1 ./...`, `go vet ./...`, and
    a production-tagged build after code changes. Re-run the executable startup
    smoke test when changing host/runtime code.

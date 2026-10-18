@@ -96,9 +96,13 @@ and tests demonstrated to be UI-independent and correct for the GUI.
   mounted and reuses its screen when reopened; a browser interaction smoke
   with a mocked bridge verified that output received while hidden appears on
   reopen and input routes to the reopened session. The actual Wails/ConPTY path
-  remains unverified. YAML preview/editing, generated harness defaults,
-  recent folders, keyboard navigation, overflow controls, and persisted-tab
-  restoration under a real WebView profile remain missing.
+  remains unverified. Tabs now use keyboard-accessible tab roles, arrow/Home/
+  End selection, active-tab visibility, and horizontal overflow buttons.
+  A complete keyboard-only walkthrough inside the desktop host remains
+  unverified. The session dialog now suggests the five most recently created
+  project folders using WebView local storage. YAML preview/editing, generated
+  harness defaults, and persisted-tab restoration under a real WebView profile
+  remain missing.
 - **Step 6 (persistence/shutdown): partial.** Tab metadata persists separately
   from YAML/runtime state. App close confirms before stopping, and stop results
   that report forced termination receive an additional native notice. Manager
@@ -248,13 +252,17 @@ tree cleanup, and no leaked handles/goroutines.
   runtime state and detected tool availability. Restore prior tab
   arrangement/selection as available launcher state, not as automatically
   running sessions. Provide **New session** with harness selection, folder
-  picker/recent folders, generated editable config preview, and creation; offer
-  to start the session immediately after it is saved.
+  picker/recent folder suggestions, generated editable config preview, and
+  creation; offer to start the session immediately after it is saved. Recent
+  folder suggestions are implemented and limited to the five most recently
+  created session folders.
 - Show a clear setup path when host prerequisites are missing, and direct
   Install actions for missing harnesses and recommended tools.
 - Implement a tabbed workspace with an embedded terminal for each running
   session, keyboard-accessible session selection, tab overflow handling, and
-  clear active/inactive status.
+  clear active/inactive status. The current UI exposes tab semantics, arrow
+  and Home/End selection, and horizontal scroll controls; verify these in the
+  desktop keyboard-only walkthrough.
 - Start never-used sessions explicitly; offer Restore or confirmed Start fresh
   when a resume ID exists. Selecting an already-running session focuses its
   existing tab.
