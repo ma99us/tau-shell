@@ -56,6 +56,41 @@ func (manager *closeTestManager) Close(context.Context) error {
 	return nil
 }
 
+func TestCreateSessionReturnsSavedSessionWithoutListing(t *testing.T) {
+	listErr := errors.New("session listing should not be needed")
+	manager := &closeTestManager{
+		list: func(context.Context) ([]sessionhost.Snapshot, error) {
+			return nil, listErr
+		},
+	}
+	workingDirectory := t.TempDir()
+	application := &App{
+		manager:         manager,
+		configDirectory: filepath.Join(t.TempDir(), "sessions"),
+	}
+	launchArgs := []string{"--model", "sonnet"}
+
+	snapshot, err := application.CreateSession(" API refactor! ", string(session.ClaudeCode), workingDirectory, launchArgs)
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	if manager.listCalls != 0 {
+		t.Fatalf("session manager List called %d times, want zero", manager.listCalls)
+	}
+	if snapshot.ID != "api-refactor" || snapshot.Name != "API refactor!" || snapshot.Tool != session.ClaudeCode ||
+		snapshot.WorkingDir != workingDirectory || snapshot.Status != session.StatusNeverStarted ||
+		snapshot.RunningHere || snapshot.HasResumeID {
+		t.Fatalf("created session snapshot = %+v", snapshot)
+	}
+	config, err := session.FindConfig(application.configDirectory, snapshot.ID)
+	if err != nil {
+		t.Fatalf("read saved config: %v", err)
+	}
+	if len(config.LaunchArgs) != len(launchArgs) || config.LaunchArgs[0] != launchArgs[0] || config.LaunchArgs[1] != launchArgs[1] {
+		t.Fatalf("saved launch args = %v, want %v", config.LaunchArgs, launchArgs)
+	}
+}
+
 func TestBeforeCloseKeepsWindowOpenWhenSessionCheckFails(t *testing.T) {
 	root := t.TempDir()
 	configDirectory := filepath.Join(root, "sessions")

@@ -33,7 +33,10 @@ interaction decisions and feasibility gate are in
   registration before host startup; creates a Wails window with embedded
   frontend assets; binds session operations; exposes directory selection;
   detects tool executables and versions; and confirms app close when sessions
-  are running.
+  are running. Session creation returns its never-started snapshot from the
+  validated configuration after saving, without rereading the full session
+  list; an unrelated listing failure can no longer make a successful save look
+  like a failed create.
 - `frontend/` contains the React launcher, session creation form, Home tool
   inventory, local tab-order/selection storage, xterm.js panes, and typed
   frontend bridge declarations. Start and restore now open and size the

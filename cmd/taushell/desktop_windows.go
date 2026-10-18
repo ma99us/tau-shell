@@ -208,16 +208,13 @@ func (application *App) CreateSession(name, toolName, workingDir string, launchA
 	if _, err := session.SaveConfig(application.configDirectory, config); err != nil {
 		return sessionhost.Snapshot{}, err
 	}
-	sessions, err := application.manager.List(context.Background())
-	if err != nil {
-		return sessionhost.Snapshot{}, err
-	}
-	for _, current := range sessions {
-		if current.ID == id {
-			return current, nil
-		}
-	}
-	return sessionhost.Snapshot{}, fmt.Errorf("session %q was saved but is missing from the session list", id)
+	return sessionhost.Snapshot{
+		ID:         config.ID,
+		Name:       config.Name,
+		Tool:       config.Tool,
+		WorkingDir: config.WorkingDir,
+		Status:     session.StatusNeverStarted,
+	}, nil
 }
 
 func (application *App) StartSession(id string, columns, rows int) (sessionhost.Snapshot, error) {
