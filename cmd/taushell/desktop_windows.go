@@ -34,12 +34,23 @@ var frontendAssets embed.FS
 var sessionIDPattern = regexp.MustCompile(`[^a-z0-9]+`)
 
 type App struct {
-	manager                *sessionhost.Manager
+	manager                desktopSessionManager
 	ctx                    context.Context
 	configDirectory        string
 	webViewVersion         string
 	showMessageDialog      func(context.Context, runtime.MessageDialogOptions) (string, error)
 	forcedShutdownWarnings []string
+}
+
+type desktopSessionManager interface {
+	List(context.Context) ([]sessionhost.Snapshot, error)
+	Start(context.Context, string, bool, int, int) (sessionhost.Snapshot, error)
+	StartFresh(context.Context, string, int, int) (sessionhost.Snapshot, error)
+	Write(string, []byte) error
+	Resize(string, int, int) error
+	Stop(context.Context, string) error
+	StopAll(context.Context) error
+	Close(context.Context) error
 }
 
 type ToolStatus struct {
@@ -308,10 +319,25 @@ func (application *App) beforeClose(ctx context.Context) bool {
 		return true
 	}
 	forced := make([]string, 0)
+	stillRunning := make([]string, 0)
 	for _, current := range stopped {
-		if strings.Contains(current.LastError, "force-terminated") {
+		if current.RunningHere {
+			stillRunning = append(stillRunning, current.Name)
+		} else if strings.Contains(current.LastError, "force-terminated") {
 			forced = append(forced, current.Name)
 		}
+	}
+	if len(stillRunning) > 0 {
+		_, dialogErr := application.messageDialog(ctx, runtime.MessageDialogOptions{
+			Type:    runtime.ErrorDialog,
+			Title:   "Some sessions are still running",
+			Message: fmt.Sprintf("TauShell could not verify that these sessions stopped:\n\n%s", strings.Join(stillRunning, "\n")),
+			Buttons: []string{"Keep TauShell open"},
+		})
+		if dialogErr != nil {
+			fmt.Fprintf(os.Stderr, "taushell: report sessions still running after shutdown: %v\n", dialogErr)
+		}
+		return true
 	}
 	return application.reportForcedShutdowns(ctx, forced)
 }

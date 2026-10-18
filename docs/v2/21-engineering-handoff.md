@@ -133,6 +133,11 @@ Go 1.26+ toolchain or redownload and verify the official archive before
 repeating Go checks. Node.js/npm and the required WebView2 Runtime were
 available.
 
+The latest shutdown/recovery update again passed the full Windows Go test
+suite, `go vet`, and a production-tagged build. It adds checks for the shutdown
+confirmation and cancellation flow, forced-stop notices, stop failures, and
+the case where a session is still running after `StopAll` returns successfully.
+
 This verification used Windows 10 Pro 22H2 (build 19045), Go 1.27.2,
 PowerShell 7.6.7, GitHub Copilot CLI 1.0.99-2, and WebView2 Runtime
 155.0.4283.60. Claude Code 2.1.302 was installed after the user confirmed the
@@ -158,12 +163,15 @@ Known gaps and risks:
   non-destructive Claude Code and Copilot CLI walkthroughs on Windows 10.
   Existing ConPTY byte tests and the browser-only mocked-bridge xterm smoke do
   not validate the production WebView2/ConPTY path end to end.
-- Add native ConPTY handle-leak checks and UI-level shutdown tests. The close
-  path now reports session-list, stop, and post-stop verification failures
-  without allowing the window to close; forced-stop notices remain pending and
-  retry after a native-dialog failure. Extend stale-runtime recovery tests
-  beyond an abandoned startup, recent starting state, running records with
-  missing or exited PIDs, and a live other-window process.
+- Add native ConPTY handle-leak checks and Wails-host close integration tests.
+  Close-flow unit tests now cover cancellation, successful stop and
+  verification, forced-stop reporting, stop failure, and keeping the window
+  open when a managed session remains running after `StopAll`. The close path
+  also reports session-list failures without allowing the window to close;
+  forced-stop notices remain pending and retry after a native-dialog failure.
+  Extend stale-runtime recovery tests beyond an abandoned startup, recent
+  starting state, running records with missing or exited PIDs, and a live
+  other-window process.
 - The ConPTY job-cleanup test now launches a direct child fixture and verifies
   that inherited job members are terminated. A PowerShell `Start-Process`
   experiment produced a child outside the TauShell job; that detached launch
@@ -240,7 +248,7 @@ Known gaps and risks:
    A clean missing-WebView2 environment is unavailable on this machine; do
    not treat host startup or compile-only checks as the feasibility gate.
 2. Continue independent shutdown/recovery coverage with native ConPTY
-   handle-leak and UI-level shutdown checks; keep setup/install and
+   handle-leak and Wails-host close integration checks; keep setup/install and
    session-template implementation behind the feasibility gate, as required
    by the implementation plan.
    The frontend tab strip's keyboard navigation and overflow controls are
