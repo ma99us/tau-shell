@@ -43,3 +43,7 @@ outside `http://wails.localhost` before they load, and Wails independently
 validates the origin of calls into bound methods. Keep both controls enabled:
 origin validation protects the bridge, while the navigation guard keeps
 untrusted pages out of the desktop surface.
+
+WebView local storage contains presentation metadata (open tab IDs and
+selection) and up to five recently created session working-directory paths.
+It must not contain credentials, environment values, or other secret data.
