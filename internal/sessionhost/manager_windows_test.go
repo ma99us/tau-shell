@@ -302,6 +302,53 @@ func TestManagerReconcilesRunningStateWithoutProcessID(t *testing.T) {
 	}
 }
 
+func TestManagerReconcilesRunningStateWithExitedProcessID(t *testing.T) {
+	manager, _, _ := newLifecycleTestManager(t, "exited-process")
+	ctx := context.Background()
+	runtime, err := manager.store.BeginFresh(ctx, "exited-process", session.ClaudeCode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const exitedProcessID = int(^uint32(0) >> 1)
+	if err := manager.store.MarkRunning(ctx, "exited-process", exitedProcessID); err != nil {
+		t.Fatal(err)
+	}
+
+	snapshots, err := manager.List(ctx)
+	if err != nil {
+		t.Fatalf("list sessions: %v", err)
+	}
+	if len(snapshots) != 1 {
+		t.Fatalf("got %d snapshots, want one", len(snapshots))
+	}
+	if snapshots[0].Status != session.StatusFailed || snapshots[0].LastError == "" {
+		t.Fatalf("exited-process runtime snapshot = %+v, want observable failed state", snapshots[0])
+	}
+	if !snapshots[0].HasResumeID || snapshots[0].RunningHere {
+		t.Fatalf("exited-process recovery lost resume state or appears live: %+v (original ID %q)", snapshots[0], runtime.HarnessSessionID)
+	}
+}
+
+func TestManagerKeepsRecentStartingStateDuringRecovery(t *testing.T) {
+	manager, _, _ := newLifecycleTestManager(t, "recent-start")
+	ctx := context.Background()
+	original, err := manager.store.BeginFresh(ctx, "recent-start", session.ClaudeCode)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	snapshots, err := manager.List(ctx)
+	if err != nil {
+		t.Fatalf("list sessions: %v", err)
+	}
+	if len(snapshots) != 1 || snapshots[0].Status != session.StatusStarting {
+		t.Fatalf("recent-start snapshots = %+v, want one starting session", snapshots)
+	}
+	if !snapshots[0].HasResumeID || snapshots[0].RunningHere {
+		t.Fatalf("recent-start state lost resume ID or appears live: %+v (original ID %q)", snapshots[0], original.HarnessSessionID)
+	}
+}
+
 func TestManagerPreservesLiveProcessFromAnotherWindow(t *testing.T) {
 	manager, _, _ := newLifecycleTestManager(t, "other-window")
 	ctx := context.Background()

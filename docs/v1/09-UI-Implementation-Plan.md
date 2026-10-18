@@ -84,9 +84,10 @@ and tests demonstrated to be UI-independent and correct for the GUI.
   cover concurrent independent I/O/resize, process exit, restore failure,
   graceful/forced shutdown, cleanup, supervisor and pipe-handle completion,
   and retry after stop or database-close failure. Recovery tests cover an
-  abandoned startup, a running record without a process ID, and a live session
-  owned by another window. App-close error handling now keeps the window open
-  when session checks or forced-shutdown reporting fail. Process tests verify
+  abandoned startup, recent starting state, running records with missing or
+  exited process IDs, and a live session owned by another window. App-close
+  error handling now keeps the window open when session checks or
+  forced-shutdown reporting fail. Process tests verify
   explicit ConPTY resource clearing and idempotent close; a dedicated native
   handle-leak check and hosted-terminal integration remain open.
 - **Step 5 (launcher/tabs): partial.** Home, session creation, tabs, terminal
@@ -106,9 +107,10 @@ and tests demonstrated to be UI-independent and correct for the GUI.
 - **Step 6 (persistence/shutdown): partial.** Tab metadata persists separately
   from YAML/runtime state. App close confirms before stopping, and stop results
   that report forced termination receive an additional native notice. Manager
-  tests verify stale running state without a process ID and abandoned startup
-  are marked failed without losing their resume IDs, while a live process in
-  another window remains running but is not marked local. Manager tests cover
+  tests verify stale running state with missing or exited process IDs and
+  abandoned startup are marked failed without losing their resume IDs, while a
+  recent starting state is retained and a live process in another window
+  remains running but is not marked local. Manager tests cover
   retrying after stop timeouts and database-close errors; close-path tests
   verify the window remains open when session listing fails and a forced-stop
   notice is retried after its native dialog fails. Broader restart

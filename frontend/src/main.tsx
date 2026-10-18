@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { app, events, Session, SessionEvent, SystemStatus } from "./bridge";
+import { app, Session, SessionEvent, SystemStatus } from "./bridge";
 import "./style.css";
 
 type Tab = { id: string; name: string };
@@ -69,7 +69,9 @@ function App() {
 
   useEffect(() => {
     void refresh();
-    events().EventsOnMultiple("session-event", (event: SessionEvent) => {
+    const runtime = window.runtime;
+    if (!runtime) return;
+    runtime.EventsOnMultiple("session-event", (event: SessionEvent) => {
       if (event.kind === "state" && event.session) {
         setSessions((current) => current.map((session) => session.id === event.sessionId ? event.session! : session));
         if (!event.session.runningHere) {
@@ -83,7 +85,7 @@ function App() {
         terminalInstances.get(event.sessionId)?.write(bytes);
       }
     }, -1);
-    return () => events().EventsOff("session-event");
+    return () => runtime.EventsOff("session-event");
   }, []);
 
   useEffect(() => {

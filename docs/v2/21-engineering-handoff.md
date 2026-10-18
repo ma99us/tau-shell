@@ -114,6 +114,13 @@ encoding, and fit-driven resize forwarding. These checks are not a substitute
 for a repeatable full-screen fixture through the production WebView2/ConPTY
 path.
 
+The frontend browser preview was also exercised with 20 seeded persisted tabs:
+ArrowLeft moved selection to the preceding tab, horizontal overflow controls
+were enabled and scrolled the tab list, and the session form exposed the
+persisted recent-folder suggestions. This is frontend-only coverage; browser
+preview without the Wails bridge displays the bridge error and cannot exercise
+session lifecycle or terminal transport.
+
 The latest repeat of `npm run build`, `go test -count=1 ./...`, `go vet ./...`,
 and the production-tagged build passed using a temporary Go 1.27.2 toolchain.
 The frontend output has a non-failing Vite warning because its 566 kB JavaScript
@@ -151,12 +158,12 @@ Known gaps and risks:
   non-destructive Claude Code and Copilot CLI walkthroughs on Windows 10.
   Existing ConPTY byte tests and the browser-only mocked-bridge xterm smoke do
   not validate the production WebView2/ConPTY path end to end.
-- Add native ConPTY handle-leak checks and UI-level shutdown tests. The close path
-  now reports session-list, stop, and post-stop verification failures without
-  allowing the window to close; forced-stop notices remain pending and retry
-  after a native-dialog failure. Extend stale-runtime recovery tests beyond a
-  missing-PID running record, an abandoned startup, and a live other-window
-  process.
+- Add native ConPTY handle-leak checks and UI-level shutdown tests. The close
+  path now reports session-list, stop, and post-stop verification failures
+  without allowing the window to close; forced-stop notices remain pending and
+  retry after a native-dialog failure. Extend stale-runtime recovery tests
+  beyond an abandoned startup, recent starting state, running records with
+  missing or exited PIDs, and a live other-window process.
 - The ConPTY job-cleanup test now launches a direct child fixture and verifies
   that inherited job members are terminated. A PowerShell `Start-Process`
   experiment produced a child outside the TauShell job; that detached launch
@@ -253,6 +260,9 @@ Wails' diagnostic stub instead of the desktop host. Run the frontend build
 first because Go embeds its output. Generated frontend files are part of the
 application build input, not a substitute for frontend source.
 
-The Windows toolchain is currently available at
-`C:\Users\Mike\AppData\Local\Programs\go1.27.2\bin\go.exe` on the development
-machine, but do not hard-code this machine-specific path in project scripts.
+Go is not currently on this checkout's PATH. The latest Windows verification
+used a temporary Go 1.27.2 archive downloaded from the official Go distribution
+and verified against SHA-256
+`1314008898BD40DF77AF4B014F777F08873DBDFBCD3D92308728EE03304FE04F`; the
+archive and extracted toolchain were removed after verification. Do not
+hard-code machine-specific toolchain paths in project scripts.

@@ -40,7 +40,8 @@
   five recently used folders, persisted in WebView local storage.
 - **Shutdown/recovery:** add native ConPTY handle-leak checks and UI-level
   shutdown tests; broaden stale-runtime reconciliation coverage beyond the
-  tested abandoned-starting, missing-PID, and live-other-window cases.
+  tested abandoned-starting, recent-starting, missing/exited-PID, and
+  live-other-window cases.
 - **Harness compatibility:** complete provider-backed Claude Code and Copilot
   CLI hosted-terminal walkthroughs; the current Copilot restore evidence is
   CLI/provider-level only, not hosted xterm coverage.
