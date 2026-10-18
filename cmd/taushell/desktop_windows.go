@@ -288,7 +288,11 @@ func (application *App) beforeClose(ctx context.Context) bool {
 		DefaultButton: "Keep TauShell open",
 		CancelButton:  "Keep TauShell open",
 	})
-	if err != nil || choice != "Stop sessions and close" {
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "taushell: confirm active session shutdown: %v\n", err)
+		return true
+	}
+	if choice != "Stop sessions and close" {
 		return true
 	}
 	stopCtx, cancel := context.WithTimeout(context.Background(), 12*time.Second)

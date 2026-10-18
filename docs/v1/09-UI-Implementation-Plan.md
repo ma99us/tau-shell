@@ -115,8 +115,9 @@ and tests demonstrated to be UI-independent and correct for the GUI.
   verify the window remains open when session listing fails and a forced-stop
   notice is retried after its native dialog fails. Additional close-flow unit
   tests verify cancellation leaves sessions untouched, confirmed shutdown
-  stops and rechecks sessions, forced outcomes are reported, and stop failures
-  or sessions still running after StopAll keep the window open. Broader restart
+  stops and rechecks sessions, forced outcomes are reported, and failures to
+  show the confirmation or stop sessions keep the window open. A session still
+  running after StopAll also prevents close. Broader restart
   reconciliation, native Wails-host close integration, and real WebView profile
   restoration remain outstanding.
   Detached shell/broker processes that escape TauShell's job are intentionally

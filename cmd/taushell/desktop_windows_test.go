@@ -118,6 +118,32 @@ func TestBeforeCloseCancelKeepsRunningSessions(t *testing.T) {
 	}
 }
 
+func TestBeforeCloseKeepsWindowOpenWhenConfirmationDialogFails(t *testing.T) {
+	dialogErr := errors.New("native confirmation dialog unavailable")
+	manager := &closeTestManager{
+		list: func(context.Context) ([]sessionhost.Snapshot, error) {
+			return []sessionhost.Snapshot{{Name: "API session", RunningHere: true, Status: session.StatusRunning}}, nil
+		},
+		stopAll: func(context.Context) error {
+			t.Fatal("StopAll called after shutdown confirmation failed")
+			return nil
+		},
+	}
+	application := &App{
+		manager: manager,
+		showMessageDialog: func(context.Context, runtime.MessageDialogOptions) (string, error) {
+			return "", dialogErr
+		},
+	}
+
+	if !application.beforeClose(context.Background()) {
+		t.Fatal("confirmation-dialog failure allowed TauShell to close")
+	}
+	if manager.stopAllCalls != 0 {
+		t.Fatalf("StopAll called %d times after confirmation failure, want zero", manager.stopAllCalls)
+	}
+}
+
 func TestBeforeCloseStopsSessionsAndReportsForcedTermination(t *testing.T) {
 	manager := &closeTestManager{stopAll: func(context.Context) error { return nil }}
 	manager.list = func(context.Context) ([]sessionhost.Snapshot, error) {

@@ -166,9 +166,11 @@ Known gaps and risks:
 - Add native ConPTY handle-leak checks and Wails-host close integration tests.
   Close-flow unit tests now cover cancellation, successful stop and
   verification, forced-stop reporting, stop failure, and keeping the window
-  open when a managed session remains running after `StopAll`. The close path
-  also reports session-list failures without allowing the window to close;
-  forced-stop notices remain pending and retry after a native-dialog failure.
+  open when a managed session remains running after `StopAll` or the shutdown
+  confirmation dialog fails. Confirmation-dialog failures are logged rather
+  than silently ignored. The close path also reports session-list failures
+  without allowing the window to close; forced-stop notices remain pending and
+  retry after a native-dialog failure.
   Extend stale-runtime recovery tests beyond an abandoned startup, recent
   starting state, running records with missing or exited PIDs, and a live
   other-window process.
