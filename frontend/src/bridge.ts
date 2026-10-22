@@ -19,12 +19,14 @@ export type SessionEvent = {
 export type ToolStatus = {
   name: string;
   installed: boolean;
+  executablePath?: string;
   version?: string;
   error?: string;
 };
 
 export type SystemStatus = {
   webView2Version: string;
+  diagnosticsLogPath: string;
   powershell: ToolStatus;
   claudeCode: ToolStatus;
   copilotCLI: ToolStatus;
@@ -33,6 +35,9 @@ export type SystemStatus = {
 type WailsApp = {
   GetSessions(): Promise<Session[]>;
   GetSystemStatus(): Promise<SystemStatus>;
+  LogFrontendFailure(source: string, message: string, stack: string): Promise<void>;
+  LogTerminalPointerEvent(id: string, event: "pointerdown" | "mousedown"): Promise<void>;
+  LogTerminalMouseTrackingMode(id: string, mode: "none" | "x10" | "vt200" | "drag" | "any"): Promise<void>;
   SelectWorkingDirectory(): Promise<string>;
   CreateSession(name: string, tool: string, workingDir: string, launchArgs: string[]): Promise<Session>;
   StartSession(id: string, columns: number, rows: number): Promise<Session>;

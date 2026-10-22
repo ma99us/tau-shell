@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"embed"
 	"encoding/base64"
@@ -13,13 +14,17 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime/debug"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/ma99us/tau-shell/internal/diagnostics"
 	"github.com/ma99us/tau-shell/internal/harness"
 	"github.com/ma99us/tau-shell/internal/session"
 	"github.com/ma99us/tau-shell/internal/sessionhost"
 	"github.com/wailsapp/wails/v2"
+	"github.com/wailsapp/wails/v2/pkg/logger"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	windowsOptions "github.com/wailsapp/wails/v2/pkg/options/windows"
@@ -39,7 +44,12 @@ type App struct {
 	configDirectory        string
 	webViewVersion         string
 	showMessageDialog      func(context.Context, runtime.MessageDialogOptions) (string, error)
+	requestQuit            func(context.Context)
 	forcedShutdownWarnings []string
+	terminalReports        sync.Map
+	shutdownMu             sync.Mutex
+	shutdownInProgress     bool
+	allowShutdown          bool
 }
 
 type desktopSessionManager interface {
@@ -54,54 +64,66 @@ type desktopSessionManager interface {
 }
 
 type ToolStatus struct {
-	Name      string `json:"name"`
-	Installed bool   `json:"installed"`
-	Version   string `json:"version,omitempty"`
-	Error     string `json:"error,omitempty"`
+	Name           string `json:"name"`
+	Installed      bool   `json:"installed"`
+	ExecutablePath string `json:"executablePath,omitempty"`
+	Version        string `json:"version,omitempty"`
+	Error          string `json:"error,omitempty"`
 }
 
 type SystemStatus struct {
-	WebView2Version string     `json:"webView2Version"`
-	PowerShell      ToolStatus `json:"powershell"`
-	ClaudeCode      ToolStatus `json:"claudeCode"`
-	CopilotCLI      ToolStatus `json:"copilotCLI"`
+	WebView2Version    string     `json:"webView2Version"`
+	DiagnosticsLogPath string     `json:"diagnosticsLogPath"`
+	PowerShell         ToolStatus `json:"powershell"`
+	ClaudeCode         ToolStatus `json:"claudeCode"`
+	CopilotCLI         ToolStatus `json:"copilotCLI"`
 }
 
 func runDesktop() error {
+	diagnostics.Info("desktop startup beginning")
 	version, err := installedWebView2Version()
 	if err != nil {
+		diagnostics.Error("check WebView2 runtime failed", err)
 		return fmt.Errorf("check Microsoft Edge WebView2 Runtime: %w", err)
 	}
 	if version == "" {
+		diagnostics.Warn("WebView2 runtime is missing", errors.New("required desktop prerequisite not found"))
 		return explainMissingWebView2()
 	}
 
 	configDirectory, databasePath, err := appPaths()
 	if err != nil {
+		diagnostics.Error("resolve TauShell data paths failed", err)
 		return err
 	}
 	assetFS, err := fs.Sub(frontendAssets, "frontend/dist")
 	if err != nil {
+		diagnostics.Error("load embedded desktop assets failed", err)
 		return fmt.Errorf("load embedded desktop assets: %w", err)
 	}
 	application := &App{configDirectory: configDirectory, webViewVersion: version}
 	application.manager, err = sessionhost.New(configDirectory, databasePath, application.publish)
 	if err != nil {
+		diagnostics.Error("initialize session manager failed", err)
 		return fmt.Errorf("initialize session manager: %w", err)
 	}
+	diagnostics.Info("desktop window starting", "webview2_version", version)
 	runErr := wails.Run(&options.App{
-		Title:       "TauShell",
-		Width:       1180,
-		Height:      780,
-		MinWidth:    760,
-		MinHeight:   520,
-		AssetServer: &assetserver.Options{Assets: assetFS},
-		Bind:        []interface{}{application},
+		Title:              "TauShell",
+		Width:              1180,
+		Height:             780,
+		MinWidth:           760,
+		MinHeight:          520,
+		AssetServer:        &assetserver.Options{Assets: assetFS},
+		Bind:               []interface{}{application},
+		Logger:             diagnostics.WailsLogger{},
+		LogLevel:           logger.DEBUG,
+		LogLevelProduction: logger.DEBUG,
 		OnNavigationStarting: func(_ context.Context, targetURL string) bool {
 			if isBundledAppNavigation(targetURL) {
 				return true
 			}
-			fmt.Fprintln(os.Stderr, "taushell: blocked WebView navigation outside the bundled app origin")
+			diagnostics.Warn("blocked WebView navigation outside bundled app origin", errors.New("navigation denied"))
 			return false
 		},
 		OnStartup:     application.startup,
@@ -113,30 +135,64 @@ func runDesktop() error {
 	})
 	closeCtx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()
-	return errors.Join(runErr, application.manager.Close(closeCtx))
+	closeErr := application.manager.Close(closeCtx)
+	if runErr != nil {
+		diagnostics.Error("Wails desktop runtime stopped with an error", runErr)
+	}
+	if closeErr != nil {
+		diagnostics.Error("close session manager failed", closeErr)
+	}
+	diagnostics.Info("desktop shutdown complete", "runtime_error", runErr != nil, "manager_close_error", closeErr != nil)
+	return errors.Join(runErr, closeErr)
 }
 
 func (application *App) startup(ctx context.Context) {
 	application.ctx = ctx
+	diagnostics.Info("desktop UI ready", "webview2_version", application.webViewVersion)
 }
 
 func (application *App) publish(event sessionhost.Event) {
+	if event.Kind == sessionhost.EventState && event.Session.ID != "" {
+		diagnostics.Info("session state changed",
+			"session_id", event.SessionID,
+			"status", event.Session.Status,
+			"running_here", event.Session.RunningHere,
+			"has_resume_id", event.Session.HasResumeID,
+			"has_error", event.Session.LastError != "",
+		)
+	}
 	if application.ctx != nil {
 		runtime.EventsEmit(application.ctx, "session-event", event)
 	}
 }
 
-func (application *App) GetSessions() ([]sessionhost.Snapshot, error) {
+func (application *App) GetSessions() (snapshots []sessionhost.Snapshot, err error) {
+	defer func() {
+		if err != nil {
+			diagnostics.Error("list sessions failed", err)
+			return
+		}
+		diagnostics.Debug("sessions listed", "count", len(snapshots))
+	}()
 	return application.manager.List(context.Background())
 }
 
 func (application *App) GetSystemStatus() SystemStatus {
-	return SystemStatus{
-		WebView2Version: application.webViewVersion,
-		PowerShell:      detectTool("PowerShell 7", "pwsh.exe", "--version"),
-		ClaudeCode:      detectHarness(session.ClaudeCode),
-		CopilotCLI:      detectHarness(session.CopilotCLI),
+	status := SystemStatus{
+		WebView2Version:    application.webViewVersion,
+		DiagnosticsLogPath: diagnostics.LogPath(),
+		PowerShell:         detectTool("PowerShell 7", "pwsh.exe", "--version"),
+		ClaudeCode:         detectHarness(session.ClaudeCode),
+		CopilotCLI:         detectHarness(session.CopilotCLI),
 	}
+	for _, tool := range []ToolStatus{status.PowerShell, status.ClaudeCode, status.CopilotCLI} {
+		if tool.Installed && tool.Error == "" {
+			diagnostics.Info("prerequisite detected", "tool", tool.Name, "version", tool.Version)
+		} else {
+			diagnostics.Warn("prerequisite unavailable or version check failed", errors.New(tool.Error), "tool", tool.Name)
+		}
+	}
+	return status
 }
 
 func detectHarness(tool session.Harness) ToolStatus {
@@ -162,6 +218,7 @@ func detectTool(name, executable, versionFlag string) ToolStatus {
 		return status
 	}
 	status.Installed = true
+	status.ExecutablePath = path
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	output, err := exec.CommandContext(ctx, path, versionFlag).CombinedOutput()
@@ -178,7 +235,12 @@ func detectTool(name, executable, versionFlag string) ToolStatus {
 	return status
 }
 
-func (application *App) SelectWorkingDirectory() (string, error) {
+func (application *App) SelectWorkingDirectory() (path string, err error) {
+	defer func() {
+		if err != nil {
+			diagnostics.Error("choose project directory failed", err)
+		}
+	}()
 	return runtime.OpenDirectoryDialog(application.ctx, runtime.OpenDialogOptions{
 		Title:                      "Choose a project folder",
 		CanCreateDirectories:       false,
@@ -186,7 +248,14 @@ func (application *App) SelectWorkingDirectory() (string, error) {
 	})
 }
 
-func (application *App) CreateSession(name, toolName, workingDir string, launchArgs []string) (sessionhost.Snapshot, error) {
+func (application *App) CreateSession(name, toolName, workingDir string, launchArgs []string) (snapshot sessionhost.Snapshot, err error) {
+	defer func() {
+		if err != nil {
+			diagnostics.Error("create session failed", err, "tool", toolName)
+			return
+		}
+		diagnostics.Info("session created", "session_id", snapshot.ID, "tool", snapshot.Tool)
+	}()
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return sessionhost.Snapshot{}, errors.New("session name must not be empty")
@@ -217,23 +286,41 @@ func (application *App) CreateSession(name, toolName, workingDir string, launchA
 	}, nil
 }
 
-func (application *App) StartSession(id string, columns, rows int) (sessionhost.Snapshot, error) {
+func (application *App) StartSession(id string, columns, rows int) (snapshot sessionhost.Snapshot, err error) {
+	defer logSessionOperation("start session", id, &snapshot, &err)
 	return application.manager.Start(context.Background(), id, false, columns, rows)
 }
 
-func (application *App) RestoreSession(id string, columns, rows int) (sessionhost.Snapshot, error) {
+func (application *App) RestoreSession(id string, columns, rows int) (snapshot sessionhost.Snapshot, err error) {
+	defer logSessionOperation("restore session", id, &snapshot, &err)
 	return application.manager.Start(context.Background(), id, true, columns, rows)
 }
 
-func (application *App) StartFresh(id string, columns, rows int) (sessionhost.Snapshot, error) {
+func (application *App) StartFresh(id string, columns, rows int) (snapshot sessionhost.Snapshot, err error) {
+	defer logSessionOperation("start fresh session", id, &snapshot, &err)
 	return application.manager.StartFresh(context.Background(), id, columns, rows)
 }
 
-func (application *App) WriteTerminal(id, input string) error {
-	return application.manager.Write(id, []byte(input))
+func (application *App) WriteTerminal(id, input string) (err error) {
+	defer func() {
+		if err != nil {
+			diagnostics.Error("write terminal input failed", err, "session_id", id, "input_bytes", len(input))
+		}
+	}()
+	data := []byte(input)
+	if err := application.manager.Write(id, data); err != nil {
+		return err
+	}
+	application.logTerminalReports(id, data)
+	return nil
 }
 
-func (application *App) WriteTerminalBinary(id, input string) error {
+func (application *App) WriteTerminalBinary(id, input string) (err error) {
+	defer func() {
+		if err != nil {
+			diagnostics.Error("write binary terminal input failed", err, "session_id", id)
+		}
+	}()
 	if len(input) > 88*1024 {
 		return errors.New("encoded terminal input exceeds the 88 KiB limit")
 	}
@@ -241,22 +328,193 @@ func (application *App) WriteTerminalBinary(id, input string) error {
 	if err != nil {
 		return fmt.Errorf("decode binary terminal input: %w", err)
 	}
-	return application.manager.Write(id, data)
+	if err := application.manager.Write(id, data); err != nil {
+		return err
+	}
+	application.logTerminalReports(id, data)
+	return nil
 }
 
-func (application *App) ResizeTerminal(id string, columns, rows int) error {
+func (application *App) logTerminalReports(id string, data []byte) {
+	for _, report := range terminalProtocolReports(data) {
+		key := id + "\x00" + report
+		if _, alreadyLogged := application.terminalReports.LoadOrStore(key, struct{}{}); alreadyLogged {
+			continue
+		}
+		diagnostics.Debug("terminal protocol input forwarded",
+			"session_id", id,
+			"protocol", report,
+		)
+	}
+}
+
+func terminalProtocolReports(data []byte) []string {
+	var reports []string
+	seen := make(map[string]struct{}, 2)
+	add := func(report string) {
+		if _, exists := seen[report]; exists {
+			return
+		}
+		seen[report] = struct{}{}
+		reports = append(reports, report)
+	}
+
+	for offset := 0; offset+2 < len(data); offset++ {
+		if data[offset] != 0x1b || data[offset+1] != '[' {
+			continue
+		}
+		start := offset + 2
+		if data[start] == 'M' && len(data)-start >= 4 {
+			add("mouse-x10")
+			continue
+		}
+		if data[start] == '<' {
+			for end := start + 1; end < len(data); end++ {
+				if data[end] == 'M' || data[end] == 'm' {
+					add("mouse-sgr")
+					break
+				}
+				if (data[end] < '0' || data[end] > '9') && data[end] != ';' {
+					break
+				}
+			}
+			continue
+		}
+
+		end := start
+		for end < len(data) && ((data[end] >= '0' && data[end] <= '9') || data[end] == ';') {
+			end++
+		}
+		if end >= len(data) {
+			continue
+		}
+		switch {
+		case data[end] == 'n' && bytes.Equal(data[start:end], []byte("0")):
+			add("device-status")
+		case data[end] == 'R' && bytes.IndexByte(data[start:end], ';') >= 0:
+			add("cursor-position")
+		}
+	}
+	return reports
+}
+
+func (application *App) ResizeTerminal(id string, columns, rows int) (err error) {
+	defer func() {
+		if err != nil {
+			diagnostics.Error("resize terminal failed", err, "session_id", id, "columns", columns, "rows", rows)
+		}
+	}()
 	return application.manager.Resize(id, columns, rows)
 }
 
-func (application *App) StopSession(id string) error {
+func (application *App) StopSession(id string) (err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	defer func() {
+		if err != nil {
+			diagnostics.Error("stop session failed", err, "session_id", id)
+		} else {
+			diagnostics.Info("session stop requested", "session_id", id)
+		}
+	}()
 	return application.manager.Stop(ctx, id)
 }
 
+func (application *App) LogFrontendFailure(source, message, stack string) {
+	diagnostics.FrontendFailure(source, message, stack)
+}
+
+func (application *App) LogTerminalPointerEvent(id, event string) {
+	if event != "pointerdown" && event != "mousedown" {
+		diagnostics.Warn("unsupported terminal pointer event reported", errors.New("invalid event type"), "session_id", id)
+		return
+	}
+	key := id + "\x00" + event
+	if _, alreadyLogged := application.terminalReports.LoadOrStore(key, struct{}{}); alreadyLogged {
+		return
+	}
+	diagnostics.Debug("terminal pointer event received", "session_id", id, "event", event)
+}
+
+func (application *App) LogTerminalMouseTrackingMode(id, mode string) {
+	switch mode {
+	case "none", "x10", "vt200", "drag", "any":
+	default:
+		diagnostics.Warn("unsupported terminal mouse tracking mode reported", errors.New("invalid mode"), "session_id", id)
+		return
+	}
+	key := id + "\x00mouse-mode\x00" + mode
+	if _, alreadyLogged := application.terminalReports.LoadOrStore(key, struct{}{}); alreadyLogged {
+		return
+	}
+	diagnostics.Debug("terminal mouse tracking mode changed", "session_id", id, "mode", mode)
+}
+
+func logSessionOperation(operation, id string, snapshot *sessionhost.Snapshot, err *error) {
+	if *err != nil {
+		diagnostics.Error(operation+" failed", *err, "session_id", id)
+		return
+	}
+	diagnostics.Info(operation+" completed", "session_id", id, "status", snapshot.Status, "running_here", snapshot.RunningHere)
+}
+
 func (application *App) beforeClose(ctx context.Context) bool {
+	application.shutdownMu.Lock()
+	if application.allowShutdown {
+		application.allowShutdown = false
+		application.shutdownMu.Unlock()
+		return false
+	}
+	if application.shutdownInProgress {
+		application.shutdownMu.Unlock()
+		return true
+	}
+	application.shutdownInProgress = true
+	application.shutdownMu.Unlock()
+
+	go application.confirmShutdownAsync(ctx)
+	return true
+}
+
+func (application *App) confirmShutdownAsync(ctx context.Context) {
+	allowShutdown := false
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			diagnostics.Error("shutdown confirmation panicked", fmt.Errorf("%v", recovered), "stack", string(debug.Stack()))
+			allowShutdown = false
+		}
+		application.shutdownMu.Lock()
+		application.shutdownInProgress = false
+		if allowShutdown {
+			application.allowShutdown = true
+		}
+		application.shutdownMu.Unlock()
+		if allowShutdown {
+			diagnostics.Info("shutdown confirmed; requesting application close")
+			application.requestApplicationQuit(ctx)
+		}
+	}()
+
+	allowShutdown = !application.confirmShutdown(ctx)
+}
+
+func (application *App) requestApplicationQuit(ctx context.Context) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			diagnostics.Error("request application shutdown panicked", fmt.Errorf("%v", recovered), "stack", string(debug.Stack()))
+		}
+	}()
+	if application.requestQuit != nil {
+		application.requestQuit(ctx)
+		return
+	}
+	runtime.Quit(ctx)
+}
+
+func (application *App) confirmShutdown(ctx context.Context) bool {
 	sessions, err := application.manager.List(ctx)
 	if err != nil {
+		diagnostics.Error("check active sessions before shutdown failed", err)
 		_, dialogErr := application.messageDialog(ctx, runtime.MessageDialogOptions{
 			Type:    runtime.ErrorDialog,
 			Title:   "Unable to check active sessions",
@@ -264,6 +522,7 @@ func (application *App) beforeClose(ctx context.Context) bool {
 			Buttons: []string{"Keep TauShell open"},
 		})
 		if dialogErr != nil {
+			diagnostics.Error("report active-session check failure failed", dialogErr)
 			fmt.Fprintf(os.Stderr, "taushell: report active sessions check failure: %v\n", dialogErr)
 		}
 		return true
@@ -275,26 +534,31 @@ func (application *App) beforeClose(ctx context.Context) bool {
 		}
 	}
 	if len(active) == 0 {
+		diagnostics.Info("shutdown requested with no locally running sessions")
 		return application.reportForcedShutdowns(ctx, nil)
 	}
+	diagnostics.Info("shutdown confirmation required", "active_session_count", len(active))
 	choice, err := application.messageDialog(ctx, runtime.MessageDialogOptions{
 		Type:          runtime.QuestionDialog,
 		Title:         "Sessions are still running",
 		Message:       fmt.Sprintf("%d session(s) are running in TauShell. Closing will interrupt them. Stop the sessions and close TauShell?", len(active)),
-		Buttons:       []string{"Stop sessions and close", "Keep TauShell open"},
-		DefaultButton: "Keep TauShell open",
-		CancelButton:  "Keep TauShell open",
+		Buttons:       []string{"Yes", "No"},
+		DefaultButton: "No",
+		CancelButton:  "No",
 	})
 	if err != nil {
+		diagnostics.Error("show shutdown confirmation failed", err)
 		fmt.Fprintf(os.Stderr, "taushell: confirm active session shutdown: %v\n", err)
 		return true
 	}
-	if choice != "Stop sessions and close" {
+	if !strings.EqualFold(choice, "Yes") {
+		diagnostics.Info("shutdown cancelled by user")
 		return true
 	}
 	stopCtx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()
 	if err := application.manager.StopAll(stopCtx); err != nil {
+		diagnostics.Error("stop sessions for shutdown failed", err)
 		_, dialogErr := application.messageDialog(ctx, runtime.MessageDialogOptions{
 			Type:    runtime.ErrorDialog,
 			Title:   "Unable to stop all sessions",
@@ -302,12 +566,14 @@ func (application *App) beforeClose(ctx context.Context) bool {
 			Buttons: []string{"Keep TauShell open"},
 		})
 		if dialogErr != nil {
+			diagnostics.Error("report session shutdown failure failed", dialogErr)
 			fmt.Fprintf(os.Stderr, "taushell: report session shutdown failure: %v\n", dialogErr)
 		}
 		return true
 	}
 	stopped, err := application.manager.List(ctx)
 	if err != nil {
+		diagnostics.Error("verify stopped sessions failed", err)
 		_, dialogErr := application.messageDialog(ctx, runtime.MessageDialogOptions{
 			Type:    runtime.ErrorDialog,
 			Title:   "Unable to verify stopped sessions",
@@ -315,6 +581,7 @@ func (application *App) beforeClose(ctx context.Context) bool {
 			Buttons: []string{"Keep TauShell open"},
 		})
 		if dialogErr != nil {
+			diagnostics.Error("report stopped-session verification failure failed", dialogErr)
 			fmt.Fprintf(os.Stderr, "taushell: report stopped-session verification failure: %v\n", dialogErr)
 		}
 		return true
@@ -329,6 +596,7 @@ func (application *App) beforeClose(ctx context.Context) bool {
 		}
 	}
 	if len(stillRunning) > 0 {
+		diagnostics.Error("sessions remain running after shutdown", errors.New("some session processes remain active"), "count", len(stillRunning))
 		_, dialogErr := application.messageDialog(ctx, runtime.MessageDialogOptions{
 			Type:    runtime.ErrorDialog,
 			Title:   "Some sessions are still running",
@@ -336,6 +604,7 @@ func (application *App) beforeClose(ctx context.Context) bool {
 			Buttons: []string{"Keep TauShell open"},
 		})
 		if dialogErr != nil {
+			diagnostics.Error("report sessions still running failed", dialogErr)
 			fmt.Fprintf(os.Stderr, "taushell: report sessions still running after shutdown: %v\n", dialogErr)
 		}
 		return true
@@ -355,6 +624,7 @@ func (application *App) reportForcedShutdowns(ctx context.Context, names []strin
 	if len(application.forcedShutdownWarnings) == 0 {
 		return false
 	}
+	diagnostics.Warn("sessions required force termination", errors.New("graceful interruption did not stop all session processes"), "count", len(application.forcedShutdownWarnings))
 	_, err := application.messageDialog(ctx, runtime.MessageDialogOptions{
 		Type:    runtime.WarningDialog,
 		Title:   "Some sessions required force termination",
@@ -362,6 +632,7 @@ func (application *App) reportForcedShutdowns(ctx context.Context, names []strin
 		Buttons: []string{"Continue closing"},
 	})
 	if err != nil {
+		diagnostics.Error("report forced session shutdown failed", err)
 		fmt.Fprintf(os.Stderr, "taushell: report forced session shutdown: %v\n", err)
 		return true
 	}
@@ -373,8 +644,11 @@ func (application *App) shutdown(ctx context.Context) {
 	stopCtx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()
 	if err := application.manager.Close(stopCtx); err != nil {
+		diagnostics.Error("close session manager during Wails shutdown failed", err)
 		fmt.Fprintf(os.Stderr, "taushell: close session manager: %v\n", err)
+		return
 	}
+	diagnostics.Info("session manager closed")
 }
 
 func installedWebView2Version() (string, error) {

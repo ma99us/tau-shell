@@ -1,6 +1,6 @@
 # Engineering Handoff
 
-**Updated:** 2026-10-17
+**Updated:** 2026-10-19
 **Project state:** Phase 1 desktop migration in progress; not release-ready.
 
 This is the implementation handoff for the next engineering session. The
@@ -33,7 +33,12 @@ interaction decisions and feasibility gate are in
   registration before host startup; creates a Wails window with embedded
   frontend assets; binds session operations; exposes directory selection;
   detects tool executables and versions; and confirms app close when sessions
-  are running. Session creation returns its never-started snapshot from the
+  are running. Its Wails close callback returns immediately while confirmation
+  and session stopping run asynchronously, avoiding a blocked native message
+  loop. The Home tool inventory shows the resolved executable path and
+  detected version so PATH precedence is visible. The shutdown prompt uses
+  Yes/No responses and defaults safely to No.
+  Session creation returns its never-started snapshot from the
   validated configuration after saving, without rereading the full session
   list; an unrelated listing failure can no longer make a successful save look
   like a failed create. Desktop tests cover the returned snapshot, persisted
@@ -86,12 +91,14 @@ npm run build
 Pop-Location
 go test -count=1 ./...
 go vet ./...
-go build -tags production -o taushell.exe ./cmd/taushell
+go build -tags production -ldflags "-H=windowsgui" -o taushell.exe ./cmd/taushell
 ```
 
-The production-tagged executable was smoke-launched and opened a responsive
-TauShell window using the installed WebView2 Runtime. This verifies host
-startup and local embedded asset loading only. The Windows tests include the
+The production-tagged GUI-subsystem executable was smoke-launched and opened a
+responsive, styled TauShell window using the installed WebView2 Runtime. The
+`-H=windowsgui` linker flag is required for direct `go build` use; without it,
+the console window can cover the desktop window when Wails writes startup
+logs. The Windows tests include the
 existing ConPTY/CLI tests, YAML and runtime-store tests, a session-output test
 that verifies base64 transport preserves raw terminal bytes, and manager tests
 for concurrent independent I/O/resize, process exit, graceful and forced
@@ -138,10 +145,12 @@ Go 1.26+ toolchain or redownload and verify the official archive before
 repeating Go checks. Node.js/npm and the required WebView2 Runtime were
 available.
 
-The latest shutdown/recovery update again passed the full Windows Go test
-suite, `go vet`, and a production-tagged build. It adds checks for the shutdown
-confirmation and cancellation flow, forced-stop notices, stop failures, and
-the case where a session is still running after `StopAll` returns successfully.
+The latest asynchronous close-flow update passed `go test -count=1 ./...`,
+`go vet ./...`, and a production-tagged build. It adds a regression test that
+the Wails close callback returns while confirmation is blocked, ignores
+duplicate close attempts during that work, and allows the app to close only
+after confirmation completes. A separate native production smoke with an
+inert fixture verified the responsive Yes/No dialog behavior.
 
 This verification used Windows 10 Pro 22H2 (build 19045), Go 1.27.2,
 PowerShell 7.6.7, GitHub Copilot CLI 1.0.99-2, and WebView2 Runtime
@@ -149,9 +158,37 @@ PowerShell 7.6.7, GitHub Copilot CLI 1.0.99-2, and WebView2 Runtime
 verified `Anthropic.ClaudeCode` winget package. An existing npm-installed
 Claude Code 2.1.133 is earlier on PATH, so `claude` currently resolves to that
 version while the winget executable is at its package path. Neither CLI has
-passed provider-backed hosted-terminal testing. The Go toolchain used for
+passed provider-backed hosted-terminal testing. TauShell follows the first
+executable resolved from `PATH`; Home now displays that exact path beside the
+detected version, making the selected installation visible without changing
+precedence. The Go toolchain used for
 this run was downloaded to the system temp directory and its official archive
 SHA-256 was verified; it was not installed system-wide.
+
+A deterministic terminal fixture in `cmd/terminal-fixture/` was built as
+`copilot.exe` and run from an isolated TauShell profile through the production
+Wails window, session bridge, PowerShell 7, and real ConPTY. The hosted xterm
+rendered Greek/Japanese text, a combining mark, emoji, ANSI colors, cursor
+movement/erase, and a four-byte emoji split across writes 50 ms apart; it
+replied to a cursor-position query (`ESC[10;1R`), forwarded typed input
+(`tau-proof`), and forwarded a live resize from 117x35 to 94x28. The fixture's
+explicit `q` exit was also recorded. This is fixture-path evidence only, not
+Claude Code or Copilot CLI compatibility evidence. The explicit exit restored
+the preserved primary-screen marker. Repeated hosted clicks produced no
+captured mouse report. A later post-start device-status reply was accepted and
+written by the Go bridge but did not reach any fixture input chunk. A repeated
+cursor-position query produced a fixture-visible seven-byte input chunk
+without a matching bridge marker. These remain unexplained.
+The shutdown prompt exposed a native Wails Yes/No return-value mismatch; the
+host now treats `Yes` as confirmation and defaults/cancels to `No`. Unit tests
+check the native choice values and safe default. A production Wails smoke with
+an inert live fixture verified the active-session prompt remains responsive:
+No left TauShell and the fixture running, while Yes stopped the fixture
+process and closed TauShell. The fixture's PowerShell process exited with code
+1 during interruption, so this does not prove graceful-stop success or cover
+the forced-termination notice. The native close flow runs outside Wails'
+synchronous `OnBeforeClose` callback; automated Wails-host integration
+coverage remains open.
 
 ## Do not overstate current readiness
 
@@ -166,9 +203,39 @@ Known gaps and risks:
   terminal queries, alternate screen, cursor movement, resize, mouse modes,
   and Unicode/emoji against a controllable full-screen fixture, then perform
   non-destructive Claude Code and Copilot CLI walkthroughs on Windows 10.
-  Existing ConPTY byte tests and the browser-only mocked-bridge xterm smoke do
-  not validate the production WebView2/ConPTY path end to end.
-- Add native ConPTY handle-leak checks and Wails-host close integration tests.
+  The checked-in fixture has verified Unicode/emoji, split UTF-8 output, ANSI,
+  cursor movement, cursor-position query replies, typed input, explicit exit,
+  primary-screen restoration, and live resize through the production
+  WebView2/ConPTY path. Mouse reporting, device-status query delivery, and real
+  harness walkthroughs still need verification.
+  - An isolated browser-side xterm check emitted `ESC[0n` for a device-status
+    query and SGR mouse reports when tracking was enabled and the terminal was
+    clicked. This does not validate the Wails bridge/ConPTY path. Payload-free
+    diagnostics now log the first successfully forwarded device-status,
+    cursor-position, SGR mouse, and X10 mouse report category per session, plus
+    pointer-event categories and xterm's effective mouse-tracking mode without
+    coordinates. A production run observed `pointerdown` and `mousedown` in
+    the terminal container, but xterm remained in `none` mode and emitted no
+    mouse report. Resending `CSI ? 1000 h` and `CSI ? 1006 h` from the fixture
+    did not change the mode. A temporary xterm-side probe enabled `vt200` and
+    forwarded an SGR mouse report to the Go bridge, proving the UI input path
+    works when tracking is active. A direct ConPTY probe found that Windows
+    ConPTY consumes those DECSET controls before they reach xterm, while
+    preserving adjacent text output. Do not force mouse tracking
+    unconditionally; that changes normal selection and input behavior. Mouse
+    support across the PowerShell/ConPTY boundary needs an explicit design
+    decision.
+    The device-status reply (`ESC[0n`) still reaches the Go bridge and its
+    ConPTY input write succeeds, but no corresponding fixture input chunk
+    arrives. The fixture's `c` key produced a fixture-visible cursor reply
+    (`ESC[6;15R`) without a matching bridge marker; its source remains
+    unknown. Fixture input chunk sizes are recorded without contents.
+  - A repeated native handle-close test now verifies that the process, job,
+    input-pipe, and output-pipe handles are valid before `Close` and invalid
+    afterward. It passed 10 consecutive runs. The opaque pseudoconsole handle
+    is not compatible with `GetHandleInformation`; its successful close and
+    cleared field are still covered by the existing cleanup test. Wails-host
+    close integration tests remain open.
   Close-flow unit tests now cover cancellation, successful stop and
   verification, forced-stop reporting, stop failure, and keeping the window
   open when a managed session remains running after `StopAll` or the shutdown
@@ -176,6 +243,9 @@ Known gaps and risks:
   than silently ignored. The close path also reports session-list failures
   without allowing the window to close; forced-stop notices remain pending and
   retry after a native-dialog failure.
+  A production-window smoke exercised both No and Yes with an inert fixture;
+  an automated Wails-host close integration test and forced-termination notice
+  verification remain open.
   Extend stale-runtime recovery tests beyond an abandoned startup, recent
   starting state, running records with missing or exited PIDs, and a live
   other-window process.
@@ -207,10 +277,16 @@ Known gaps and risks:
 - Tabs and selected tab persist in WebView local storage. They do not
   auto-launch sessions. In-process background tabs retain their xterm buffer.
   The tab strip now has tab semantics, arrow/Home/End keyboard selection,
-  active-tab scrolling, and horizontal overflow buttons. The complete
-  keyboard-only walkthrough, persisted presentation state under different
-  WebView profile conditions, and the background terminal path through the
-  real Wails/ConPTY host remain unverified.
+  active-tab scrolling, and horizontal overflow buttons. A mocked-browser
+  keyboard smoke verified Home/End selection, arrow-key wraparound, focus
+  movement, and synchronized selected-tab state. A production-host smoke
+  exposed a missing flex layout on the tab strip; after the CSS fix, Home and
+  Right switched focus/selection between Home and a stopped fixture tab. A
+  mouse click seeded focus, so a complete keyboard-only walkthrough remains
+  unverified. With eight inert fixture tabs open, the native left/right
+  controls scrolled between earlier and later tabs. Persisted presentation
+  state under different WebView profile conditions and the background terminal
+  path through the real Wails/ConPTY host also remain unverified.
 - Start Fresh is explicitly confirmed in the UI and rotates the persisted
   harness ID. Confirm failure/retry behavior with each adapter; Claude Code
   provider-backed restore remains unverified. A disposable Copilot CLI
@@ -245,38 +321,80 @@ Known gaps and risks:
   process. An isolated comparison rose by 59 handles across 20 ConPTY
   Start/Wait/Close cycles and by 41 handles across 20 ordinary PowerShell
   launches in its control process. The difference is not reliable enough to
-  attribute to ConPTY, so the experiment was discarded as a regression test;
-  it neither proves nor disproves a native handle leak. Existing tests assert
-  explicit `Close` success, cleared owned resource fields, idempotent close,
-  and manager pipe/supervisor cleanup. A reliable native leak check remains
+  attribute to ConPTY, so the experiment was discarded as a regression test.
+  A follow-up isolated `CreatePseudoConsole`/`ClosePseudoConsole` probe, with
+  no client process and all four pipe handles closed, observed one additional
+  handle targeting `C:\Windows\System32\conhost.exe`. The conhost process had
+  exited after close, but its process handle remained in the calling test
+  process. This local Windows 10 result points to ConPTY/conhost lifecycle
+  behavior rather than an unclosed handle field in TauShell's `Process`; do
+  not add an unsafe handle-table workaround or brittle process-wide threshold.
+  A deterministic test now verifies that process, job, and input/output pipe
+  handles are valid before `Close` and invalid afterward, repeated 10 times.
+  The opaque pseudoconsole handle cannot be checked with `GetHandleInformation`;
+  its successful close and cleared field remain verified. Existing tests also
+  assert cleared resource fields, idempotent close, and manager
+  pipe/supervisor cleanup. A comprehensive native handle-leak check remains
   open.
 
 ## Recommended next actions
 
-1. Complete the Step 1 terminal fixture and non-destructive walkthroughs for
-   both harnesses on Windows 10, resolving the Claude PATH ambiguity first.
-   A clean missing-WebView2 environment is unavailable on this machine; do
-   not treat host startup or compile-only checks as the feasibility gate.
-2. Continue independent shutdown/recovery coverage with native ConPTY
-   handle-leak and Wails-host close integration checks; keep setup/install and
-   session-template implementation behind the feasibility gate, as required
-   by the implementation plan.
-   The frontend tab strip's keyboard navigation and overflow controls are
-   implemented; verify them as part of the desktop-host keyboard walkthrough.
-3. Run `npm ci`, `npm run build`, `go test -count=1 ./...`, `go vet ./...`, and
+1. Run the bundled-ConPTY spike (decided): load a newer `conpty.dll` +
+   `OpenConsole.exe` behind a loader switch in `internal/conpty`, keep inbox
+   ConPTY as fallback, and compare both using the terminal fixture for
+   mouse-mode passthrough (`CSI ? 1000 h`/`CSI ? 1006 h`), device-status and
+   cursor-report delivery (hypothesis: inbox ConPTY answers them itself), and
+   the residual console-host process handle. Record license, Windows 10
+   support, and packaging. Adopt only if mouse modes pass through; do not
+   force xterm mouse tracking.
+2. Run user-authorized, non-destructive Claude Code and Copilot CLI hosted
+   walkthroughs with the user's existing sign-ins: start, short read-only
+   prompt, stop, restore/resume. Record Home-displayed executable path and
+   version; TauShell uses the first PATH match.
+3. In parallel (decided), implement Step 3 tool metadata/version ranges,
+   capability probes, and confirmed winget installs, plus Step 4 session
+   templates with argv preview; neither depends on the terminal path.
+   Missing-WebView2 verification is deferred to a manual Windows Sandbox/VM
+   check; rely on registry-detection unit tests until then.
+4. Add Wails-host close integration coverage and complete the keyboard-only
+   workflow.
+   A mocked-browser smoke verified frontend Home/End and arrow-key tab
+   selection, and a production-host smoke verified Home/Right switching after
+   fixing tab-strip layout; native left/right overflow controls also scrolled
+   eight inert fixture tabs.
+5. Run `npm ci`, `npm run build`, `go test -count=1 ./...`, `go vet ./...`, and
    a production-tagged build after code changes. Re-run the executable startup
    smoke test when changing host/runtime code.
-4. Keep README, V2 architecture/schema/backlog, and this handoff aligned with
+6. Keep README, V2 architecture/schema/backlog, and this handoff aligned with
    observed behavior. Do not mark a feasibility item complete based on a
    compile-only check.
+
+## Diagnostics logging
+
+- Every process truncates `%TEMP%\TauShell\taushell.log` at startup and emits
+  JSON records with timestamps, severity, source locations, and safe
+  operational metadata. The Home screen displays the resolved path.
+- Go command failures and top-level panics, Wails framework errors, session
+  lifecycle outcomes, UI operation failures, browser errors/unhandled promise
+  rejections, and React render errors are recorded. The Wails bridge logger
+  suppresses failed request payloads so terminal input is not copied into the
+  diagnostic log.
+- Do not add prompt text, terminal bytes/text, environment values, credentials,
+  or launch argument values to diagnostic attributes. Error messages and
+  frontend stacks are bounded and credential-like strings are redacted.
+- Log initialization failure is surfaced and prevents the process from
+  starting without the requested diagnostic file. A process terminated by the
+  OS or a runtime failure before Go initialization cannot write an app log.
 
 ## Build and workspace notes
 
 Use Go 1.26 or newer and Node.js/npm on Windows. A production executable must
 be built with Wails' `production` build tag; a plain `go build` can produce
-Wails' diagnostic stub instead of the desktop host. Run the frontend build
-first because Go embeds its output. Generated frontend files are part of the
-application build input, not a substitute for frontend source.
+Wails' diagnostic stub instead of the desktop host. Direct `go build` also
+needs `-ldflags "-H=windowsgui"` to prevent the console subsystem window from
+covering the desktop app. Run the frontend build first because Go embeds its
+output. Generated frontend files are part of the application build input, not
+a substitute for frontend source.
 
 Go is not currently on this checkout's PATH. The latest Windows verification
 used a temporary Go 1.27.2 archive downloaded from the official Go distribution

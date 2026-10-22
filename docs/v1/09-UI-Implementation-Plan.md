@@ -63,21 +63,34 @@ and tests demonstrated to be UI-independent and correct for the GUI.
 - **Step 1 (feasibility): open.** A production-tagged Wails host opens with
   bundled React/xterm.js assets on the current Windows 10 development machine.
   A production-mode WebView2 smoke confirmed that navigation to an external
-  `.invalid` origin is cancelled. A browser-only xterm smoke with a mocked
-  bridge exercised split UTF-8/emoji, ANSI, alternate screen, terminal queries,
-  mouse reporting, resize, and input; it is not evidence for the actual
-  WebView2/ConPTY path. A controllable full-screen fixture, missing-runtime
-  exercise, and Claude Code/Copilot CLI hosted-terminal walkthroughs have not
-  passed.
+  `.invalid` origin is cancelled. The checked-in `cmd/terminal-fixture/`
+  harness has now run through the production Wails window, bridge, PowerShell
+  7, and ConPTY. The real hosted xterm rendered Unicode/emoji (including a
+  four-byte sequence split across writes 50 ms apart), ANSI colors, and cursor
+  movement/erase; it replied to a cursor-position query, accepted typed input,
+  and reflected live resize. The fixture's explicit `q` exit restored the
+  preserved primary-screen marker. A repeated run confirmed the cursor-position
+  reply (`ESC[10;1R`). In a later isolated run, the post-start device-status
+  reply was recognized and successfully written by the Go bridge, but did not
+  arrive in any fixture input chunk. A post-start cursor query produced a
+  fixture-visible seven-byte reply (`ESC[6;15R`) without a corresponding
+  bridge marker. Native `pointerdown`/`mousedown` events reach the terminal
+  container, but xterm remains in `none` mouse mode and emits no report.
+  A direct ConPTY probe showed mouse-mode DECSET controls are consumed before
+  reaching xterm; a temporary xterm-side mode enable forwarded SGR reports to
+  the Go bridge. An isolated browser-side xterm check also emitted the
+  expected device-status and SGR mouse responses.
+  Missing-runtime behavior and Claude Code/Copilot CLI hosted-terminal
+  walkthroughs remain unverified.
 - **Step 2 (host and bridge): partial.** The no-argument Windows entry point,
   bundled local asset server, WebView2 registry precheck, typed bound methods,
   standalone CLI path, and top-level local-origin navigation guard exist.
   The external navigation denial is smoke-verified; untrusted-origin bridge
   dispatch has not been separately exercised.
-- **Step 3 (discovery/install): partial.** Home can display executable lookup
-  and `--version` output for PowerShell 7, Claude Code, and Copilot CLI.
-  Minimum/tested ranges, capability probes, setup flows, winget consent, and
-  installation are not implemented.
+- **Step 3 (discovery/install): partial.** Home displays executable paths and
+  `--version` output for PowerShell 7, Claude Code, and Copilot CLI, making
+  PATH precedence visible. Minimum/tested ranges, capability probes, setup
+  flows, winget consent, and installation are not implemented.
 - **Step 4 (session manager): foundation implemented.** Process lifecycle has
   been extracted from the TUI, and start/restore/fresh, input, resize, output
   events, and bounded stop operations are wired. Windows fake-process tests
@@ -88,8 +101,11 @@ and tests demonstrated to be UI-independent and correct for the GUI.
   exited process IDs, and a live session owned by another window. App-close
   error handling now keeps the window open when session checks or
   forced-shutdown reporting fail. Process tests verify
-  explicit ConPTY resource clearing and idempotent close; a dedicated native
-  handle-leak check and hosted-terminal integration remain open.
+  explicit ConPTY resource clearing and idempotent close. A repeated native
+  check confirms process, job, and input/output pipe handles are invalidated
+  after close; the opaque pseudoconsole handle remains covered by successful
+  `ClosePseudoConsole` and cleared state. Wails-host close integration and a
+  comprehensive native handle-leak check remain open.
 - **Step 5 (launcher/tabs): partial.** Home, session creation, tabs, terminal
   panes, and stop-or-background tab close are implemented. Tab IDs and
   selection are stored in WebView local storage and are not auto-launched.
@@ -99,8 +115,14 @@ and tests demonstrated to be UI-independent and correct for the GUI.
   reopen and input routes to the reopened session. The actual Wails/ConPTY path
   remains unverified. Tabs now use keyboard-accessible tab roles, arrow/Home/
   End selection, active-tab visibility, and horizontal overflow buttons.
-  A complete keyboard-only walkthrough inside the desktop host remains
-  unverified. The session dialog now suggests the five most recently created
+  A mocked-browser keyboard smoke verified Home/End selection, arrow-key
+  wraparound, focus movement, and synchronized selected-tab state. A complete
+  production-host smoke found that the tab strip was missing its flex layout;
+  after the CSS fix, Home and Right switched focus and selection between Home
+  and one stopped fixture tab. A mouse click seeded tab focus, so this does not
+  count as a complete keyboard-only walkthrough. With eight inert fixture tabs
+  open, the native left/right overflow controls scrolled between earlier and
+  later tabs. The session dialog now suggests the five most recently created
   project folders using WebView local storage. YAML preview/editing, generated
   harness defaults, and persisted-tab restoration under a real WebView profile
   remain missing.
@@ -118,8 +140,15 @@ and tests demonstrated to be UI-independent and correct for the GUI.
   stops and rechecks sessions, forced outcomes are reported, and failures to
   show the confirmation or stop sessions keep the window open. A session still
   running after StopAll also prevents close. Broader restart
-  reconciliation, native Wails-host close integration, and real WebView profile
-  restoration remain outstanding.
+  reconciliation, automated Wails-host close integration, and real WebView
+  profile restoration remain outstanding. The Wails `OnBeforeClose` callback
+  now returns immediately and performs confirmation and session stopping
+  asynchronously. A production-window smoke with an inert live fixture
+  verified the native prompt remained responsive: choosing No kept TauShell
+  and the fixture running; choosing Yes stopped the fixture process and closed
+  TauShell. The fixture's PowerShell process exited with code 1 during
+  interruption, so this does not verify graceful-stop success or the
+  forced-termination notice path.
   Detached shell/broker processes that escape TauShell's job are intentionally
   unmanaged.
 
@@ -134,14 +163,45 @@ and tests demonstrated to be UI-independent and correct for the GUI.
   restricted Go↔UI bridge, and shows a terminal component hosted by the
   WebView.
 - Evaluate xterm.js or alternatives with a fake interactive TUI over the
-  existing ConPTY path. Cover alternate screen, cursor movement, erase,
-  colors, Unicode/emoji, input modes, mouse behavior, resize, and terminal
-  queries.
+  existing ConPTY path. The checked-in terminal fixture verifies Unicode/
+  emoji, ANSI colors, cursor movement/erase, cursor-position query replies,
+  typed input, live resize, explicit exit, and split UTF-8 output through the
+  actual hosted path. The explicit exit restored the preserved primary-screen
+  marker. Device-status input reaches the Go bridge but is not observed by the
+  fixture; mouse input is not observed at the bridge or fixture. Payload-free
+  diagnostics now confirm native pointer events reach the terminal container,
+  while xterm remains in `none` mouse-tracking mode. A direct ConPTY probe
+  showed that Windows ConPTY consumes `CSI ? 1000 h` and `CSI ? 1006 h` before
+  they reach xterm; a temporary xterm-side mode-enable probe forwarded SGR
+  mouse input to the Go bridge. Do not force mouse tracking unconditionally:
+  it would change normal terminal selection and input behavior. The current
+  PowerShell/ConPTY boundary needs an explicit design decision to support
+  harness-requested mouse modes. Device-status delivery and the cursor-report
+  source remain unresolved, and both supported real harnesses remain
+  unverified.
+- **Bundled ConPTY spike (decided):** evaluate shipping a newer
+  `conpty.dll` + `OpenConsole.exe` (Windows Terminal /
+  `Microsoft.Windows.Console.ConPTY` package) behind a loader switch in
+  `internal/conpty`, keeping inbox kernel32 ConPTY as the fallback. Done when
+  the spike records, for both inbox and bundled ConPTY: (a) whether
+  `CSI ? 1000 h`/`CSI ? 1006 h` reach xterm and SGR mouse input reaches the
+  fixture; (b) whether device-status/cursor-position replies are answered by
+  ConPTY itself or delivered to the fixture; (c) whether the per-cycle
+  process handle to the exited console host remains; plus license (MIT),
+  Windows 10 support, and packaging/signing implications. Adopt the bundled
+  ConPTY only if it passes mouse modes through; otherwise record the evidence
+  and return for a mouse-support decision. Do not force xterm mouse tracking.
 - Verify how a missing WebView2 runtime is detected and handed off before the
   WebView can render. The bootstrap path must use a minimal native Windows
-  surface or an equivalent independently available mechanism.
+  surface or an equivalent independently available mechanism. **Decided:**
+  registry-detection unit tests cover Phase 1 automation; the native prompt
+  and download handoff are deferred to a manual Windows Sandbox/VM check and
+  are not claimed verified until then.
 - Exercise Claude Code and Copilot CLI terminal screens without sending
   prompts that modify user data. Test on supported Windows 10 environments.
+  The user has authorized non-destructive walkthroughs using their existing
+  signed-in installations: start, a short read-only prompt, stop, and
+  restore/resume, recording executable path, version, and observed outcome.
 - Verify runtime-missing behavior, app asset loading, local-only navigation,
   license/maintenance acceptability, and an install/build path.
 - Record the selected Go host and terminal component plus tested limitations
@@ -174,6 +234,10 @@ with Go through a restricted bridge.
   navigation and external content. Keep environment values, credentials, and
   arbitrary process controls out of renderer state.
 - Add clear WebView2 missing-runtime instructions and startup diagnostics.
+- Create a per-process structured diagnostic log under the user's system temp
+  directory, truncate it on each launch, and capture host, bridge, and frontend
+  failures without recording prompts, terminal input/output, credentials, or
+  environment values.
 - Keep `list`, `start`, and `restore` independent of the GUI host.
 - Once implemented, make no-argument interactive launch open the desktop app.
   If no interactive desktop or required GUI host is available, report a clear
@@ -186,7 +250,10 @@ invoke privileged bridge operations.
 
 ### Step 3 — Dependency discovery, version support, and installation
 
-**Depends on:** Step 2.
+**Depends on:** Step 2. **Decided:** proceeds in parallel with the Step 1
+feasibility gate because detection, metadata, and confirmed-install flows do
+not depend on the terminal path. The Step 1 bootstrap item still governs the
+missing-WebView2 surface.
 
 - Define a metadata contract for host prerequisites, harnesses, and optional
   development/runtime tools: executable detection, version detection,
@@ -226,7 +293,10 @@ missing winget fallback, and post-install verification.
   adapter-generated arguments; pass configured values as discrete argv
   entries, never as shell text.
 - Generate per-harness session templates with editable argument defaults,
-  including the agreed Claude Code and Copilot CLI examples. Preserve those
+  including the agreed Claude Code and Copilot CLI examples. **Decided:**
+  template generation, argv preview, and YAML validation may proceed in
+  parallel with the Step 1 feasibility gate; they do not depend on the
+  terminal path. Preserve those
   values in the user-edited YAML and preview the effective executable and
   discrete argument list before saving. Secrets must not be entered as
   arguments.

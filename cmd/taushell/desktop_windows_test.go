@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ma99us/tau-shell/internal/session"
 	"github.com/ma99us/tau-shell/internal/sessionhost"
@@ -54,6 +55,44 @@ func (manager *closeTestManager) StopAll(ctx context.Context) error {
 
 func (manager *closeTestManager) Close(context.Context) error {
 	return nil
+}
+
+func TestTerminalProtocolReports(t *testing.T) {
+	input := []byte("sensitive typed text \x1b[0n \x1b[10;1R \x1b[<0;4;3M \x1b[M\x20\x25\x27")
+	got := terminalProtocolReports(input)
+	want := []string{"device-status", "cursor-position", "mouse-sgr", "mouse-x10"}
+	if len(got) != len(want) {
+		t.Fatalf("terminalProtocolReports() = %v, want %v", got, want)
+	}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("terminalProtocolReports() = %v, want %v", got, want)
+		}
+	}
+}
+
+func TestTerminalProtocolReportsIgnoreOrdinaryInput(t *testing.T) {
+	if got := terminalProtocolReports([]byte("ordinary typed text")); len(got) != 0 {
+		t.Fatalf("terminalProtocolReports() = %v, want no protocol reports", got)
+	}
+	if got := terminalProtocolReports([]byte("\x1b[M")); len(got) != 0 {
+		t.Fatalf("terminalProtocolReports() = %v, want incomplete mouse report ignored", got)
+	}
+}
+
+func TestDetectToolReportsResolvedExecutablePath(t *testing.T) {
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	status := detectTool("Go test executable", executable, "-test.run=^$")
+	if !status.Installed {
+		t.Fatalf("tool should be detected, got error %q", status.Error)
+	}
+	if status.ExecutablePath != executable {
+		t.Fatalf("executable path = %q, want %q", status.ExecutablePath, executable)
+	}
 }
 
 func TestCreateSessionReturnsSavedSessionWithoutListing(t *testing.T) {
@@ -163,11 +202,64 @@ func TestBeforeCloseKeepsWindowOpenWhenSessionCheckFails(t *testing.T) {
 			return "", nil
 		},
 	}
-	if !application.beforeClose(context.Background()) {
+	if !application.confirmShutdown(context.Background()) {
 		t.Fatal("beforeClose allowed closing after session state could not be checked")
 	}
 	if !dialogShown {
 		t.Fatal("session check failure was not shown")
+	}
+}
+
+func TestBeforeCloseDefersConfirmationAndAllowsConfirmedRetry(t *testing.T) {
+	started := make(chan struct{}, 1)
+	release := make(chan struct{})
+	released := false
+	defer func() {
+		if !released {
+			close(release)
+		}
+	}()
+
+	manager := &closeTestManager{
+		list: func(context.Context) ([]sessionhost.Snapshot, error) {
+			started <- struct{}{}
+			<-release
+			return nil, nil
+		},
+		stopAll: func(context.Context) error {
+			return nil
+		},
+	}
+	requestedQuit := make(chan struct{}, 1)
+	application := &App{
+		manager: manager,
+		requestQuit: func(context.Context) {
+			requestedQuit <- struct{}{}
+		},
+	}
+	ctx := context.Background()
+
+	if !application.beforeClose(ctx) {
+		t.Fatal("initial close request was not deferred")
+	}
+	select {
+	case <-started:
+	case <-time.After(3 * time.Second):
+		t.Fatal("shutdown confirmation did not start")
+	}
+	if !application.beforeClose(ctx) {
+		t.Fatal("repeated close request was not deferred during confirmation")
+	}
+
+	close(release)
+	released = true
+	select {
+	case <-requestedQuit:
+	case <-time.After(3 * time.Second):
+		t.Fatal("confirmed shutdown did not request application close")
+	}
+	if application.beforeClose(ctx) {
+		t.Fatal("confirmed retry did not allow the application to close")
 	}
 }
 
@@ -187,11 +279,17 @@ func TestBeforeCloseCancelKeepsRunningSessions(t *testing.T) {
 			if options.Title != "Sessions are still running" {
 				t.Errorf("dialog title = %q, want running-session confirmation", options.Title)
 			}
-			return "Keep TauShell open", nil
+			if options.DefaultButton != "No" || options.CancelButton != "No" {
+				t.Errorf("shutdown dialog defaults = %q/%q, want No/No", options.DefaultButton, options.CancelButton)
+			}
+			if len(options.Buttons) != 2 || options.Buttons[0] != "Yes" || options.Buttons[1] != "No" {
+				t.Errorf("shutdown dialog buttons = %v, want Yes/No", options.Buttons)
+			}
+			return "No", nil
 		},
 	}
 
-	if !application.beforeClose(context.Background()) {
+	if !application.confirmShutdown(context.Background()) {
 		t.Fatal("cancelling shutdown allowed TauShell to close")
 	}
 	if manager.stopAllCalls != 0 {
@@ -217,7 +315,7 @@ func TestBeforeCloseKeepsWindowOpenWhenConfirmationDialogFails(t *testing.T) {
 		},
 	}
 
-	if !application.beforeClose(context.Background()) {
+	if !application.confirmShutdown(context.Background()) {
 		t.Fatal("confirmation-dialog failure allowed TauShell to close")
 	}
 	if manager.stopAllCalls != 0 {
@@ -239,7 +337,13 @@ func TestBeforeCloseStopsSessionsAndReportsForcedTermination(t *testing.T) {
 		showMessageDialog: func(_ context.Context, options runtime.MessageDialogOptions) (string, error) {
 			dialogTitles = append(dialogTitles, options.Title)
 			if options.Title == "Sessions are still running" {
-				return "Stop sessions and close", nil
+				if options.DefaultButton != "No" || options.CancelButton != "No" {
+					t.Errorf("shutdown dialog defaults = %q/%q, want No/No", options.DefaultButton, options.CancelButton)
+				}
+				if len(options.Buttons) != 2 || options.Buttons[0] != "Yes" || options.Buttons[1] != "No" {
+					t.Errorf("shutdown dialog buttons = %v, want Yes/No", options.Buttons)
+				}
+				return "Yes", nil
 			}
 			if options.Title == "Some sessions required force termination" && !strings.Contains(options.Message, "API session") {
 				t.Errorf("forced-shutdown notice omitted session name: %q", options.Message)
@@ -248,7 +352,7 @@ func TestBeforeCloseStopsSessionsAndReportsForcedTermination(t *testing.T) {
 		},
 	}
 
-	if application.beforeClose(context.Background()) {
+	if application.confirmShutdown(context.Background()) {
 		t.Fatal("successful confirmed shutdown prevented closing")
 	}
 	if manager.stopAllCalls != 1 || manager.listCalls != 2 {
@@ -271,7 +375,7 @@ func TestBeforeCloseKeepsWindowOpenWhenSessionRemainsRunning(t *testing.T) {
 		manager: manager,
 		showMessageDialog: func(_ context.Context, options runtime.MessageDialogOptions) (string, error) {
 			if options.Title == "Sessions are still running" {
-				return "Stop sessions and close", nil
+				return "Yes", nil
 			}
 			if options.Title == "Some sessions are still running" && strings.Contains(options.Message, "API session") {
 				failureShown = true
@@ -280,7 +384,7 @@ func TestBeforeCloseKeepsWindowOpenWhenSessionRemainsRunning(t *testing.T) {
 		},
 	}
 
-	if !application.beforeClose(context.Background()) {
+	if !application.confirmShutdown(context.Background()) {
 		t.Fatal("post-stop verification allowed closing while a managed session remained running")
 	}
 	if !failureShown {
@@ -304,7 +408,7 @@ func TestBeforeCloseKeepsWindowOpenWhenStoppingSessionsFails(t *testing.T) {
 		manager: manager,
 		showMessageDialog: func(_ context.Context, options runtime.MessageDialogOptions) (string, error) {
 			if options.Title == "Sessions are still running" {
-				return "Stop sessions and close", nil
+				return "Yes", nil
 			}
 			if options.Title == "Unable to stop all sessions" && strings.Contains(options.Message, stopErr.Error()) {
 				failureShown = true
@@ -313,7 +417,7 @@ func TestBeforeCloseKeepsWindowOpenWhenStoppingSessionsFails(t *testing.T) {
 		},
 	}
 
-	if !application.beforeClose(context.Background()) {
+	if !application.confirmShutdown(context.Background()) {
 		t.Fatal("stop failure allowed TauShell to close")
 	}
 	if !failureShown {

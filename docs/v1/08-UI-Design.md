@@ -96,6 +96,19 @@ Origin-policy tests, a production host smoke, and a production-mode WebView2
 attempted external-navigation smoke pass on the current machine. This does not
 close the separate xterm/harness feasibility gate.
 
+The checked-in `cmd/terminal-fixture/` program was built as `copilot.exe` and
+run from an isolated TauShell profile through the production Wails window,
+session bridge, PowerShell 7, and ConPTY. The embedded xterm rendered
+Greek/Japanese text, a combining mark, emoji, ANSI colors, and cursor
+movement/erase, and a four-byte emoji split across two writes 50 ms apart. It
+replied to a cursor-position query, forwarded typed input, and reflected a
+live resize from 117x35 to 94x28; explicit `q` exit was recorded. Mouse reports
+and device-status query replies were not observed. Alternate-screen
+restoration is not established.
+This fixture does not replace the required non-destructive Claude Code and
+Copilot CLI walkthroughs. The actual hosted-terminal path is therefore
+partially verified, and Step 1 remains open.
+
 The current Bubble Tea screen and its in-process VT renderer are not the GUI
 architecture. Use the TUI only as a behavioral reference or as a source of
 UI-independent regression fixtures; do not wrap or port the TUI UI into

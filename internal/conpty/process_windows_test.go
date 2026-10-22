@@ -11,9 +11,18 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
+
+var getHandleInformation = windows.NewLazySystemDLL("kernel32.dll").NewProc("GetHandleInformation")
+
+func hasHandleInformation(handle windows.Handle) bool {
+	var flags uint32
+	result, _, _ := getHandleInformation.Call(uintptr(handle), uintptr(unsafe.Pointer(&flags)))
+	return result != 0
+}
 
 func TestProcessRunsPowerShellThroughConPTY(t *testing.T) {
 	powershell, err := exec.LookPath("pwsh.exe")
@@ -90,6 +99,20 @@ func TestProcessCanResizeAndTerminate(t *testing.T) {
 	if exited {
 		t.Fatal("PowerShell exited before resize and termination")
 	}
+	nativeHandles := []struct {
+		name   string
+		handle windows.Handle
+	}{
+		{name: "process", handle: process.process},
+		{name: "job", handle: process.job},
+		{name: "input pipe", handle: windows.Handle(process.input.Fd())},
+		{name: "output pipe", handle: windows.Handle(process.output.Fd())},
+	}
+	for _, nativeHandle := range nativeHandles {
+		if !hasHandleInformation(nativeHandle.handle) {
+			t.Fatalf("%s handle is invalid before Close: %v", nativeHandle.name, nativeHandle.handle)
+		}
+	}
 	if err := process.Resize(100, 30); err != nil {
 		t.Fatal(err)
 	}
@@ -105,6 +128,11 @@ func TestProcessCanResizeAndTerminate(t *testing.T) {
 	}
 	if err := process.Close(); err != nil {
 		t.Fatalf("close ConPTY resources: %v", err)
+	}
+	for _, nativeHandle := range nativeHandles {
+		if hasHandleInformation(nativeHandle.handle) {
+			t.Errorf("%s handle %v remained valid after Close", nativeHandle.name, nativeHandle.handle)
+		}
 	}
 	if process.console != 0 || process.process != 0 || process.job != 0 || process.input != nil || process.output != nil {
 		t.Fatalf("Close left process resources assigned: console=%v process=%v job=%v input=%v output=%v",

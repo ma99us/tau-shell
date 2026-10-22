@@ -1,4 +1,4 @@
-import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
+import { Component, ErrorInfo, FormEvent, KeyboardEvent, ReactNode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
@@ -11,13 +11,58 @@ const savedTabsKey = "taushell.tabs.v1";
 const savedSelectionKey = "taushell.selected-tab.v1";
 const recentFoldersKey = "taushell.recent-folders.v1";
 
+function errorDetails(error: unknown): { message: string; stack: string } {
+  if (error instanceof Error) return { message: error.message, stack: error.stack ?? "" };
+  return { message: String(error), stack: "" };
+}
+
+function reportFrontendFailure(source: string, error: unknown, stack = ""): string {
+  const details = errorDetails(error);
+  const fullStack = stack || details.stack;
+  const logger = window.go?.main?.App?.LogFrontendFailure;
+  if (logger) {
+    void logger(source, details.message, fullStack).catch((logError) => {
+      console.error("TauShell could not write a frontend failure to its diagnostic log.", logError);
+    });
+  } else {
+    console.error(`TauShell frontend failure (${source}):`, error);
+  }
+  return details.message;
+}
+
+window.addEventListener("error", (event) => {
+  const details = errorDetails(event.error ?? event.message);
+  reportFrontendFailure("window.error", event.error ?? event.message, `${details.stack}\n${event.filename}:${event.lineno}:${event.colno}`);
+});
+window.addEventListener("unhandledrejection", (event) => {
+  reportFrontendFailure("window.unhandledrejection", event.reason);
+});
+
+class AppErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    reportFrontendFailure("react.render", error, `${error.stack ?? ""}\n${info.componentStack ?? ""}`);
+  }
+
+  render() {
+    if (this.state.failed) return <main className="main-content"><div className="error-banner">TauShell encountered a display error. Check the diagnostic log for details.</div></main>;
+    return this.props.children;
+  }
+}
+
 function readRecentFolders(): string[] {
   try {
     const parsed: unknown = JSON.parse(localStorage.getItem(recentFoldersKey) ?? "[]");
     return Array.isArray(parsed)
       ? parsed.filter((folder): folder is string => typeof folder === "string" && folder.length > 0).slice(0, 5)
       : [];
-  } catch {
+  } catch (error) {
+    reportFrontendFailure("storage.recent-folders", error);
     return [];
   }
 }
@@ -28,7 +73,8 @@ function readTabs(): Tab[] {
     return Array.isArray(parsed)
       ? parsed.filter((tab): tab is Tab => typeof tab?.id === "string" && typeof tab?.name === "string")
       : [];
-  } catch {
+  } catch (error) {
+    reportFrontendFailure("storage.tabs", error);
     return [];
   }
 }
@@ -46,6 +92,7 @@ function App() {
   const [closeRequest, setCloseRequest] = useState<Session | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const showError = (source: string, failure: unknown) => setError(reportFrontendFailure(source, failure));
 
   const refresh = async () => {
     try {
@@ -63,7 +110,7 @@ function App() {
       setStatus(nextStatus);
       setError("");
     } catch (err) {
-      setError(String(err));
+      showError("ui.refresh", err);
     }
   };
 
@@ -162,7 +209,7 @@ function App() {
       openTab(started);
       await refresh();
     } catch (err) {
-      setError(String(err));
+      showError("ui.session-launch", err);
     } finally {
       setBusy(false);
     }
@@ -195,7 +242,7 @@ function App() {
       setCloseRequest(null);
       await refresh();
     } catch (err) {
-      setError(String(err));
+      showError("ui.stop-session", err);
     } finally {
       setBusy(false);
     }
@@ -266,7 +313,7 @@ function App() {
               if (!tab && !session?.runningHere) return null;
               return (
                 <div id={`panel-${id}`} className={`terminal-tab-content ${tab && selected === id ? "" : "hidden"}`} role="tabpanel" aria-labelledby={`tab-${id}`} tabIndex={0} key={id}>
-                  <TerminalPane session={session} visible={Boolean(tab && selected === id)} busy={busy} onLaunch={launch} onError={setError} />
+                  <TerminalPane session={session} visible={Boolean(tab && selected === id)} busy={busy} onLaunch={launch} onError={(failure) => showError("ui.terminal", failure)} />
                 </div>
               );
             })}
@@ -277,7 +324,7 @@ function App() {
         setSessions((current) => [...current, session]);
         setRecentFolders((current) => [session.workingDir, ...current.filter((folder) => folder.toLowerCase() !== session.workingDir.toLowerCase())].slice(0, 5));
         setDialogOpen(false);
-      }} onError={setError} />}
+      }} onError={(failure) => showError("ui.create-session", failure)} />}
       {closeRequest && <div className="modal-backdrop"><div className="modal confirm-modal">
         <div className="modal-heading"><div><p className="eyebrow">CLOSE SESSION TAB</p><h2>{closeRequest.name} is running</h2></div></div>
         <p className="muted">Stop its PowerShell and harness process, or keep it running in the background?</p>
@@ -321,6 +368,7 @@ function Home({ sessions, status, busy, onNew, onLaunch }: {
       <div className="tools-panel"><div><h2>Installed tools</h2><p className="muted">Detected on this machine</p></div><div className="tool-list">
         <ToolRow name="PowerShell 7" tool={status?.powershell} /><ToolRow name="Claude Code" tool={status?.claudeCode} /><ToolRow name="GitHub Copilot CLI" tool={status?.copilotCLI} />
       </div></div>
+      {status?.diagnosticsLogPath && <p className="muted diagnostic-path">Diagnostic log: <code>{status.diagnosticsLogPath}</code></p>}
     </div>
     {freshSession && <div className="modal-backdrop"><div className="modal confirm-modal">
       <div className="modal-heading"><div><p className="eyebrow">START FRESH</p><h2>Begin a new harness conversation?</h2></div></div>
@@ -333,7 +381,7 @@ function Home({ sessions, status, busy, onNew, onLaunch }: {
 
 function ToolRow({ name, tool }: { name: string; tool?: SystemStatus["powershell"] }) {
   const label = tool?.installed ? tool.version || "Installed" : tool ? "Not found" : "Checking...";
-  return <div className="tool-row" title={tool?.error}><span className={`status-dot ${tool?.installed ? "online" : ""}`} /><strong>{name}</strong><span>{label}</span></div>;
+  return <div className="tool-row" title={tool?.error}><span className={`status-dot ${tool?.installed ? "online" : ""}`} /><strong>{name}</strong><span>{label}</span>{tool?.executablePath && <code className="tool-path">{tool.executablePath}</code>}</div>;
 }
 
 const terminalInstances = new Map<string, Terminal>();
@@ -382,7 +430,7 @@ function TerminalPane({ session, visible, busy, onLaunch, onError }: {
   visible: boolean;
   busy: boolean;
   onLaunch: (session: Session, mode: "start" | "restore" | "fresh") => void;
-  onError: (error: string) => void;
+  onError: (error: unknown) => void;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const runningRef = useRef(session?.runningHere ?? false);
@@ -392,28 +440,55 @@ function TerminalPane({ session, visible, busy, onLaunch, onError }: {
     let terminal = terminalInstances.get(session.id);
     const fit = new FitAddon();
     fitInstances.set(session.id, fit);
+    const pointerEventsLogged = new Set<string>();
+    const logPointerEvent = (event: "pointerdown" | "mousedown") => {
+      if (pointerEventsLogged.has(event)) return;
+      pointerEventsLogged.add(event);
+      void app().LogTerminalPointerEvent(session.id, event).catch((error) => onError(error));
+    };
+    const onPointerDown = () => logPointerEvent("pointerdown");
+    const onMouseDown = () => logPointerEvent("mousedown");
+    container.current.addEventListener("pointerdown", onPointerDown, true);
+    container.current.addEventListener("mousedown", onMouseDown, true);
     if (!terminal) {
       terminal = new Terminal({ convertEol: false, cursorBlink: true, fontFamily: "Cascadia Code, Consolas, monospace", fontSize: 14, theme: { background: "#0c0e12", foreground: "#d8dce5", cursor: "#a4e1c0" } });
       terminal.loadAddon(fit);
       terminal.open(container.current);
       terminalInstances.set(session.id, terminal);
-      terminal.onData((data) => { void app().WriteTerminal(session.id, data).catch((err) => onError(String(err))); });
-      terminal.onBinary((data) => { void app().WriteTerminalBinary(session.id, btoa(data)).catch((err) => onError(String(err))); });
+      terminal.onData((data) => { void app().WriteTerminal(session.id, data).catch((err) => onError(err)); });
+      terminal.onBinary((data) => { void app().WriteTerminalBinary(session.id, btoa(data)).catch((err) => onError(err)); });
     } else {
       terminal.loadAddon(fit);
       terminal.open(container.current);
     }
+    let lastMouseTrackingMode: string | undefined;
+    const mouseModeSubscription = terminal.onWriteParsed(() => {
+      const mode = terminal!.modes.mouseTrackingMode;
+      if (mode === lastMouseTrackingMode) return;
+      lastMouseTrackingMode = mode;
+      void app().LogTerminalMouseTrackingMode(session.id, mode).catch((error) => onError(error));
+    });
     const resize = () => {
       try {
         fit.fit();
-        if (runningRef.current) void app().ResizeTerminal(session.id, terminal!.cols, terminal!.rows).catch((err) => onError(String(err)));
-      } catch { /* hidden terminal has no measurable rows */ }
+        if (runningRef.current) void app().ResizeTerminal(session.id, terminal!.cols, terminal!.rows).catch((err) => onError(err));
+      } catch (error) {
+        reportFrontendFailure("ui.terminal-layout", error);
+      }
     };
     const observer = new ResizeObserver(resize);
     observer.observe(container.current);
     resize();
     notifyTerminalReady(session.id, terminal);
-    return () => { observer.disconnect(); terminal?.dispose(); terminalInstances.delete(session.id); fitInstances.delete(session.id); };
+    return () => {
+      observer.disconnect();
+      container.current?.removeEventListener("pointerdown", onPointerDown, true);
+      container.current?.removeEventListener("mousedown", onMouseDown, true);
+      mouseModeSubscription.dispose();
+      terminal?.dispose();
+      terminalInstances.delete(session.id);
+      fitInstances.delete(session.id);
+    };
   }, [session?.id]);
   useEffect(() => {
     if (!visible || !session) return;
@@ -423,8 +498,10 @@ function TerminalPane({ session, visible, busy, onLaunch, onError }: {
     requestAnimationFrame(() => {
       try {
         fit.fit();
-        if (session.runningHere) void app().ResizeTerminal(session.id, terminal.cols, terminal.rows).catch((err) => onError(String(err)));
-      } catch { /* terminal is not measurable yet */ }
+        if (session.runningHere) void app().ResizeTerminal(session.id, terminal.cols, terminal.rows).catch((err) => onError(err));
+      } catch (error) {
+        reportFrontendFailure("ui.terminal-layout", error);
+      }
     });
   }, [visible, session?.id, session?.runningHere]);
   if (!session) return <div className="terminal-missing">Session configuration is unavailable.</div>;
@@ -435,7 +512,7 @@ function CreateSession({ recentFolders, onClose, onCreated, onError }: {
   recentFolders: string[];
   onClose: () => void;
   onCreated: (session: Session) => void;
-  onError: (error: string) => void;
+  onError: (error: unknown) => void;
 }) {
   const [name, setName] = useState("");
   const [tool, setTool] = useState<Session["tool"]>("claude-code");
@@ -443,7 +520,7 @@ function CreateSession({ recentFolders, onClose, onCreated, onError }: {
   const [launchArgs, setLaunchArgs] = useState("");
   const [saving, setSaving] = useState(false);
   const chooseDirectory = async () => {
-    try { const path = await app().SelectWorkingDirectory(); if (path) setWorkingDir(path); } catch (err) { onError(String(err)); }
+    try { const path = await app().SelectWorkingDirectory(); if (path) setWorkingDir(path); } catch (err) { onError(err); }
   };
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -451,7 +528,7 @@ function CreateSession({ recentFolders, onClose, onCreated, onError }: {
     try {
       const session = await app().CreateSession(name, tool, workingDir, launchArgs.split(/\r?\n/).map((arg) => arg.trim()).filter(Boolean));
       onCreated(session);
-    } catch (err) { onError(String(err)); } finally { setSaving(false); }
+    } catch (err) { onError(err); } finally { setSaving(false); }
   };
   return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="modal">
     <div className="modal-heading"><div><p className="eyebrow">NEW WORKSPACE</p><h2>Create a session</h2></div><button className="icon-button" onClick={onClose}>x</button></div>
@@ -466,4 +543,4 @@ function CreateSession({ recentFolders, onClose, onCreated, onError }: {
   </div></div>;
 }
 
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(<AppErrorBoundary><App /></AppErrorBoundary>);

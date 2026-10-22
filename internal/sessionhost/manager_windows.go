@@ -9,10 +9,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime/debug"
 	"sync"
 	"time"
 
 	"github.com/ma99us/tau-shell/internal/conpty"
+	"github.com/ma99us/tau-shell/internal/diagnostics"
 	"github.com/ma99us/tau-shell/internal/harness"
 	"github.com/ma99us/tau-shell/internal/session"
 )
@@ -220,6 +222,15 @@ func (manager *Manager) start(ctx context.Context, id string, restoring, fresh b
 	}
 	manager.sessions[id] = current
 	manager.publish(Event{Kind: EventState, SessionID: id, Session: current.snapshot()})
+	diagnostics.Info("session process started",
+		"session_id", id,
+		"tool", config.Tool,
+		"pid", process.PID(),
+		"restoring", restoring,
+		"fresh", fresh,
+		"columns", columns,
+		"rows", rows,
+	)
 	go manager.supervise(current)
 	return current.snapshot(), nil
 }
@@ -279,6 +290,13 @@ func (manager *Manager) StopAll(ctx context.Context) error {
 		wait.Add(1)
 		go func(current *managedSession) {
 			defer wait.Done()
+			defer func() {
+				if recovered := recover(); recovered != nil {
+					err := fmt.Errorf("stop session worker panic: %v", recovered)
+					diagnostics.Error("session shutdown worker panicked", err, "session_id", current.config.ID, "stack", string(debug.Stack()))
+					errorsOut <- err
+				}
+			}()
 			if err := manager.stop(ctx, current); err != nil {
 				errorsOut <- err
 			}
@@ -363,8 +381,45 @@ func waitForSession(ctx context.Context, current *managedSession, timeout time.D
 }
 
 func (manager *Manager) supervise(current *managedSession) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			panicErr := fmt.Errorf("session supervisor panicked: %v", recovered)
+			diagnostics.Error("session supervisor panicked", panicErr,
+				"session_id", current.config.ID,
+				"stack", string(debug.Stack()),
+			)
+			_ = current.process.Terminate()
+			current.process.CloseConsole()
+			closeErr := current.process.Close()
+			detail := errors.Join(panicErr, closeErr).Error()
+			if finishErr := manager.store.Finish(context.Background(), current.config.ID, session.StatusFailed, detail); finishErr != nil {
+				detail = errors.Join(errors.New(detail), finishErr).Error()
+				diagnostics.Error("persist session supervisor panic failed", finishErr, "session_id", current.config.ID)
+			}
+			current.mu.Lock()
+			current.status = session.StatusFailed
+			current.detail = detail
+			current.mu.Unlock()
+			select {
+			case <-current.done:
+			default:
+				close(current.done)
+			}
+			manager.publish(Event{Kind: EventState, SessionID: current.config.ID, Session: current.snapshot()})
+		}
+	}()
 	outputDone := make(chan error, 1)
 	go func() {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				err := fmt.Errorf("session output relay panicked: %v", recovered)
+				diagnostics.Error("session output relay panicked", err,
+					"session_id", current.config.ID,
+					"stack", string(debug.Stack()),
+				)
+				outputDone <- err
+			}
+		}()
 		_, err := io.Copy(sessionOutputWriter{manager: manager, id: current.config.ID}, current.process.Output())
 		outputDone <- err
 	}()
@@ -429,6 +484,20 @@ func (manager *Manager) supervise(current *managedSession) {
 	current.detail = detail
 	current.mu.Unlock()
 	close(current.done)
+	if status == session.StatusFailed {
+		diagnostics.Error("session process failed", errors.New(detail),
+			"session_id", current.config.ID,
+			"exit_code", exitCode,
+			"forced", current.wasForced(),
+		)
+	} else {
+		diagnostics.Info("session process exited",
+			"session_id", current.config.ID,
+			"status", status,
+			"exit_code", exitCode,
+			"forced", current.wasForced(),
+		)
+	}
 	manager.publish(Event{Kind: EventState, SessionID: current.config.ID, Session: current.snapshot()})
 }
 
@@ -493,6 +562,15 @@ func (manager *Manager) get(id string) *managedSession {
 }
 
 func (manager *Manager) publish(event Event) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			diagnostics.Error("session event publication panicked", fmt.Errorf("%v", recovered),
+				"session_id", event.SessionID,
+				"event_kind", event.Kind,
+				"stack", string(debug.Stack()),
+			)
+		}
+	}()
 	if manager.emit != nil {
 		manager.emit(event)
 	}

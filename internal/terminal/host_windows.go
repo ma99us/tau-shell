@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime/debug"
 	"time"
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/term"
 
 	"github.com/ma99us/tau-shell/internal/conpty"
+	"github.com/ma99us/tau-shell/internal/diagnostics"
 )
 
 const (
@@ -182,12 +184,29 @@ func runInConsole(options Options) (returnErr error) {
 	outputDone := make(chan struct{})
 	outputErrors := make(chan error, 1)
 	go func() {
+		defer close(outputDone)
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				err := fmt.Errorf("terminal output relay panicked: %v", recovered)
+				diagnostics.Error("terminal output relay panicked", err, "stack", string(debug.Stack()))
+				outputErrors <- err
+			}
+		}()
 		_, err := io.Copy(os.Stdout, process.Output())
 		outputErrors <- err
-		close(outputDone)
 	}()
 	inputReady := make(chan inputResult, 1)
 	go func() {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				err := fmt.Errorf("terminal input relay panicked: %v", recovered)
+				diagnostics.Error("terminal input relay panicked", err, "stack", string(debug.Stack()))
+				select {
+				case inputReady <- inputResult{err: err}:
+				case <-outputDone:
+				}
+			}
+		}()
 		buffer := make([]byte, 4096)
 		for {
 			n, err := os.Stdin.Read(buffer)

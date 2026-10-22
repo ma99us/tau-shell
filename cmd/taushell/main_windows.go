@@ -8,19 +8,60 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime/debug"
 	"sort"
 	"time"
 
+	"github.com/ma99us/tau-shell/internal/diagnostics"
 	"github.com/ma99us/tau-shell/internal/harness"
 	"github.com/ma99us/tau-shell/internal/session"
 	"github.com/ma99us/tau-shell/internal/terminal"
+	"golang.org/x/sys/windows"
 )
 
 func main() {
-	if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
-		fmt.Fprintln(os.Stderr, "taushell:", err)
-		os.Exit(1)
+	os.Exit(runMain())
+}
+
+func runMain() (exitCode int) {
+	closeLog, err := diagnostics.Init()
+	if err != nil {
+		message := fmt.Sprintf("TauShell could not create its diagnostic log at %s: %v", diagnostics.LogPath(), err)
+		if len(os.Args) == 1 {
+			title, titleErr := windows.UTF16PtrFromString("TauShell startup failed")
+			body, bodyErr := windows.UTF16PtrFromString(message)
+			if titleErr == nil && bodyErr == nil {
+				_, _ = windows.MessageBox(0, body, title, windows.MB_ICONERROR|windows.MB_OK)
+				return 1
+			}
+		}
+		fmt.Fprintln(os.Stderr, "taushell:", message)
+		return 1
 	}
+	defer func() {
+		if err := closeLog(); err != nil {
+			fmt.Fprintln(os.Stderr, "taushell: close diagnostic log:", err)
+		}
+	}()
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			diagnostics.Error("unhandled application panic", fmt.Errorf("%v", recovered), "stack", string(debug.Stack()))
+			exitCode = 2
+		}
+	}()
+
+	command := "desktop"
+	if len(os.Args) > 1 {
+		command = os.Args[1]
+	}
+	diagnostics.Info("application process started", "pid", os.Getpid(), "command", command)
+	if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
+		diagnostics.Error("application command failed", err, "command", command)
+		fmt.Fprintln(os.Stderr, "taushell:", err)
+		return 1
+	}
+	diagnostics.Info("application process completed", "command", command)
+	return 0
 }
 
 func run(args []string, stdout, stderr io.Writer) error {

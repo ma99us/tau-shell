@@ -37,7 +37,10 @@ capabilities are present.
 At startup, discover supported harness executables and versions. Missing
 harnesses do not block the desktop app; the UI offers a user-confirmed install
 through a known package source or an official vendor setup link. Verify
-installation by detecting the executable and version again.
+installation by detecting the executable and version again. Show the resolved
+executable path alongside its version so users can identify which installation
+won PATH resolution; do not silently prefer a newer or separately installed
+copy.
 
 ## Initial CLI options observed
 

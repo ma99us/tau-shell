@@ -65,6 +65,16 @@ start sessions automatically; use **Start** or **Restore**. Tabs may continue
 running in the background. Closing the app asks before interrupting live
 sessions.
 
+## Diagnostics
+
+Each TauShell process truncates and writes a structured JSON diagnostic log to
+`%TEMP%\TauShell\taushell.log` (the actual path is shown on Home). It records
+startup, session lifecycle, prerequisite detection, bridge errors, frontend
+runtime/rejection failures, and React render failures. Prompt text, terminal
+input/output, environment values, and credentials are excluded; credential-like
+strings in error text are redacted. The file is local to the current Windows
+user's temp directory and is replaced on the next launch.
+
 Build on Windows with Go 1.26 or newer and Node.js:
 
 ```powershell
@@ -73,7 +83,7 @@ npm ci
 npm run build
 Pop-Location
 go test ./...
-go build -tags production -o taushell.exe ./cmd/taushell
+go build -tags production -ldflags "-H=windowsgui" -o taushell.exe ./cmd/taushell
 ```
 
 Create one YAML file at `%USERPROFILE%\.tau_shell\sessions\<session-id>.yaml` for each session; see the [Phase 1 schema](docs/v2/18-yaml-schema.md). For example:

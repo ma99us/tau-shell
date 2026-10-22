@@ -47,3 +47,14 @@ untrusted pages out of the desktop surface.
 WebView local storage contains presentation metadata (open tab IDs and
 selection) and up to five recently created session working-directory paths.
 It must not contain credentials, environment values, or other secret data.
+
+## Diagnostic logging
+
+The per-run log is stored under the current user's system temp directory and
+is replaced at process startup. It may contain operational errors and frontend
+stack traces, plus coarse terminal protocol categories, pointer-event types,
+and effective mouse-tracking mode changes without pointer coordinates. It
+must not contain prompts, terminal input/output, launch argument values,
+credential values, or environment values. Keep bridge failure request payloads
+suppressed, bound frontend-supplied message/stack sizes, and redact
+credential-like strings before writing error text.
