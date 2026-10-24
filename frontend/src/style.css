@@ -1014,6 +1014,22 @@ h3 {
   margin: 4px 0 0;
 }
 
+.yaml-section {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
+.yaml-section .text-button {
+  justify-self: start;
+}
+
+.yaml-editor {
+  min-height: 150px;
+  white-space: pre;
+  overflow: auto;
+}
+
 .modal-actions {
   display: flex;
   flex-wrap: wrap;

@@ -134,9 +134,29 @@ func TestDetectTestedVersionWithCapabilities(t *testing.T) {
 		t.Fatalf("expected tested and usable, got %+v", status)
 	}
 	for _, capability := range status.Capabilities {
-		if !capability.Available {
+		if !capability.Available && !capability.Optional {
 			t.Fatalf("capability %s unavailable", capability.Option)
 		}
+	}
+}
+
+func TestDetectMissingOptionalCapabilityIsNotAWarning(t *testing.T) {
+	environment := fakeEnvironment(`C:\tools\claude.exe`, map[string]string{
+		"--version": "2.1.133 (Claude Code)\n",
+		"--help":    claudeHelp,
+	}, nil)
+	status := Detect(context.Background(), environment, mustSpec(t, ClaudeCode))
+	var model *CapabilityStatus
+	for index := range status.Capabilities {
+		if status.Capabilities[index].Option == "--model" {
+			model = &status.Capabilities[index]
+		}
+	}
+	if model == nil || !model.Optional || model.Available {
+		t.Fatalf("model capability = %+v", model)
+	}
+	if !status.Usable() || len(status.Warnings) != 0 {
+		t.Fatalf("optional capability affected status: %+v", status)
 	}
 }
 

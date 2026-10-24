@@ -414,7 +414,7 @@ function App() {
           </section>
         </main>
       </div>
-      {dialogOpen && <CreateSession recentFolders={recentFolders} onClose={() => setDialogOpen(false)} onCreated={(session) => {
+      {dialogOpen && <CreateSession recentFolders={recentFolders} tools={status?.tools ?? []} onClose={() => setDialogOpen(false)} onCreated={(session) => {
         setSessions((current) => [...current, session]);
         setRecentFolders((current) => [session.workingDir, ...current.filter((folder) => folder.toLowerCase() !== session.workingDir.toLowerCase())].slice(0, 5));
         setDialogOpen(false);
@@ -498,7 +498,7 @@ type ToolActions = {
 
 function toolUsable(tool: ToolStatus): boolean {
   return tool.installed && !tool.error && tool.support !== "below-minimum" &&
-    (tool.capabilities ?? []).every((capability) => capability.available);
+    (tool.capabilities ?? []).every((capability) => capability.available || capability.optional);
 }
 
 function toolNoticeBanner(tools: ToolActions) {
@@ -532,7 +532,7 @@ function ToolRow({ tool, actions }: { tool: ToolStatus; actions: ToolActions }) 
   const label = tool.installed ? tool.version || "Installed" : "Not found";
   const supportNote = tool.installed && tool.support === "below-minimum" ? `below minimum ${tool.minimum}` :
     tool.installed && tool.support === "untested" ? `untested (tested: ${tool.testedRange})` : "";
-  const unavailableCapabilities = (tool.capabilities ?? []).filter((capability) => !capability.available);
+  const unavailableCapabilities = (tool.capabilities ?? []).filter((capability) => !capability.available && !capability.optional);
   const installing = actions.installing === tool.id;
   const title = [tool.error, ...(tool.warnings ?? [])].filter(Boolean).join("\n");
   return <div className="tool-row" title={title || undefined}>
@@ -705,8 +705,32 @@ function parseLaunchArgs(text: string): string[] {
   return text.split(/\r?\n/).map((arg) => arg.trim()).filter(Boolean);
 }
 
-function CreateSession({ recentFolders, onClose, onCreated, onError }: {
+function modelFromArgs(text: string): string {
+  const args = parseLaunchArgs(text);
+  for (let index = 0; index < args.length; index++) {
+    if (args[index] === "--model") return args[index + 1] ?? "";
+    if (args[index].startsWith("--model=")) return args[index].slice("--model=".length);
+  }
+  return "";
+}
+
+// Keeps the launch-argument text as the single source of truth: the Model
+// field only rewrites the --model entry in it.
+function withModelArg(text: string, model: string): string {
+  const args = parseLaunchArgs(text);
+  const kept: string[] = [];
+  for (let index = 0; index < args.length; index++) {
+    if (args[index] === "--model") { index++; continue; }
+    if (args[index].startsWith("--model=")) continue;
+    kept.push(args[index]);
+  }
+  if (model.trim()) kept.push("--model", model.trim());
+  return kept.join("\n");
+}
+
+function CreateSession({ recentFolders, tools, onClose, onCreated, onError }: {
   recentFolders: string[];
+  tools: ToolStatus[];
   onClose: () => void;
   onCreated: (session: Session) => void;
   onError: (error: unknown) => void;
@@ -719,6 +743,12 @@ function CreateSession({ recentFolders, onClose, onCreated, onError }: {
   const [preview, setPreview] = useState<LaunchPreview | null>(null);
   const [previewError, setPreviewError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [yamlOpen, setYamlOpen] = useState(false);
+  const [yamlText, setYamlText] = useState("");
+  const [yamlDirty, setYamlDirty] = useState(false);
+  const [yamlError, setYamlError] = useState("");
+  const modelSupported = (tools.find((candidate) => candidate.id === tool)?.capabilities ?? [])
+    .some((capability) => capability.option === "--model" && capability.available);
   const chooseDirectory = async () => {
     try { const path = await app().SelectWorkingDirectory(); if (path) setWorkingDir(path); } catch (err) { onError(err); }
   };
@@ -756,11 +786,30 @@ function CreateSession({ recentFolders, onClose, onCreated, onError }: {
     }, 300);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [tool, launchArgs]);
+  // The YAML view follows the form until the user edits it by hand; after
+  // that their text is kept until they choose "Reset from form".
+  useEffect(() => {
+    if (!yamlOpen || yamlDirty) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      (async () => {
+        try {
+          const text = await app().PreviewSessionYAML(name, tool, workingDir, parseLaunchArgs(launchArgs));
+          if (!cancelled) { setYamlText(text); setYamlError(""); }
+        } catch (err) {
+          if (!cancelled) setYamlError(err instanceof Error ? err.message : String(err));
+        }
+      })();
+    }, 300);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [yamlOpen, yamlDirty, name, tool, workingDir, launchArgs]);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setSaving(true);
     try {
-      const session = await app().CreateSession(name, tool, workingDir, parseLaunchArgs(launchArgs));
+      const session = yamlOpen
+        ? await app().CreateSessionFromYAML(yamlText)
+        : await app().CreateSession(name, tool, workingDir, parseLaunchArgs(launchArgs));
       onCreated(session);
     } catch (err) { onError(err); } finally { setSaving(false); }
   };
@@ -770,12 +819,21 @@ function CreateSession({ recentFolders, onClose, onCreated, onError }: {
       <label>Session name <span className="optional">(optional; defaults to the project or folder name)</span><input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. API refactor" /></label>
       <label>AI harness<select value={tool} onChange={(event) => setTool(event.target.value as Session["tool"])}><option value="claude-code">Claude Code</option><option value="copilot-cli">GitHub Copilot CLI</option></select></label>
       <label>Project folder<div className="folder-row"><input required list="recent-project-folders" value={workingDir} onChange={(event) => setWorkingDir(event.target.value)} placeholder="Choose a local project folder" /><datalist id="recent-project-folders">{recentFolders.map((folder) => <option key={folder} value={folder} />)}</datalist><button type="button" className="secondary-button" onClick={() => void chooseDirectory()}>Browse</button></div></label>
+      {modelSupported && <label>Model <span className="optional">(optional; passed as --model, name or alias as the harness defines it)</span><input value={modelFromArgs(launchArgs)} onChange={(event) => setLaunchArgs(withModelArg(launchArgs, event.target.value))} placeholder="e.g. sonnet" /></label>}
       <label>Launch arguments <span className="optional">(editable template, one per line)</span><textarea rows={3} value={launchArgs} onChange={(event) => setLaunchArgs(event.target.value)} placeholder="--model&#10;sonnet" /></label>
       <div className="launch-preview">
         {previewError ? <p className="tool-warning">{previewError}</p> : preview && <>
           <p className="muted">Will run:</p>
           <code className="launch-command">{[preview.executable, ...preview.arguments].join(" ")}</code>
           {preview.warnings.map((warning) => <p key={warning} className="tool-warning">{warning}</p>)}
+        </>}
+      </div>
+      <div className="yaml-section">
+        <button type="button" className="text-button" aria-expanded={yamlOpen} onClick={() => setYamlOpen((open) => !open)}>{yamlOpen ? "Hide session YAML" : "Edit session YAML"}</button>
+        {yamlOpen && <>
+          <textarea className="yaml-editor" rows={9} spellCheck={false} aria-label="Session YAML" value={yamlText} onChange={(event) => { setYamlText(event.target.value); setYamlDirty(true); }} />
+          {yamlError && <p className="tool-warning">{yamlError}</p>}
+          <p className="form-note">{yamlDirty ? "Edited by hand: the form fields above no longer change this text. " : "Follows the form until you edit it. "}The definition is validated and saved in normal form.{yamlDirty && <> <button type="button" className="text-button" onClick={() => setYamlDirty(false)}>Reset from form</button></>}</p>
         </>}
       </div>
       <p className="form-note">A YAML session definition is saved locally and the session starts immediately.</p>

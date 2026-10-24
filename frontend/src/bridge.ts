@@ -28,7 +28,7 @@ export type ToolStatus = {
   minimum?: string;
   testedRange: string;
   support: "tested" | "untested" | "below-minimum" | "unknown";
-  capabilities: { name: string; option: string; available: boolean }[] | null;
+  capabilities: { name: string; option: string; optional?: boolean; available: boolean }[] | null;
   warnings: string[] | null;
   error?: string;
   install: { wingetId?: string; source?: string; vendorUrl: string };
@@ -71,6 +71,8 @@ type WailsApp = {
   GetSessionTemplate(tool: string): Promise<SessionTemplate>;
   PreviewSessionLaunch(tool: string, launchArgs: string[]): Promise<LaunchPreview>;
   CreateSession(name: string, tool: string, workingDir: string, launchArgs: string[]): Promise<Session>;
+  PreviewSessionYAML(name: string, tool: string, workingDir: string, launchArgs: string[]): Promise<string>;
+  CreateSessionFromYAML(text: string): Promise<Session>;
   StartSession(id: string, columns: number, rows: number): Promise<Session>;
   RestoreSession(id: string, columns: number, rows: number): Promise<Session>;
   StartFresh(id: string, columns: number, rows: number): Promise<Session>;

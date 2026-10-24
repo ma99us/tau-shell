@@ -438,6 +438,15 @@ Known gaps and risks:
   ConPTY, so the residue is inbox console-host behavior; see
   [`02-conpty-integration.md`](02-conpty-integration.md#bundled-conpty).
 
+## Model field
+
+The Create dialog shows an optional Model field only when the selected
+harness's `--help` lists `--model` (an optional capability: it never makes a
+tool unusable or adds a warning). The field rewrites the `--model <value>`
+pair inside the editable launch arguments, so the YAML `launch_args` and the
+"Will run" preview stay the single source of truth. No model list is shipped.
+Verified in the real window with Claude Code (preview showed `--model sonnet`).
+
 ## Recommended next actions
 
 1. Done: the bundled-ConPTY spike passed and was adopted. `conpty.StartPreferred`
@@ -446,16 +455,22 @@ Known gaps and risks:
    opt-in comparison with `TAUSHELL_CONPTY_SPIKE_DLL=<abs path to conpty.dll>
    go test -v -run TestConPTYBackendSpike ./internal/conpty`.
 2. Done: real Claude Code and Copilot CLI walkthroughs (see Known gaps).
-   Remaining manual checks: Claude Code restore after a completed login, and
-   Copilot restore of a session with at least one real turn hosted in the app.
+   Remaining manual checks: Copilot restore of a session with at least one
+   real turn hosted in the app. **Postponed by the owner (2026-10-24):** Claude
+   Code restore after a completed login, and the unverified Claude Code title
+   cue (braille spinner = working, U+2733 = idle) used by the state icons. Do
+   these when the owner logs in to Claude Code; they do not block later work.
    Test sessions `kbd-test-1` and `copilot-smoke-1` were removed from the dev
    profile with the new delete feature.
 3. Done: Step 3 tool metadata/version ranges, capability probes, and
    confirmed winget installs are implemented (`internal/tools`,
    `cmd/taushell/tools_windows.go`, Home/Setup frontend). Done: Step 4
    session templates with argv preview (`Adapter.DefaultLaunchArgs()`,
-   `GetSessionTemplate`/`PreviewSessionLaunch`); editable full-YAML preview
-   remains outstanding. A newly created session is now selected and started automatically. Does not depend on
+   `GetSessionTemplate`/`PreviewSessionLaunch`); done: the Create dialog's
+   "Edit session YAML" section (`PreviewSessionYAML`/`CreateSessionFromYAML`,
+   strict `session.ParseConfig`) follows the form until hand-edited, then is
+   validated and saved; the empty `powershell:` block is no longer written.
+   A newly created session is now selected and started automatically. Does not depend on
    the terminal path.
    A clean-Windows-10/missing-WebView2 test will not be performed (user
    decision); registry-detection unit tests are the coverage.

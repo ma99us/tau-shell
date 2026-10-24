@@ -51,4 +51,6 @@ copy.
 
 The locally installed Claude Code 2.1.263 and Copilot CLI 1.0.96-2 help output documents these options. This is CLI-contract discovery only; successful conversation restoration still requires a controlled integration test. Avoid `--continue` for managed restore because it selects the most recent session rather than TauShell's recorded session.
 
+To add another harness, follow [`23-adding-a-harness.md`](23-adding-a-harness.md).
+
 Future adapters may add supported actions and state hints, but tool-specific behavior must remain out of the core session manager.

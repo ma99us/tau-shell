@@ -304,19 +304,12 @@ func probeUnsupportedLaunchArgs(executablePath string, spec tools.Spec, launchAr
 	return warnings
 }
 
-func (application *App) CreateSession(name, toolName, workingDir string, launchArgs []string) (snapshot sessionhost.Snapshot, err error) {
-	defer func() {
-		if err != nil {
-			diagnostics.Error("create session failed", err, "tool", toolName)
-			return
-		}
-		diagnostics.Info("session created", "session_id", snapshot.ID, "tool", snapshot.Tool)
-	}()
+func (application *App) newConfig(name, toolName, workingDir string, launchArgs []string) (session.Config, error) {
 	name = strings.TrimSpace(name)
 	deduced := name == ""
 	if deduced {
 		if strings.TrimSpace(workingDir) == "" {
-			return sessionhost.Snapshot{}, errors.New("project folder must not be empty")
+			return session.Config{}, errors.New("project folder must not be empty")
 		}
 		name = deduceSessionName(workingDir)
 	}
@@ -329,7 +322,7 @@ func (application *App) CreateSession(name, toolName, workingDir string, launchA
 	}
 	id := makeID(name)
 	if id == "" {
-		return sessionhost.Snapshot{}, errors.New("session name must include at least one letter or number")
+		return session.Config{}, errors.New("session name must include at least one letter or number")
 	}
 	if deduced {
 		// A deduced name must not collide with an existing session.
@@ -342,13 +335,52 @@ func (application *App) CreateSession(name, toolName, workingDir string, launchA
 			id = makeID(name)
 		}
 	}
-	config := session.Config{
+	return session.Config{
 		ID:         id,
 		Name:       name,
 		Tool:       session.Harness(toolName),
 		WorkingDir: workingDir,
 		LaunchArgs: append([]string(nil), launchArgs...),
+	}, nil
+}
+
+// PreviewSessionYAML renders the session definition the Create dialog would
+// save, so it can be reviewed and edited before creation. It does not
+// validate: the text is validated when saved.
+func (application *App) PreviewSessionYAML(name, toolName, workingDir string, launchArgs []string) (text string, err error) {
+	defer func() {
+		if err != nil {
+			diagnostics.Error("preview session yaml failed", err, "tool", toolName)
+		}
+	}()
+	if strings.TrimSpace(name) == "" && strings.TrimSpace(workingDir) == "" {
+		name = "new-session"
 	}
+	config, err := application.newConfig(name, toolName, workingDir, launchArgs)
+	if err != nil {
+		return "", err
+	}
+	return session.MarshalConfig(config)
+}
+
+// CreateSessionFromYAML saves a session from user-edited YAML after strict
+// validation. It fails rather than overwrite an existing session.
+func (application *App) CreateSessionFromYAML(text string) (snapshot sessionhost.Snapshot, err error) {
+	defer func() {
+		if err != nil {
+			diagnostics.Error("create session from yaml failed", err)
+			return
+		}
+		diagnostics.Info("session created from yaml", "session_id", snapshot.ID, "tool", snapshot.Tool)
+	}()
+	config, err := session.ParseConfig(text)
+	if err != nil {
+		return sessionhost.Snapshot{}, err
+	}
+	return application.saveNewConfig(config)
+}
+
+func (application *App) saveNewConfig(config session.Config) (sessionhost.Snapshot, error) {
 	if _, err := session.SaveConfig(application.configDirectory, config); err != nil {
 		return sessionhost.Snapshot{}, err
 	}
@@ -359,6 +391,21 @@ func (application *App) CreateSession(name, toolName, workingDir string, launchA
 		WorkingDir: config.WorkingDir,
 		Status:     session.StatusNeverStarted,
 	}, nil
+}
+
+func (application *App) CreateSession(name, toolName, workingDir string, launchArgs []string) (snapshot sessionhost.Snapshot, err error) {
+	defer func() {
+		if err != nil {
+			diagnostics.Error("create session failed", err, "tool", toolName)
+			return
+		}
+		diagnostics.Info("session created", "session_id", snapshot.ID, "tool", snapshot.Tool)
+	}()
+	config, err := application.newConfig(name, toolName, workingDir, launchArgs)
+	if err != nil {
+		return sessionhost.Snapshot{}, err
+	}
+	return application.saveNewConfig(config)
 }
 
 func (application *App) StartSession(id string, columns, rows int) (snapshot sessionhost.Snapshot, err error) {

@@ -144,6 +144,46 @@ func TestCreateSessionDeducesUniqueNameFromProject(t *testing.T) {
 	}
 }
 
+func TestSessionYAMLPreviewAndCreateFromEditedYAML(t *testing.T) {
+	application := &App{configDirectory: filepath.Join(t.TempDir(), "sessions")}
+	project := t.TempDir()
+
+	text, err := application.PreviewSessionYAML("API refactor", string(session.ClaudeCode), project, []string{"--model", "sonnet"})
+	if err != nil {
+		t.Fatalf("preview: %v", err)
+	}
+	for _, want := range []string{"id: api-refactor", "name: API refactor", "tool: claude-code", "- --model", "- sonnet"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("preview missing %q:\n%s", want, text)
+		}
+	}
+	if _, err := application.PreviewSessionYAML("", string(session.ClaudeCode), "", nil); err != nil {
+		t.Fatalf("blank preview should use a placeholder name: %v", err)
+	}
+
+	edited := strings.Replace(text, "name: API refactor", "name: Edited name", 1)
+	snapshot, err := application.CreateSessionFromYAML(edited)
+	if err != nil {
+		t.Fatalf("create from yaml: %v", err)
+	}
+	if snapshot.ID != "api-refactor" || snapshot.Name != "Edited name" || snapshot.Status != session.StatusNeverStarted {
+		t.Fatalf("snapshot = %+v", snapshot)
+	}
+	if _, err := application.CreateSessionFromYAML(edited); err == nil {
+		t.Fatal("duplicate id from YAML succeeded")
+	}
+	for name, bad := range map[string]string{
+		"unknown field": strings.Replace(text, "tool:", "bogus: 1\ntool:", 1),
+		"reserved arg":  strings.Replace(text, "- sonnet", "- sonnet\n    - --resume", 1),
+		"bad tool":      strings.Replace(text, "claude-code", "nope", 1),
+		"two documents": text + "---\n" + text,
+	} {
+		if _, err := application.CreateSessionFromYAML(bad); err == nil {
+			t.Fatalf("%s: create from invalid YAML succeeded", name)
+		}
+	}
+}
+
 func TestCreateSessionRejectsInvalidConfig(t *testing.T) {
 	application := &App{
 		configDirectory: filepath.Join(t.TempDir(), "sessions"),

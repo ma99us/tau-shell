@@ -33,7 +33,7 @@ type Config struct {
 	Environment map[string]string `yaml:"environment,omitempty"`
 	PowerShell  struct {
 		UTF8 *bool `yaml:"utf8"`
-	} `yaml:"powershell"`
+	} `yaml:"powershell,omitempty"`
 }
 
 func (config Config) UTF8Enabled() bool {
@@ -47,21 +47,44 @@ func LoadConfig(path string) (Config, error) {
 	}
 	defer file.Close()
 
+	config, err := parseConfig(file, fmt.Sprintf("%q", path))
+	if err != nil {
+		return Config{}, err
+	}
+	return config, nil
+}
+
+// ParseConfig strictly decodes and validates one session YAML document, such
+// as text edited in the Create dialog.
+func ParseConfig(text string) (Config, error) {
+	return parseConfig(strings.NewReader(text), "text")
+}
+
+// MarshalConfig renders config in the same form SaveConfig writes.
+func MarshalConfig(config Config) (string, error) {
+	data, err := yaml.Marshal(config)
+	if err != nil {
+		return "", fmt.Errorf("encode session config: %w", err)
+	}
+	return string(data), nil
+}
+
+func parseConfig(reader io.Reader, source string) (Config, error) {
 	var config Config
-	decoder := yaml.NewDecoder(file)
+	decoder := yaml.NewDecoder(reader)
 	decoder.KnownFields(true)
 	if err := decoder.Decode(&config); err != nil {
-		return Config{}, fmt.Errorf("decode session config %q: %w", path, err)
+		return Config{}, fmt.Errorf("decode session config %s: %w", source, err)
 	}
 	var trailing any
 	if err := decoder.Decode(&trailing); err != io.EOF {
 		if err != nil {
-			return Config{}, fmt.Errorf("decode trailing session YAML in %q: %w", path, err)
+			return Config{}, fmt.Errorf("decode trailing session YAML in %s: %w", source, err)
 		}
-		return Config{}, fmt.Errorf("session config %q must contain one YAML document", path)
+		return Config{}, fmt.Errorf("session config %s must contain one YAML document", source)
 	}
 	if err := config.Validate(); err != nil {
-		return Config{}, fmt.Errorf("validate session config %q: %w", path, err)
+		return Config{}, fmt.Errorf("validate session config %s: %w", source, err)
 	}
 	return config, nil
 }

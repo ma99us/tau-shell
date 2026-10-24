@@ -28,6 +28,9 @@ const (
 type Capability struct {
 	Name   string `json:"name"`
 	Option string `json:"option"`
+	// Optional capabilities only gate a UI feature; a tool without them is
+	// still usable.
+	Optional bool `json:"optional,omitempty"`
 }
 
 // InstallSource identifies a maintained winget package and the vendor's
@@ -88,6 +91,7 @@ var specs = []Spec{
 		Capabilities: []Capability{
 			{Name: "Start with a TauShell session ID", Option: "--session-id"},
 			{Name: "Resume a conversation", Option: "--resume"},
+			{Name: "Select a model", Option: "--model", Optional: true},
 		},
 		Install: InstallSource{
 			WingetID:  "Anthropic.ClaudeCode",
@@ -106,6 +110,7 @@ var specs = []Spec{
 		Capabilities: []Capability{
 			{Name: "Start with a TauShell session ID", Option: "--session-id"},
 			{Name: "Resume a conversation", Option: "--resume"},
+			{Name: "Select a model", Option: "--model", Optional: true},
 		},
 		Install: InstallSource{
 			WingetID:  "GitHub.Copilot",
@@ -230,7 +235,7 @@ func (status Status) Usable() bool {
 		return false
 	}
 	for _, capability := range status.Capabilities {
-		if !capability.Available {
+		if !capability.Available && !capability.Optional {
 			return false
 		}
 	}
@@ -315,7 +320,7 @@ func Detect(ctx context.Context, environment Environment, spec Spec) Status {
 	for index := range status.Capabilities {
 		capability := &status.Capabilities[index]
 		capability.Available = HasOption(string(help), capability.Option)
-		if !capability.Available {
+		if !capability.Available && !capability.Optional {
 			status.Warnings = append(status.Warnings, fmt.Sprintf("Required option %s (%s) was not found in %s help output.", capability.Option, capability.Name, spec.Name))
 		}
 	}
