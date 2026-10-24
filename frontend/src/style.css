@@ -230,11 +230,124 @@ textarea:focus-visible,
   box-shadow: 0 0 8px #e0b24d55;
 }
 
+.state-icon {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  vertical-align: middle;
+  background: #717986;
+}
+
+.state-icon.working {
+  background: transparent;
+  border: 2px solid #3d4a44;
+  border-top-color: #63d69a;
+  box-sizing: border-box;
+  animation: state-spin 0.9s linear infinite;
+}
+
+.state-icon.quiet {
+  background: #63d69a;
+}
+
+.state-icon.failed {
+  background: #e06c75;
+}
+
+.state-icon.unseen {
+  background: #f0c75e;
+  animation: state-glow 1.4s ease-in-out infinite;
+}
+
+.session-row .state-icon {
+  margin-right: 0;
+}
+
+@keyframes state-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes state-glow {
+  0%, 100% { box-shadow: 0 0 2px #f0c75e88; }
+  50% { box-shadow: 0 0 10px 3px #f0c75ecc; }
+}
+
 .sidebar-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-top: auto;
   padding: 10px 7px 3px;
   color: #737c89;
   font-size: 11px;
+}
+
+.sidebar-toggle {
+  min-width: 30px;
+  height: 24px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #9ba4b2;
+  font-family: Consolas, monospace;
+  font-size: 12px;
+}
+
+.sidebar-toggle:hover {
+  border-color: #373d47;
+  background: #20242c;
+  color: #f4f6fa;
+}
+
+.sidebar.collapsed {
+  width: 58px;
+  min-width: 58px;
+  flex-basis: 58px;
+  align-items: center;
+  padding: 12px 6px;
+}
+
+.sidebar.collapsed .sidebar-title,
+.sidebar.collapsed .session-row-text,
+.sidebar.collapsed .sidebar-foot-text,
+.sidebar.collapsed .delete-button {
+  display: none;
+}
+
+.sidebar.collapsed .sidebar-heading {
+  justify-content: center;
+  padding: 0 0 9px;
+}
+
+.sidebar.collapsed .nav-row {
+  width: 40px;
+  overflow: hidden;
+  font-size: 0;
+  text-align: center;
+}
+
+.sidebar.collapsed .nav-row::before {
+  content: "H";
+  font-size: 13px;
+}
+
+.sidebar.collapsed .session-item {
+  width: 40px;
+  justify-content: center;
+}
+
+.sidebar.collapsed .session-row {
+  justify-content: center;
+  padding: 9px;
+}
+
+.sidebar.collapsed .sidebar-foot {
+  justify-content: center;
+  padding-right: 0;
+  padding-left: 0;
 }
 
 .main {

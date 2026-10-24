@@ -5,10 +5,10 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { app, InstallResult, LaunchPreview, Session, SessionEvent, SystemStatus, ToolStatus } from "./bridge";
 import "./style.css";
+import { readHarnessSignal } from "./attention";
 
 type Tab = { id: string; name: string };
 const savedTabsKey = "taushell.tabs.v1";
-const savedSelectionKey = "taushell.selected-tab.v1";
 const recentFoldersKey = "taushell.recent-folders.v1";
 
 function errorDetails(error: unknown): { message: string; stack: string } {
@@ -90,7 +90,52 @@ function App() {
   const [tabs, setTabs] = useState<Tab[]>(readTabs);
   const [recentFolders, setRecentFolders] = useState<string[]>(readRecentFolders);
   const [backgroundTerminalIds, setBackgroundTerminalIds] = useState<string[]>([]);
-  const [selected, setSelected] = useState(localStorage.getItem(savedSelectionKey) ?? "");
+  const [selected, setSelected] = useState("");
+  const [activity, setActivity] = useState<Record<string, Activity>>({});
+  const selectedRef = useRef("");
+  selectedRef.current = selected;
+  const outputAt = useRef(new Map<string, number>());
+  const sessionsRef = useRef<Session[]>([]);
+  sessionsRef.current = sessions;
+  useEffect(() => {
+    // Prefers the harness's own cue (title / status row); falls back to output timing.
+    const tick = () => {
+      const now = Date.now();
+      const watching = document.hasFocus();
+      setActivity((previous) => {
+        let changed = false;
+        const next = { ...previous };
+        sessionsRef.current.forEach((session) => {
+          if (!session.runningHere) return;
+          const id = session.id;
+          const at = outputAt.current.get(id);
+          const signal = readHarnessSignal(session.tool, terminalInstances.get(id), terminalTitles.get(id) ?? "");
+          if (signal === undefined && at === undefined) return;
+          const old = previous[id] ?? { working: false, unseen: false };
+          const working = signal ? signal === "working" : now - at! < workingWindowMs;
+          const seen = selectedRef.current === id && watching;
+          let unseen = old.unseen;
+          if (old.working && !working && !seen) unseen = true;
+          if (seen) unseen = false;
+          if (working !== old.working || unseen !== old.unseen) {
+            next[id] = { working, unseen };
+            changed = true;
+          }
+        });
+        return changed ? next : previous;
+      });
+    };
+    const timer = window.setInterval(tick, 500);
+    window.addEventListener("focus", tick);
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", tick); };
+  }, []);
+  useEffect(() => {
+    setActivity((previous) => selected && previous[selected]?.unseen ? { ...previous, [selected]: { ...previous[selected], unseen: false } } : previous);
+  }, [selected]);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("taushell.sidebar-collapsed.v1") === "1");
+  useEffect(() => {
+    localStorage.setItem("taushell.sidebar-collapsed.v1", sidebarCollapsed ? "1" : "0");
+  }, [sidebarCollapsed]);
   const [tabScroll, setTabScroll] = useState({ left: false, right: false });
   const tabListRef = useRef<HTMLDivElement>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -131,10 +176,14 @@ function App() {
       if (event.kind === "state" && event.session) {
         setSessions((current) => current.map((session) => session.id === event.sessionId ? event.session! : session));
         if (!event.session.runningHere) {
+          outputAt.current.delete(event.sessionId);
+          terminalTitles.delete(event.sessionId);
+          setActivity((current) => { const { [event.sessionId]: _removed, ...rest } = current; return rest; });
           setBackgroundTerminalIds((current) => current.filter((id) => id !== event.sessionId));
         }
         terminalInstances.get(event.sessionId)?.writeln(`\r\n[session ${event.session.status}${event.session.lastError ? `: ${event.session.lastError}` : ""}]\r\n`);
       } else if (event.kind === "output" && event.dataBase64) {
+        if (Date.now() - (lastInputAt.get(event.sessionId) ?? 0) > echoWindowMs) outputAt.current.set(event.sessionId, Date.now());
         const encoded = atob(event.dataBase64);
         const bytes = new Uint8Array(encoded.length);
         for (let index = 0; index < encoded.length; index++) bytes[index] = encoded.charCodeAt(index);
@@ -146,8 +195,7 @@ function App() {
 
   useEffect(() => {
     localStorage.setItem(savedTabsKey, JSON.stringify(tabs));
-    localStorage.setItem(savedSelectionKey, selected);
-  }, [tabs, selected]);
+  }, [tabs]);
 
   useEffect(() => {
     localStorage.setItem(recentFoldersKey, JSON.stringify(recentFolders));
@@ -299,19 +347,19 @@ function App() {
         <button className="icon-button" title="Refresh sessions and re-detect tools" onClick={() => void refresh(true)}>R</button>
       </header>
       <div className="workspace">
-        <aside className="sidebar">
-          <div className="sidebar-heading">SESSIONS <button className="add-button" onClick={() => setDialogOpen(true)}>+</button></div>
-          <button className={`nav-row ${selected ? "" : "active"}`} onClick={() => setSelected("")}>Home</button>
+        <aside className={`sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
+          <div className="sidebar-heading"><span className="sidebar-title">SESSIONS</span> <button className="add-button" title="Create session" onClick={() => setDialogOpen(true)}>+</button></div>
+          <button className={`nav-row ${selected ? "" : "active"}`} title="Home" onClick={() => setSelected("")}>Home</button>
           {sessions.map((session) => (
             <div className={`session-item ${selected === session.id ? "active" : ""}`} key={session.id}>
-              <button className={`session-row ${selected === session.id ? "active" : ""}`} onClick={() => openTab(session)}>
-                <span className={`status-dot ${session.runningHere ? "online" : ""}`} />
+              <button className={`session-row ${selected === session.id ? "active" : ""}`} title={session.name} onClick={() => openTab(session)}>
+                <StateIcon session={session} activity={activity[session.id]} />
                 <span className="session-row-text"><strong>{session.name}</strong><small>{session.tool === "claude-code" ? "Claude Code" : "GitHub Copilot CLI"}</small></span>
               </button>
               <button className="delete-button" aria-label={`Delete ${session.name}`} title="Delete session" onClick={() => setDeleteRequest(session)}>x</button>
             </div>
           ))}
-          <div className="sidebar-foot">Local machine only</div>
+          <div className="sidebar-foot"><span className="sidebar-foot-text">Local machine only</span><button className="sidebar-toggle" aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setSidebarCollapsed((value) => !value)}>{sidebarCollapsed ? ">>" : "<<"}</button></div>
         </aside>
         <main className="main">
           <div className="tab-strip">
@@ -340,7 +388,7 @@ function App() {
                     tabIndex={selected === tab.id ? 0 : -1}
                     onKeyDown={handleTabKeyDown}
                     onClick={() => setSelected(tab.id)}
-                  >{tab.name}</button>
+                  >{sessions.find((current) => current.id === tab.id) && <StateIcon session={sessions.find((current) => current.id === tab.id)!} activity={activity[tab.id]} />}{tab.name}</button>
                   <button className="tab-close" aria-label={`Close ${tab.name}`} onClick={() => closeTab(tab.id)}>x</button>
                 </div>
               ))}
@@ -420,7 +468,7 @@ function Home({ sessions, status, busy, tools, onNew, onLaunch, onDelete }: {
           {session.lastError && <p className="card-error">{session.lastError}</p>}
           <div className="card-actions">
             {session.runningHere ? <button className="primary-button" onClick={() => onLaunch(session, "start")}>Open terminal</button> :
-              session.hasResumeId ? <><button className="primary-button" disabled={busy || !!session.resumeNote} title={session.resumeNote} onClick={() => onLaunch(session, "restore")}>Restore</button><button className="text-button" disabled={busy} onClick={() => setFreshSession(session)}>Start fresh</button></> :
+              session.hasResumeId ? <>{!session.resumeNote && <button className="primary-button" disabled={busy} onClick={() => onLaunch(session, "restore")}>Restore</button>}<button className="text-button" disabled={busy} title={session.resumeNote} onClick={() => setFreshSession(session)}>Start fresh</button></> :
                 <button className="primary-button" disabled={busy} onClick={() => onLaunch(session, "start")}>Start</button>}
           </div>
         </article>)}</div>}
@@ -501,6 +549,28 @@ function ToolRow({ tool, actions }: { tool: ToolStatus; actions: ToolActions }) 
 }
 
 const terminalInstances = new Map<string, Terminal>();
+const lastInputAt = new Map<string, number>();
+const terminalTitles = new Map<string, string>();
+// Output within this window after a keystroke is treated as echo, not harness work.
+const echoWindowMs = 400;
+// Output newer than this means the session is "working"; older means "quiet".
+const workingWindowMs = 2500;
+
+type ActivityKind = "working" | "quiet" | "stopped" | "failed";
+type Activity = { working: boolean; unseen: boolean };
+
+function stateIconKind(session: Session, activity?: Activity): { kind: ActivityKind; unseen: boolean } {
+  if (!session.runningHere) return { kind: session.status === "failed" ? "failed" : "stopped", unseen: false };
+  return { kind: activity?.working ? "working" : "quiet", unseen: !!activity?.unseen };
+}
+
+const stateLabels: Record<ActivityKind, string> = { working: "Working (output active)", quiet: "Quiet (output stopped)", stopped: "Not running", failed: "Failed" };
+
+function StateIcon({ session, activity }: { session: Session; activity?: Activity }) {
+  const { kind, unseen } = stateIconKind(session, activity);
+  const label = unseen ? "Quiet since you last looked (may need input)" : stateLabels[kind];
+  return <span className={`state-icon ${kind} ${unseen ? "unseen" : ""}`} title={label} aria-label={label} role="img" />;
+}
 const fitInstances = new Map<string, FitAddon>();
 const terminalReadyWaiters = new Map<string, Set<(terminal: Terminal) => void>>();
 
@@ -571,7 +641,8 @@ function TerminalPane({ session, visible, busy, onLaunch, onError }: {
       terminal.loadAddon(fit);
       terminal.open(container.current);
       terminalInstances.set(session.id, terminal);
-      terminal.onData((data) => { void app().WriteTerminal(session.id, data).catch((err) => onError(err)); });
+      terminal.onTitleChange((title) => terminalTitles.set(session.id, title));
+      terminal.onData((data) => { lastInputAt.set(session.id, Date.now()); void app().WriteTerminal(session.id, data).catch((err) => onError(err)); });
       terminal.onBinary((data) => { void app().WriteTerminalBinary(session.id, btoa(data)).catch((err) => onError(err)); });
     } else {
       terminal.loadAddon(fit);
@@ -619,9 +690,15 @@ function TerminalPane({ session, visible, busy, onLaunch, onError }: {
         reportFrontendFailure("ui.terminal-layout", error);
       }
     });
+    if (!session.runningHere) return;
+    // Delayed so it wins over a closing dialog or the clicked Start button restoring focus.
+    const timer = window.setTimeout(() => {
+      if (!document.querySelector(".modal, [role='dialog']")) terminal.focus();
+    }, 120);
+    return () => window.clearTimeout(timer);
   }, [visible, session?.id, session?.runningHere]);
   if (!session) return <div className="terminal-missing">Session configuration is unavailable.</div>;
-  return <div className="terminal-view"><div className="terminal-toolbar"><span className={`status-dot ${session.runningHere ? "online" : ""}`} />{session.id} | {session.tool} | {session.workingDir}<span className="terminal-status">{session.runningHere ? "Connected" : session.status || "Not started"}</span>{!session.runningHere && (session.hasResumeId && session.resumeNote ? <><button className="primary-button terminal-action" disabled title={session.resumeNote}>Restore</button><button className="text-button terminal-action" disabled={busy} title={session.resumeNote} onClick={() => onLaunch(session, "fresh")}>Start fresh</button></> : <button className="primary-button terminal-action" disabled={busy} onClick={() => onLaunch(session, session.hasResumeId ? "restore" : "start")}>{session.hasResumeId ? "Restore" : "Start"}</button>)}</div><div className="terminal-container" ref={container} /></div>;
+  return <div className="terminal-view"><div className="terminal-toolbar"><span className={`status-dot ${session.runningHere ? "online" : ""}`} />{session.id} | {session.tool} | {session.workingDir}<span className="terminal-status">{session.runningHere ? "Connected" : session.status || "Not started"}</span>{!session.runningHere && (session.hasResumeId && session.resumeNote ? <button className="text-button terminal-action" disabled={busy} title={session.resumeNote} onClick={() => onLaunch(session, "fresh")}>Start fresh</button> : <button className="primary-button terminal-action" disabled={busy} onClick={() => onLaunch(session, session.hasResumeId ? "restore" : "start")}>{session.hasResumeId ? "Restore" : "Start"}</button>)}</div><div className="terminal-container" ref={container} /></div>;
 }
 
 function parseLaunchArgs(text: string): string[] {

@@ -462,6 +462,32 @@ func TestManagerRestoreFailurePreservesResumeID(t *testing.T) {
 	}
 }
 
+func TestManagerStartFreshReplacesResumeID(t *testing.T) {
+	manager, _, _ := newLifecycleTestManager(t, "fresh")
+	ctx := context.Background()
+	original, err := manager.store.BeginFresh(ctx, "fresh", session.ClaudeCode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.store.Finish(ctx, "fresh", session.StatusStopped, ""); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := manager.StartFresh(ctx, "fresh", 80, 24)
+	if err != nil {
+		t.Fatalf("start fresh over an existing resume ID: %v", err)
+	}
+	if !snapshot.RunningHere {
+		t.Fatalf("fresh start is not running: %+v", snapshot)
+	}
+	runtime, err := manager.store.Runtime(ctx, "fresh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.HarnessSessionID == "" || runtime.HarnessSessionID == original.HarnessSessionID {
+		t.Errorf("fresh start resume ID = %q, want a new ID (was %q)", runtime.HarnessSessionID, original.HarnessSessionID)
+	}
+}
+
 func TestManagerDeleteRemovesConfigAndRuntime(t *testing.T) {
 	manager, _, _ := newLifecycleTestManager(t, "gone", "kept")
 	ctx := context.Background()

@@ -42,6 +42,18 @@ interaction decisions and feasibility gate are in
   confirmation warning): `DeleteSession` removes the YAML and the runtime row,
   refuses running/starting sessions, and never touches the harness's own data
   or the working directory.
+  Sidebar rows and tabs show a state icon (`StateIcon` in `main.tsx`): spinner
+  = output in the last 2.5 s ("working"), solid green = output stopped
+  ("quiet"), grey = not running, red = failed. A quiet session that was not
+  selected+focused glows amber ("unseen") until selected or typed in. Signals
+  are harness-specific (`frontend/src/attention.ts`), never whole-screen
+  comparison: Copilot CLI = its "Working ... esc" status row / "? help" footer
+  (last two rows only; verified live); Claude Code = terminal title (braille
+  spinner = working, U+2733 = idle; from memory, UNVERIFIED, needs a logged-in
+  run). With no cue (other screens such as permission prompts, unknown tool)
+  it falls back to output timing (output within 400 ms of a keystroke is
+  ignored as echo). "Quiet" is not proof the harness awaits input. Copilot
+  sends only topic titles, no BEL/OSC 9/777/133.
   The session name is optional: when blank, `CreateSession` uses the project
   name from `package.json`, `go.mod`, `Cargo.toml`, or `pyproject.toml` in the
   folder, else the folder name, adding ` (2)`, ` (3)` on collisions.
@@ -374,13 +386,10 @@ Known gaps and risks:
     `~\.copilot\session-state\<id>\events.jsonl` (present for sessions with
     turns, absent for zero-turn ones; undocumented Copilot internals, so it
     fails open if the session-state folder is missing). Home and the toolbar
-    show Restore disabled with the reason and keep Start fresh; the backend
-    also refuses a restore with the same message. Covered by unit tests; a
-    production-window smoke against the real zero-turn `copilot-smoke-1`
-    session confirmed Home shows Restore disabled (Start fresh available) for
-    it while the Claude Code session's Restore stays enabled. The session
-        toolbar variant (Restore disabled, Start fresh enabled) was also
-        confirmed; tooltip hover text was not visually captured.
+    hide Restore entirely (the reason is the Start fresh tooltip) and keep
+    Start fresh; the backend also refuses a restore with the same message.
+    Covered by unit tests. The earlier smoke showed Restore disabled; the
+    UI was later changed to hide it, and that change is build-verified only.
 - The WebView bridge currently receives terminal chunks as base64 events.
   Evaluate event volume and backpressure with long-running/high-output
   harnesses; do not switch to text decoding in Go.
@@ -514,8 +523,10 @@ to include the custom app icon.
   back to a single Ctrl+C (3 s) and then force-termination, which is shown as
   "Graceful interrupt failed or timed out". Claude Code still uses the
   Ctrl+C-only path until a real probe shows `/exit` is safe for it. Unit tests
-  use fake processes; the real Copilot `/exit` path is not yet verified in a
-  hosted session, nor that a later Restore resumes after it. Stop/shutdown
+  use fake processes; the real Copilot `/exit` path was smoke-tested in the
+  production window (clean exit in about 1.5 s, exit code 0, not forced). That
+  a later Restore resumes the conversation after it is still unverified.
+  Stop/shutdown
   timeouts were raised to 25 s to fit the longer sequence.
 
 1. Read "Product boundaries", "Do not overstate current readiness", and

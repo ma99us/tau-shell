@@ -209,6 +209,7 @@ func (manager *Manager) start(ctx context.Context, id string, restoring, fresh b
 		}
 	}
 	if fresh {
+		runtime, err = manager.store.BeginFresh(ctx, id, config.Tool)
 	} else {
 		runtime, err = manager.store.Begin(ctx, id, config.Tool, restoring)
 	}
