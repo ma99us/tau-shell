@@ -257,6 +257,17 @@ textarea:focus-visible,
   background: #e06c75;
 }
 
+/* A distinct square shape, so "waiting for you" is not only a colour. */
+.state-icon.input {
+  background: #ff9f43;
+  border-radius: 2px;
+}
+
+.state-icon.input.unseen {
+  background: #ff9f43;
+  animation: state-glow-input 1.4s ease-in-out infinite;
+}
+
 .state-icon.unseen {
   background: #f0c75e;
   animation: state-glow 1.4s ease-in-out infinite;
@@ -264,6 +275,11 @@ textarea:focus-visible,
 
 .session-row .state-icon {
   margin-right: 0;
+}
+
+@keyframes state-glow-input {
+  0%, 100% { box-shadow: 0 0 2px #ff9f4388; }
+  50% { box-shadow: 0 0 10px 3px #ff9f43cc; }
 }
 
 @keyframes state-spin {
@@ -418,9 +434,9 @@ textarea:focus-visible,
 
 .tab.active,
 .tab-item.active {
-  border-color: #303640;
-  background: #1b2028;
-  color: #edf0f5;
+  border-color: #2e443a;
+  background: #1a2821;
+  color: #dff8e9;
 }
 
 .tab-item {

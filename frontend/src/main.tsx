@@ -111,14 +111,15 @@ function App() {
           const at = outputAt.current.get(id);
           const signal = readHarnessSignal(session.tool, terminalInstances.get(id), terminalTitles.get(id) ?? "");
           if (signal === undefined && at === undefined) return;
-          const old = previous[id] ?? { working: false, unseen: false };
+          const old = previous[id] ?? { working: false, input: false, unseen: false };
           const working = signal ? signal === "working" : now - at! < workingWindowMs;
+          const input = signal === "input";
           const seen = selectedRef.current === id && watching;
           let unseen = old.unseen;
-          if (old.working && !working && !seen) unseen = true;
+          if (((old.working && !working) || (input && !old.input)) && !seen) unseen = true;
           if (seen) unseen = false;
-          if (working !== old.working || unseen !== old.unseen) {
-            next[id] = { working, unseen };
+          if (working !== old.working || input !== old.input || unseen !== old.unseen) {
+            next[id] = { working, input, unseen };
             changed = true;
           }
         });
@@ -556,19 +557,20 @@ const echoWindowMs = 400;
 // Output newer than this means the session is "working"; older means "quiet".
 const workingWindowMs = 2500;
 
-type ActivityKind = "working" | "quiet" | "stopped" | "failed";
-type Activity = { working: boolean; unseen: boolean };
+type ActivityKind = "working" | "input" | "quiet" | "stopped" | "failed";
+type Activity = { working: boolean; input: boolean; unseen: boolean };
 
 function stateIconKind(session: Session, activity?: Activity): { kind: ActivityKind; unseen: boolean } {
   if (!session.runningHere) return { kind: session.status === "failed" ? "failed" : "stopped", unseen: false };
-  return { kind: activity?.working ? "working" : "quiet", unseen: !!activity?.unseen };
+  const kind = activity?.input ? "input" : activity?.working ? "working" : "quiet";
+  return { kind, unseen: !!activity?.unseen };
 }
 
-const stateLabels: Record<ActivityKind, string> = { working: "Working (output active)", quiet: "Quiet (output stopped)", stopped: "Not running", failed: "Failed" };
+const stateLabels: Record<ActivityKind, string> = { working: "Working (output active)", input: "Waiting for your answer", quiet: "Quiet (output stopped)", stopped: "Not running", failed: "Failed" };
 
 function StateIcon({ session, activity }: { session: Session; activity?: Activity }) {
   const { kind, unseen } = stateIconKind(session, activity);
-  const label = unseen ? "Quiet since you last looked (may need input)" : stateLabels[kind];
+  const label = kind === "input" ? stateLabels.input : unseen ? "Quiet since you last looked (may need input)" : stateLabels[kind];
   return <span className={`state-icon ${kind} ${unseen ? "unseen" : ""}`} title={label} aria-label={label} role="img" />;
 }
 const fitInstances = new Map<string, FitAddon>();

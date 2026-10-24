@@ -1,12 +1,16 @@
 import type { Terminal } from "@xterm/xterm";
 
-// "working" / "idle" when the harness itself says so; undefined when the
-// harness gives no usable cue (callers fall back to output timing).
-export type HarnessSignal = "working" | "idle" | undefined;
+// "working" / "idle" / "input" (waiting for the user to answer a prompt) when
+// the harness itself says so; undefined when the harness gives no usable cue
+// (callers fall back to output timing).
+export type HarnessSignal = "working" | "idle" | "input" | undefined;
 
 const brailleSpinner = /^[\u2800-\u28FF]/;
 const copilotWorkingStatus = /^\S{0,2}\s*Working\b.*\besc\b/i;
 const copilotIdleFooter = /\? help/;
+// Footer of Copilot CLI's selection prompts (permission requests, pickers),
+// observed on Copilot CLI 1.0.103 as "navigate · enter to select · esc to cancel".
+const copilotPromptFooter = /\benter to select\b.*\besc to cancel\b/i;
 
 function lastRows(terminal: Terminal, count: number): string[] {
   const buffer = terminal.buffer.active;
@@ -29,6 +33,7 @@ export function readHarnessSignal(tool: string, terminal: Terminal | undefined, 
   }
   if (tool === "copilot-cli" && terminal) {
     const rows = lastRows(terminal, 2);
+    if (rows.some((row) => copilotPromptFooter.test(row))) return "input";
     if (rows.some((row) => copilotWorkingStatus.test(row))) return "working";
     if (rows.some((row) => copilotIdleFooter.test(row))) return "idle";
   }

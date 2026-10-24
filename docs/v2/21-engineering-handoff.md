@@ -48,11 +48,17 @@ interaction decisions and feasibility gate are in
   selected+focused glows amber ("unseen") until selected or typed in. Signals
   are harness-specific (`frontend/src/attention.ts`), never whole-screen
   comparison: Copilot CLI = its "Working ... esc" status row / "? help" footer
-  (last two rows only; verified live); Claude Code = terminal title (braille
+  (last two rows only; verified live) and, for "waiting for your answer", the
+  selection-prompt footer "enter to select ... esc to cancel" (verified live
+  on Copilot CLI 1.0.103 with a permission prompt in a session started without
+  `--yolo`; shown as an orange square, glowing until seen, cleared when the
+  prompt is answered). Other Copilot pickers share that footer and are also
+  treated as waiting for input. Claude Code = terminal title (braille
   spinner = working, U+2733 = idle; from memory, UNVERIFIED, needs a logged-in
-  run). With no cue (other screens such as permission prompts, unknown tool)
-  it falls back to output timing (output within 400 ms of a keystroke is
-  ignored as echo). "Quiet" is not proof the harness awaits input. Copilot
+  run); it has no "needs input" cue yet because its permission prompt has not
+  been captured. With no cue (unknown tool) it falls back to output timing
+  (output within 400 ms of a keystroke is ignored as echo). "Quiet" is not
+  proof the harness awaits input. Copilot
   sends only topic titles, no BEL/OSC 9/777/133.
   The session name is optional: when blank, `CreateSession` uses the project
   name from `package.json`, `go.mod`, `Cargo.toml`, or `pyproject.toml` in the
@@ -460,6 +466,9 @@ Verified in the real window with Claude Code (preview showed `--model sonnet`).
    Code restore after a completed login, and the unverified Claude Code title
    cue (braille spinner = working, U+2733 = idle) used by the state icons. Do
    these when the owner logs in to Claude Code; they do not block later work.
+   The full list of Claude Code gaps (G1-G12) and the test plan (T1-T9, to be
+   run on another PC) is in
+   [`24-claude-code-verification-plan.md`](24-claude-code-verification-plan.md).
    Test sessions `kbd-test-1` and `copilot-smoke-1` were removed from the dev
    profile with the new delete feature.
 3. Done: Step 3 tool metadata/version ranges, capability probes, and
