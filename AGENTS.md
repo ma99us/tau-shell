@@ -2,8 +2,8 @@
 
 ## Private user notes
 
-- Never read, search, summarize, quote, modify, or otherwise inspect `docs/.todo`.
-- Treat `docs/.todo` as private user-only notes: do not include it in changes, stage or commit it, or track its contents.
+- Never read, search, summarize, quote, modify, or otherwise inspect `docs/.todo` or `docs/.todo.md`.
+- Treat these paths as private user-only notes: exclude them from version control and changes; do not stage, commit, or track their contents.
 
 ## Source of truth and scope
 

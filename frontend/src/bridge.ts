@@ -17,28 +17,58 @@ export type SessionEvent = {
 };
 
 export type ToolStatus = {
+  id: "powershell" | "claude-code" | "copilot-cli";
   name: string;
+  required: boolean;
   installed: boolean;
   executablePath?: string;
   version?: string;
+  versionOutput?: string;
+  minimum?: string;
+  testedRange: string;
+  support: "tested" | "untested" | "below-minimum" | "unknown";
+  capabilities: { name: string; option: string; available: boolean }[] | null;
+  warnings: string[] | null;
   error?: string;
+  install: { wingetId?: string; source?: string; vendorUrl: string };
+};
+
+export type InstallResult = {
+  outcome: "installed" | "cancelled" | "winget-unavailable" | "failed";
+  message: string;
+  vendorUrl?: string;
+  status?: ToolStatus;
 };
 
 export type SystemStatus = {
   webView2Version: string;
   diagnosticsLogPath: string;
-  powershell: ToolStatus;
-  claudeCode: ToolStatus;
-  copilotCLI: ToolStatus;
+  wingetAvailable: boolean;
+  tools: ToolStatus[];
+};
+
+export type SessionTemplate = {
+  tool: "claude-code" | "copilot-cli";
+  launchArgs: string[];
+};
+
+export type LaunchPreview = {
+  executable: string;
+  arguments: string[];
+  warnings: string[];
 };
 
 type WailsApp = {
   GetSessions(): Promise<Session[]>;
   GetSystemStatus(): Promise<SystemStatus>;
+  InstallTool(id: string): Promise<InstallResult>;
+  OpenToolSetupPage(id: string): Promise<void>;
   LogFrontendFailure(source: string, message: string, stack: string): Promise<void>;
   LogTerminalPointerEvent(id: string, event: "pointerdown" | "mousedown"): Promise<void>;
   LogTerminalMouseTrackingMode(id: string, mode: "none" | "x10" | "vt200" | "drag" | "any"): Promise<void>;
   SelectWorkingDirectory(): Promise<string>;
+  GetSessionTemplate(tool: string): Promise<SessionTemplate>;
+  PreviewSessionLaunch(tool: string, launchArgs: string[]): Promise<LaunchPreview>;
   CreateSession(name: string, tool: string, workingDir: string, launchArgs: string[]): Promise<Session>;
   StartSession(id: string, columns: number, rows: number): Promise<Session>;
   RestoreSession(id: string, columns: number, rows: number): Promise<Session>;

@@ -80,21 +80,6 @@ func TestTerminalProtocolReportsIgnoreOrdinaryInput(t *testing.T) {
 	}
 }
 
-func TestDetectToolReportsResolvedExecutablePath(t *testing.T) {
-	executable, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	status := detectTool("Go test executable", executable, "-test.run=^$")
-	if !status.Installed {
-		t.Fatalf("tool should be detected, got error %q", status.Error)
-	}
-	if status.ExecutablePath != executable {
-		t.Fatalf("executable path = %q, want %q", status.ExecutablePath, executable)
-	}
-}
-
 func TestCreateSessionReturnsSavedSessionWithoutListing(t *testing.T) {
 	listErr := errors.New("session listing should not be needed")
 	manager := &closeTestManager{
@@ -141,6 +126,65 @@ func TestCreateSessionRejectsInvalidConfig(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(application.configDirectory, "api-refactor.yaml")); !os.IsNotExist(err) {
 		t.Fatalf("invalid session config file stat error = %v, want file not to exist", err)
+	}
+}
+
+func TestGetSessionTemplateReturnsAdapterDefaults(t *testing.T) {
+	application := &App{}
+	for _, test := range []struct {
+		tool string
+		want []string
+	}{
+		{string(session.ClaudeCode), []string{"--dangerously-skip-permissions"}},
+		{string(session.CopilotCLI), []string{"--yolo"}},
+	} {
+		template, err := application.GetSessionTemplate(test.tool)
+		if err != nil {
+			t.Fatalf("GetSessionTemplate(%q): %v", test.tool, err)
+		}
+		if template.Tool != session.Harness(test.tool) || strings.Join(template.LaunchArgs, ",") != strings.Join(test.want, ",") {
+			t.Fatalf("GetSessionTemplate(%q) = %+v, want launchArgs %v", test.tool, template, test.want)
+		}
+	}
+}
+
+func TestGetSessionTemplateRejectsUnsupportedTool(t *testing.T) {
+	application := &App{}
+	if _, err := application.GetSessionTemplate("unknown-tool"); err == nil {
+		t.Fatal("GetSessionTemplate(\"unknown-tool\") should fail")
+	}
+}
+
+func TestPreviewSessionLaunchRejectsReservedArgumentWithoutTouchingPATH(t *testing.T) {
+	application := &App{}
+	_, err := application.PreviewSessionLaunch(string(session.ClaudeCode), []string{"--session-id=override"})
+	if err == nil || !strings.Contains(err.Error(), "launch_args cannot override TauShell-managed --session-id") {
+		t.Fatalf("PreviewSessionLaunch error = %v, want reserved launch argument validation error", err)
+	}
+}
+
+func TestPreviewSessionLaunchAppendsManagedIdentityPlaceholder(t *testing.T) {
+	application := &App{}
+	preview, err := application.PreviewSessionLaunch(string(session.CopilotCLI), []string{" --yolo ", "", "--model", "gpt-5"})
+	if err != nil {
+		t.Fatalf("PreviewSessionLaunch: %v", err)
+	}
+	want := []string{"--yolo", "--model", "gpt-5", "--session-id", previewSessionIDPlaceholder}
+	if strings.Join(preview.Arguments, ",") != strings.Join(want, ",") {
+		t.Fatalf("PreviewSessionLaunch arguments = %v, want %v", preview.Arguments, want)
+	}
+	if preview.Executable == "" {
+		t.Fatal("PreviewSessionLaunch executable must not be empty")
+	}
+	if preview.Warnings == nil {
+		t.Fatal("PreviewSessionLaunch warnings must be a non-nil slice for stable JSON serialization")
+	}
+}
+
+func TestPreviewSessionLaunchRejectsUnsupportedTool(t *testing.T) {
+	application := &App{}
+	if _, err := application.PreviewSessionLaunch("unknown-tool", nil); err == nil {
+		t.Fatal("PreviewSessionLaunch(\"unknown-tool\", ...) should fail")
 	}
 }
 

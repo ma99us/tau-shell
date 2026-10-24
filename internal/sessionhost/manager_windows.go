@@ -103,7 +103,15 @@ func New(configDirectory, databasePath string, emit func(Event)) (*Manager, erro
 		closeStore:      store.Close,
 		emit:            emit,
 		startProcess: func(columns, rows int, executable, directory string, args ...string) (sessionProcess, error) {
-			return conpty.Start(columns, rows, executable, directory, args...)
+			process, fallbackErr, err := conpty.StartPreferred(conpty.ExecutableDirectory(), columns, rows, executable, directory, args...)
+			if fallbackErr != nil {
+				diagnostics.Warn("bundled ConPTY unavailable; using inbox ConPTY", fallbackErr)
+			}
+			if err != nil {
+				return nil, err
+			}
+			diagnostics.Info("ConPTY backend selected", "backend", process.Backend())
+			return process, nil
 		},
 		sessions: make(map[string]*managedSession),
 	}, nil

@@ -19,6 +19,17 @@ to official vendor installation instructions. Re-detect the executable and
 version after installation; do not treat the installer's exit code alone as
 proof of success.
 
+## Bundled ConPTY
+
+TauShell loads `conpty.dll` only by absolute path from its own executable
+directory, and only when `OpenConsole.exe` is also present there. Install
+TauShell to a directory writable only by the user or an administrator so that
+another process cannot plant those files. `scripts/fetch-conpty.ps1` pins the
+`Microsoft.Windows.Console.ConPTY` version and verifies the package SHA-256
+and Microsoft Authenticode signatures before copying. A present bundle that
+fails to load is logged as a warning, and the session falls back to inbox
+ConPTY.
+
 ## Harness arguments
 
 Session YAML may contain explicit command-line arguments for a harness. Treat

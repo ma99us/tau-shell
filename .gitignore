@@ -3,3 +3,7 @@
 /frontend/tsconfig.tsbuildinfo
 docs\.todo
 /docs/.todo
+/docs/.todo.md
+/conpty.dll
+/OpenConsole.exe
+/taushell.exe

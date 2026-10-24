@@ -23,6 +23,7 @@ import (
 	"github.com/ma99us/tau-shell/internal/harness"
 	"github.com/ma99us/tau-shell/internal/session"
 	"github.com/ma99us/tau-shell/internal/sessionhost"
+	"github.com/ma99us/tau-shell/internal/tools"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/logger"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -50,6 +51,9 @@ type App struct {
 	shutdownMu             sync.Mutex
 	shutdownInProgress     bool
 	allowShutdown          bool
+	installMu              sync.Mutex
+	toolInstaller          *tools.Installer
+	openURL                func(context.Context, string)
 }
 
 type desktopSessionManager interface {
@@ -63,20 +67,11 @@ type desktopSessionManager interface {
 	Close(context.Context) error
 }
 
-type ToolStatus struct {
-	Name           string `json:"name"`
-	Installed      bool   `json:"installed"`
-	ExecutablePath string `json:"executablePath,omitempty"`
-	Version        string `json:"version,omitempty"`
-	Error          string `json:"error,omitempty"`
-}
-
 type SystemStatus struct {
-	WebView2Version    string     `json:"webView2Version"`
-	DiagnosticsLogPath string     `json:"diagnosticsLogPath"`
-	PowerShell         ToolStatus `json:"powershell"`
-	ClaudeCode         ToolStatus `json:"claudeCode"`
-	CopilotCLI         ToolStatus `json:"copilotCLI"`
+	WebView2Version    string         `json:"webView2Version"`
+	DiagnosticsLogPath string         `json:"diagnosticsLogPath"`
+	WingetAvailable    bool           `json:"wingetAvailable"`
+	Tools              []tools.Status `json:"tools"`
 }
 
 func runDesktop() error {
@@ -178,61 +173,30 @@ func (application *App) GetSessions() (snapshots []sessionhost.Snapshot, err err
 }
 
 func (application *App) GetSystemStatus() SystemStatus {
+	_, wingetErr := exec.LookPath("winget.exe")
 	status := SystemStatus{
 		WebView2Version:    application.webViewVersion,
 		DiagnosticsLogPath: diagnostics.LogPath(),
-		PowerShell:         detectTool("PowerShell 7", "pwsh.exe", "--version"),
-		ClaudeCode:         detectHarness(session.ClaudeCode),
-		CopilotCLI:         detectHarness(session.CopilotCLI),
+		WingetAvailable:    wingetErr == nil,
+		Tools:              tools.DetectAll(context.Background(), tools.DefaultEnvironment()),
 	}
-	for _, tool := range []ToolStatus{status.PowerShell, status.ClaudeCode, status.CopilotCLI} {
-		if tool.Installed && tool.Error == "" {
-			diagnostics.Info("prerequisite detected", "tool", tool.Name, "version", tool.Version)
-		} else {
-			diagnostics.Warn("prerequisite unavailable or version check failed", errors.New(tool.Error), "tool", tool.Name)
-		}
+	for _, tool := range status.Tools {
+		logToolStatus(tool)
 	}
 	return status
 }
 
-func detectHarness(tool session.Harness) ToolStatus {
-	status := ToolStatus{Name: string(tool)}
-	adapter, err := harness.For(tool)
-	if err != nil {
-		status.Error = err.Error()
-		return status
+func logToolStatus(tool tools.Status) {
+	if tool.Usable() && len(tool.Warnings) == 0 {
+		diagnostics.Info("prerequisite detected", "tool", tool.Name, "version", tool.Version, "support", tool.Support)
+		return
 	}
-	executable, err := adapter.FindExecutable()
-	if err != nil {
-		status.Error = err.Error()
-		return status
+	problem := tool.Error
+	if problem == "" {
+		problem = strings.Join(tool.Warnings, " ")
 	}
-	return detectTool(status.Name, executable, "--version")
-}
-
-func detectTool(name, executable, versionFlag string) ToolStatus {
-	status := ToolStatus{Name: name}
-	path, err := exec.LookPath(executable)
-	if err != nil {
-		status.Error = err.Error()
-		return status
-	}
-	status.Installed = true
-	status.ExecutablePath = path
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	output, err := exec.CommandContext(ctx, path, versionFlag).CombinedOutput()
-	if err != nil {
-		status.Error = fmt.Sprintf("run %s %s: %v", filepath.Base(path), versionFlag, err)
-		status.Version = "Version check failed"
-		return status
-	}
-	version := strings.TrimSpace(string(output))
-	if len(version) > 200 {
-		version = version[:200]
-	}
-	status.Version = version
-	return status
+	diagnostics.Warn("prerequisite unavailable or outside tested support", errors.New(problem),
+		"tool", tool.Name, "installed", tool.Installed, "version", tool.Version, "support", tool.Support, "usable", tool.Usable())
 }
 
 func (application *App) SelectWorkingDirectory() (path string, err error) {
@@ -246,6 +210,97 @@ func (application *App) SelectWorkingDirectory() (path string, err error) {
 		CanCreateDirectories:       false,
 		TreatPackagesAsDirectories: true,
 	})
+}
+
+// SessionTemplate is the editable launch_args preset for a new session.
+type SessionTemplate struct {
+	Tool       session.Harness `json:"tool"`
+	LaunchArgs []string        `json:"launchArgs"`
+}
+
+func (application *App) GetSessionTemplate(toolName string) (template SessionTemplate, err error) {
+	defer func() {
+		if err != nil {
+			diagnostics.Error("get session template failed", err, "tool", toolName)
+		}
+	}()
+	harnessID := session.Harness(toolName)
+	adapter, err := harness.For(harnessID)
+	if err != nil {
+		return SessionTemplate{}, err
+	}
+	return SessionTemplate{Tool: harnessID, LaunchArgs: adapter.DefaultLaunchArgs()}, nil
+}
+
+// previewSessionIDPlaceholder stands in for the harness session UUID that
+// TauShell only generates once a session actually starts; it is never a
+// real identifier.
+const previewSessionIDPlaceholder = "<new-session-id>"
+
+// LaunchPreview is the effective executable and discrete argv TauShell would
+// invoke for a fresh start with the given launch_args, shown before saving.
+type LaunchPreview struct {
+	Executable string   `json:"executable"`
+	Arguments  []string `json:"arguments"`
+	Warnings   []string `json:"warnings"`
+}
+
+func (application *App) PreviewSessionLaunch(toolName string, launchArgs []string) (preview LaunchPreview, err error) {
+	defer func() {
+		if err != nil {
+			diagnostics.Error("preview session launch failed", err, "tool", toolName)
+		}
+	}()
+	harnessID := session.Harness(toolName)
+	adapter, err := harness.For(harnessID)
+	if err != nil {
+		return LaunchPreview{}, err
+	}
+	cleaned := make([]string, 0, len(launchArgs))
+	for _, arg := range launchArgs {
+		if trimmed := strings.TrimSpace(arg); trimmed != "" {
+			cleaned = append(cleaned, trimmed)
+		}
+	}
+	if err := session.ValidateLaunchArgs(harnessID, cleaned); err != nil {
+		return LaunchPreview{}, err
+	}
+	preview.Warnings = []string{}
+	spec, _ := tools.Lookup(tools.ID(harnessID))
+	executablePath, lookErr := adapter.FindExecutable()
+	if lookErr != nil {
+		preview.Executable = spec.Executable
+		preview.Warnings = append(preview.Warnings, fmt.Sprintf("%s was not found on PATH.", spec.Executable))
+	} else {
+		preview.Executable = executablePath
+		if len(cleaned) > 0 {
+			preview.Warnings = append(preview.Warnings, probeUnsupportedLaunchArgs(executablePath, spec, cleaned)...)
+		}
+	}
+	preview.Arguments = append(append([]string(nil), cleaned...), adapter.StartArgs(previewSessionIDPlaceholder)...)
+	return preview, nil
+}
+
+// probeUnsupportedLaunchArgs reports launch_args options absent from the
+// harness's own --help output. A probe failure yields a single warning
+// rather than blocking the preview.
+func probeUnsupportedLaunchArgs(executablePath string, spec tools.Spec, launchArgs []string) []string {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	environment := tools.DefaultEnvironment()
+	help, err := environment.Run(ctx, executablePath, spec.HelpArgs...)
+	if err != nil {
+		return []string{fmt.Sprintf("Could not verify launch arguments: run %s %s: %v",
+			filepath.Base(executablePath), strings.Join(spec.HelpArgs, " "), err)}
+	}
+	var warnings []string
+	for _, arg := range launchArgs {
+		name, _, _ := strings.Cut(arg, "=")
+		if strings.HasPrefix(name, "-") && !tools.HasOption(string(help), name) {
+			warnings = append(warnings, fmt.Sprintf("Option %s was not found in %s help output.", name, spec.Name))
+		}
+	}
+	return warnings
 }
 
 func (application *App) CreateSession(name, toolName, workingDir string, launchArgs []string) (snapshot sessionhost.Snapshot, err error) {

@@ -94,6 +94,17 @@ func (config Config) Validate() error {
 			return fmt.Errorf("invalid environment variable name %q", name)
 		}
 	}
+	if err := ValidateLaunchArgs(config.Tool, config.LaunchArgs); err != nil {
+		return err
+	}
+	return nil
+}
+
+// ValidateLaunchArgs rejects user-configured launch arguments that would
+// override a TauShell-managed session/resume identity argument for tool.
+// Exported so callers (such as a launch-command preview) can reuse the same
+// check without a full, filesystem-backed Config.Validate.
+func ValidateLaunchArgs(tool Harness, launchArgs []string) error {
 	reservedArgs := map[Harness]map[string]struct{}{
 		ClaudeCode: {
 			"--session-id": {},
@@ -104,9 +115,9 @@ func (config Config) Validate() error {
 			"--resume":     {},
 		},
 	}
-	for _, arg := range config.LaunchArgs {
+	for _, arg := range launchArgs {
 		name, _, _ := strings.Cut(arg, "=")
-		if _, reserved := reservedArgs[config.Tool][strings.ToLower(name)]; reserved {
+		if _, reserved := reservedArgs[tool][strings.ToLower(name)]; reserved {
 			return fmt.Errorf("launch_args cannot override TauShell-managed %s arguments", name)
 		}
 	}

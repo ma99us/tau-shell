@@ -122,3 +122,12 @@ func TestConfigRejectsArgumentsThatOverrideManagedSessionIdentity(t *testing.T) 
 		}
 	}
 }
+
+func TestValidateLaunchArgsStandaloneMatchesConfigValidate(t *testing.T) {
+	if err := ValidateLaunchArgs(ClaudeCode, []string{"--dangerously-skip-permissions"}); err != nil {
+		t.Fatalf("unreserved argument rejected: %v", err)
+	}
+	if err := ValidateLaunchArgs(ClaudeCode, []string{"--session-id"}); err == nil || !strings.Contains(err.Error(), "TauShell-managed") {
+		t.Fatalf("reserved argument not rejected without a filesystem-backed Config: %v", err)
+	}
+}

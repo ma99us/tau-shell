@@ -35,6 +35,29 @@ func TestHarnessArgumentsUseExplicitIDs(t *testing.T) {
 	}
 }
 
+func TestDefaultLaunchArgsAreAdapterSpecificAndIndependentCopies(t *testing.T) {
+	for _, test := range []struct {
+		harness session.Harness
+		want    []string
+	}{
+		{session.ClaudeCode, []string{"--dangerously-skip-permissions"}},
+		{session.CopilotCLI, []string{"--yolo"}},
+	} {
+		adapter, err := For(test.harness)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := adapter.DefaultLaunchArgs()
+		if !reflect.DeepEqual(got, test.want) {
+			t.Fatalf("%s default launch args = %#v, want %#v", test.harness, got, test.want)
+		}
+		got[0] = "mutated"
+		if again := adapter.DefaultLaunchArgs(); reflect.DeepEqual(again, got) {
+			t.Fatalf("%s DefaultLaunchArgs leaked internal slice to caller mutation", test.harness)
+		}
+	}
+}
+
 func TestWindowsHarnessLookupUsesPATHEXTResolution(t *testing.T) {
 	for harnessID, executable := range map[session.Harness]string{
 		session.ClaudeCode: "claude",

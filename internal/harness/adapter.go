@@ -14,19 +14,24 @@ type Adapter interface {
 	FindExecutable() (string, error)
 	StartArgs(harnessSessionID string) []string
 	ResumeArgs(harnessSessionID string) []string
+	// DefaultLaunchArgs returns the recommended editable launch_args preset
+	// for a new session with this harness. These are user-editable template
+	// defaults, not TauShell-managed identity arguments.
+	DefaultLaunchArgs() []string
 }
 
 type cliAdapter struct {
-	id         session.Harness
-	executable string
+	id          session.Harness
+	executable  string
+	defaultArgs []string
 }
 
 func For(id session.Harness) (Adapter, error) {
 	switch id {
 	case session.ClaudeCode:
-		return cliAdapter{id: id, executable: "claude"}, nil
+		return cliAdapter{id: id, executable: "claude", defaultArgs: []string{"--dangerously-skip-permissions"}}, nil
 	case session.CopilotCLI:
-		return cliAdapter{id: id, executable: "copilot"}, nil
+		return cliAdapter{id: id, executable: "copilot", defaultArgs: []string{"--yolo"}}, nil
 	default:
 		return nil, fmt.Errorf("unsupported harness %q", id)
 	}
@@ -50,6 +55,10 @@ func (adapter cliAdapter) StartArgs(harnessSessionID string) []string {
 
 func (adapter cliAdapter) ResumeArgs(harnessSessionID string) []string {
 	return []string{"--resume", harnessSessionID}
+}
+
+func (adapter cliAdapter) DefaultLaunchArgs() []string {
+	return append([]string(nil), adapter.defaultArgs...)
 }
 
 func PowerShellInvocation(executable string, args []string, environment map[string]string, utf8 bool) string {

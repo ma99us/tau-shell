@@ -84,7 +84,17 @@ npm run build
 Pop-Location
 go test ./...
 go build -tags production -ldflags "-H=windowsgui" -o taushell.exe ./cmd/taushell
+.\scripts\fetch-conpty.ps1
 ```
+
+`scripts\fetch-conpty.ps1` downloads the pinned, MIT-licensed
+`Microsoft.Windows.Console.ConPTY` package, verifies its SHA-256 hash and
+Microsoft Authenticode signatures, and copies the x64 `conpty.dll` and
+`OpenConsole.exe` next to `taushell.exe` (use `-Destination` for another
+folder). TauShell prefers this bundled ConPTY because Windows 10's inbox ConPTY
+consumes harness mouse-mode requests and terminal status replies. Without the
+two files, TauShell falls back to inbox ConPTY with those limitations, and the
+diagnostic log records which backend each session used.
 
 Create one YAML file at `%USERPROFILE%\.tau_shell\sessions\<session-id>.yaml` for each session; see the [Phase 1 schema](docs/v2/18-yaml-schema.md). For example:
 

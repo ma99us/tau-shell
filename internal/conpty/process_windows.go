@@ -16,6 +16,7 @@ const (
 )
 
 type Process struct {
+	api       pseudoConsoleAPI
 	console   windows.Handle
 	process   windows.Handle
 	processID uint32
@@ -25,6 +26,20 @@ type Process struct {
 }
 
 func Start(width, height int, executable, directory string, args ...string) (*Process, error) {
+	return start(inboxAPI, width, height, executable, directory, args...)
+}
+
+// StartWithLibrary hosts the process through a bundled conpty.dll at the given
+// absolute path instead of the inbox kernel32 ConPTY.
+func StartWithLibrary(library string, width, height int, executable, directory string, args ...string) (*Process, error) {
+	api, err := loadBundledAPI(library)
+	if err != nil {
+		return nil, err
+	}
+	return start(api, width, height, executable, directory, args...)
+}
+
+func start(api pseudoConsoleAPI, width, height int, executable, directory string, args ...string) (*Process, error) {
 	if width < 1 || height < 1 || width > maxDimension || height > maxDimension {
 		return nil, fmt.Errorf("invalid terminal size %dx%d", width, height)
 	}
@@ -46,7 +61,7 @@ func Start(width, height int, executable, directory string, args ...string) (*Pr
 	}
 
 	var pseudoConsole windows.Handle
-	if err := windows.CreatePseudoConsole(windows.Coord{X: int16(width), Y: int16(height)}, inputRead, outputWrite, 0, &pseudoConsole); err != nil {
+	if err := api.create(windows.Coord{X: int16(width), Y: int16(height)}, inputRead, outputWrite, 0, &pseudoConsole); err != nil {
 		closePipes()
 		return nil, fmt.Errorf("create pseudoconsole: %w", err)
 	}
@@ -58,7 +73,7 @@ func Start(width, height int, executable, directory string, args ...string) (*Pr
 	closeConsole := true
 	defer func() {
 		if closeConsole {
-			windows.ClosePseudoConsole(pseudoConsole)
+			api.close(pseudoConsole)
 		}
 	}()
 
@@ -161,6 +176,7 @@ func Start(width, height int, executable, directory string, args ...string) (*Pr
 	closePipes()
 
 	process := &Process{
+		api:       api,
 		console:   pseudoConsole,
 		process:   processInfo.Process,
 		processID: processInfo.ProcessId,
@@ -204,9 +220,14 @@ func (process *Process) PID() int {
 	return int(process.processID)
 }
 
+// Backend reports which ConPTY implementation hosts the process.
+func (process *Process) Backend() string {
+	return process.api.name
+}
+
 func (process *Process) CloseConsole() {
 	if process.console != 0 {
-		windows.ClosePseudoConsole(process.console)
+		process.api.close(process.console)
 		process.console = 0
 	}
 }
@@ -215,7 +236,7 @@ func (process *Process) Resize(width, height int) error {
 	if width < 1 || height < 1 || width > maxDimension || height > maxDimension {
 		return fmt.Errorf("invalid terminal size %dx%d", width, height)
 	}
-	if err := windows.ResizePseudoConsole(process.console, windows.Coord{X: int16(width), Y: int16(height)}); err != nil {
+	if err := process.api.resize(process.console, windows.Coord{X: int16(width), Y: int16(height)}); err != nil {
 		return fmt.Errorf("resize pseudoconsole to %dx%d: %w", width, height, err)
 	}
 	return nil

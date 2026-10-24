@@ -145,10 +145,14 @@ func runInConsole(options Options) (returnErr error) {
 	if err != nil {
 		return fmt.Errorf("read terminal dimensions: %w", err)
 	}
-	process, err := conpty.Start(width, height, options.Executable, options.Directory, options.Args...)
+	process, fallbackErr, err := conpty.StartPreferred(conpty.ExecutableDirectory(), width, height, options.Executable, options.Directory, options.Args...)
+	if fallbackErr != nil {
+		diagnostics.Warn("bundled ConPTY unavailable; using inbox ConPTY", fallbackErr)
+	}
 	if err != nil {
 		return err
 	}
+	diagnostics.Info("ConPTY backend selected", "backend", process.Backend())
 	defer func() {
 		if err := process.Close(); err != nil {
 			returnErr = errors.Join(returnErr, err)

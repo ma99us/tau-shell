@@ -1,6 +1,6 @@
 # Engineering Handoff
 
-**Updated:** 2026-10-19
+**Updated:** 2026-10-22
 **Project state:** Phase 1 desktop migration in progress; not release-ready.
 
 This is the implementation handoff for the next engineering session. The
@@ -192,10 +192,16 @@ coverage remains open.
 
 ## Do not overstate current readiness
 
-The Step 1 WebView2/xterm.js feasibility gate remains open. Neither supported
-harness has been exercised end-to-end inside the hosted terminal. The visible
-window is not evidence that terminal behavior, harness restore, or application
-security has passed.
+The Step 1 WebView2/xterm.js feasibility gate is substantially closed: both
+supported harnesses have now been exercised end-to-end inside the hosted
+terminal with real, signed-in credentials on this Windows 10 machine (see
+below). The remaining gap is a clean environment without WebView2 installed,
+plus completing an actual OAuth login flow for Claude Code (deliberately not
+attempted, to avoid live browser-based authentication during automated
+testing). The visible window alone is still not evidence that terminal
+behavior, harness restore, or application security has passed in general —
+rely on the specific verified findings below, not on the window simply
+rendering.
 
 Known gaps and risks:
 
@@ -206,30 +212,53 @@ Known gaps and risks:
   The checked-in fixture has verified Unicode/emoji, split UTF-8 output, ANSI,
   cursor movement, cursor-position query replies, typed input, explicit exit,
   primary-screen restoration, and live resize through the production
-  WebView2/ConPTY path. Mouse reporting, device-status query delivery, and real
-  harness walkthroughs still need verification.
+  WebView2/ConPTY path.
+  - **Resolved: real harness walkthroughs, user-authorized.** With explicit
+    user authorization, real signed-in Claude Code and GitHub Copilot CLI
+    processes were launched through the production app in the real (non-test)
+    user profile. Claude Code rendered its genuine first-run wizard (ASCII-art
+    banner, theme-selection menu, syntax-highlighted diff preview) correctly;
+    one menu step was confirmed via Enter to reach "Select login method",
+    where testing deliberately stopped rather than complete a real OAuth
+    login. GitHub Copilot CLI rendered its full real UI (tab bar, AI
+    disclaimer, live org-policy error banners, status bar) correctly and a
+    local `/exit` command (not an actual model prompt, to avoid consuming
+    real AI credits) was used to exit cleanly. Both harnesses correctly
+    render Unicode/ASCII art, ANSI/syntax-highlighting colors,
+    inline-autocomplete/ghost-text, and multi-line interactive menus through
+    the real production WebView2 + bundled ConPTY + PowerShell 7 path. See
+    the Start Fresh/restore bullet below for the corresponding restore
+    findings from this same walkthrough.
   - An isolated browser-side xterm check emitted `ESC[0n` for a device-status
     query and SGR mouse reports when tracking was enabled and the terminal was
     clicked. This does not validate the Wails bridge/ConPTY path. Payload-free
     diagnostics now log the first successfully forwarded device-status,
     cursor-position, SGR mouse, and X10 mouse report category per session, plus
     pointer-event categories and xterm's effective mouse-tracking mode without
-    coordinates. A production run observed `pointerdown` and `mousedown` in
-    the terminal container, but xterm remained in `none` mode and emitted no
-    mouse report. Resending `CSI ? 1000 h` and `CSI ? 1006 h` from the fixture
-    did not change the mode. A temporary xterm-side probe enabled `vt200` and
-    forwarded an SGR mouse report to the Go bridge, proving the UI input path
-    works when tracking is active. A direct ConPTY probe found that Windows
-    ConPTY consumes those DECSET controls before they reach xterm, while
-    preserving adjacent text output. Do not force mouse tracking
-    unconditionally; that changes normal selection and input behavior. Mouse
-    support across the PowerShell/ConPTY boundary needs an explicit design
-    decision.
-    The device-status reply (`ESC[0n`) still reaches the Go bridge and its
-    ConPTY input write succeeds, but no corresponding fixture input chunk
-    arrives. The fixture's `c` key produced a fixture-visible cursor reply
-    (`ESC[6;15R`) without a matching bridge marker; its source remains
-    unknown. Fixture input chunk sizes are recorded without contents.
+    coordinates. An earlier production run (on inbox ConPTY, before the
+    bundled-ConPTY adoption) observed `pointerdown`/`mousedown` events but
+    xterm stayed in `none` mode and emitted no mouse report; a direct ConPTY
+    probe found that Windows' inbox ConPTY consumes `CSI ? 1000 h`/
+    `CSI ? 1006 h` DECSET controls before they reach xterm, while preserving
+    adjacent text output.
+  - **Resolved by the bundled-ConPTY adoption.** Re-running the same fixture
+    (built as `copilot.exe`, isolated profile, production WebView2/ConPTY
+    host) with bundled `conpty.dll`/`OpenConsole.exe` present no longer
+    reproduces any of the above gaps: the diagnostic log recorded
+    `terminal mouse tracking mode changed` → `vt200` immediately after
+    startup, a `mousedown` pointer event, and a matching `mouse-sgr` forwarded
+    marker on the very first hosted click; the fixture's own event log shows
+    the startup device-status and cursor-position replies each arriving as a
+    distinct, correctly-sized input chunk with a matching report line, and a
+    manual re-query (`d`/`c` keys) after that produced another correctly-sized
+    input chunk and matching report in the fixture log (the Go-side
+    diagnostic marker is logged only once per category per session by
+    design, so it does not re-fire on the second query — this is not a gap).
+    Do not force mouse tracking unconditionally regardless; that still
+    changes normal selection and input behavior. Mouse support only needed an
+    explicit design decision while inbox ConPTY was in use; bundled ConPTY
+    removes the underlying DECSET-consuming behavior that motivated it.
+    Fixture input chunk sizes are recorded without contents.
   - A repeated native handle-close test now verifies that the process, job,
     input-pipe, and output-pipe handles are valid before `Close` and invalid
     afterward. It passed 10 consecutive runs. The opaque pseudoconsole handle
@@ -245,7 +274,12 @@ Known gaps and risks:
   retry after a native-dialog failure.
   A production-window smoke exercised both No and Yes with an inert fixture;
   an automated Wails-host close integration test and forced-termination notice
-  verification remain open.
+  verification remain open. Decision: a fully automated real-window
+  `OnBeforeClose` CI test is deemed infeasible without new Windows GUI test
+  infrastructure (Wails does not expose a navigation/close-denied callback
+  suitable for scripted assertions); this is treated as an accepted,
+  documented limitation covered by the mocked unit tests plus manual
+  production-window smokes above, not a pending action item.
   Extend stale-runtime recovery tests beyond an abandoned startup, recent
   starting state, running records with missing or exited PIDs, and a live
   other-window process.
@@ -266,14 +300,25 @@ Known gaps and risks:
 - Exercise the missing-WebView2 native prompt and download handoff. Current
   runtime detection and prompt exist, but this machine has WebView2 installed
   and the missing-runtime path has not been tested in a clean environment.
-- Tool detection is implemented, but first-run PowerShell setup, version
-  support ranges, capability probes, winget consent/install actions, and
-  vendor-link fallback are not.
-- Session creation saves validated YAML, but generated harness-specific
-  templates, editable YAML preview, effective-argv preview, and
-  offer-to-start-after-creation are incomplete. The session form now suggests
-  up to five recently created session folders, persisted in WebView local
-  storage.
+- Tool detection, version support ranges, capability probes, first-run
+  PowerShell setup, winget consent/install actions, and vendor-link fallback
+  are implemented in `internal/tools` and wired through
+  `cmd/taushell/tools_windows.go` and the Home/Setup frontend. Verified via
+  unit tests and a production Wails smoke of the rendered Home/Setup UI; a
+  live winget install run was not exercised (only the declined-confirmation
+  and concurrent-install-rejection paths were).
+- Session creation saves validated YAML. Generated harness-specific launch
+  templates (Claude Code →
+  `--dangerously-skip-permissions`, Copilot CLI → `--yolo`) and a live
+  effective-argv preview (resolved executable, full argv including the
+  managed `--session-id` placeholder, and unsupported-option warnings probed
+  against the harness's own `--help` output) are implemented via
+  `Adapter.DefaultLaunchArgs()` and the new `GetSessionTemplate`/
+  `PreviewSessionLaunch` bound methods, verified with new Go unit tests and an
+  isolated-profile UI smoke test for both harnesses.
+  Editable full-YAML preview and offer-to-start-after-creation remain
+  incomplete. The session form now suggests up to five recently created
+  session folders, persisted in WebView local storage.
 - Tabs and selected tab persist in WebView local storage. They do not
   auto-launch sessions. In-process background tabs retain their xterm buffer.
   The tab strip now has tab semantics, arrow/Home/End keyboard selection,
@@ -281,16 +326,48 @@ Known gaps and risks:
   keyboard smoke verified Home/End selection, arrow-key wraparound, focus
   movement, and synchronized selected-tab state. A production-host smoke
   exposed a missing flex layout on the tab strip; after the CSS fix, Home and
-  Right switched focus/selection between Home and a stopped fixture tab. A
-  mouse click seeded focus, so a complete keyboard-only walkthrough remains
-  unverified. With eight inert fixture tabs open, the native left/right
-  controls scrolled between earlier and later tabs. Persisted presentation
-  state under different WebView profile conditions and the background terminal
+  Right switched focus/selection between Home and a stopped fixture tab. With
+  eight inert fixture tabs open, the native left/right controls scrolled
+  between earlier and later tabs.
+  A production-host smoke starting from a fresh profile with zero mouse
+  clicks confirmed `Tab` from window launch reaches the tab strip directly
+  (seeding focus on "Home" without a click), and a further keyboard-only walk
+  (`Tab`/`Enter`/typed text) opened Create Session, filled every field, and
+  submitted the dialog. Multi-tab switching with a second open session tab
+  was then verified without invoking any live harness, by resolving
+  `exec.LookPath("copilot")` to the checked-in `terminal-fixture` binary
+  (copied to an isolated profile's `PATH` as `copilot.exe`) so `StartSession`
+  launches the harmless fixture instead of a real credentialed CLI. With
+  "Home" and the running fixture tab both open, repeated `Shift+Tab`/`Tab`
+  reached each session's left-sidebar list entry, and pressing `Enter` on
+  either entry switched the active top tab and rendered its content
+  correctly in both directions (Home -> fixture tab and back) with zero
+  mouse clicks. Persisted presentation state
+  under different WebView profile conditions and the background terminal
   path through the real Wails/ConPTY host also remain unverified.
 - Start Fresh is explicitly confirmed in the UI and rotates the persisted
-  harness ID. Confirm failure/retry behavior with each adapter; Claude Code
-  provider-backed restore remains unverified. A disposable Copilot CLI
-  provider-backed restore smoke test is documented in the README.
+  harness ID. A real, user-authorized provider-backed restore walkthrough was
+  performed for both harnesses:
+  - **Claude Code:** restoring a session that had never progressed past its
+    first-run onboarding (no completed login) re-launched the wizard from the
+    same theme-selection step, which is the harness's own expected behavior
+    for a session with no real conversation state to resume — not a TauShell
+    defect.
+  - **GitHub Copilot CLI:** restoring a session that had been cleanly exited
+    via `/exit` before any real prompt was sent invoked `copilot --resume=<id>`
+    with TauShell's session UUID. The real `copilot.exe` rejected it
+    (`Error: No session, task, or name matched '<uuid>'`) and printed its own
+    usage guidance. TauShell correctly surfaced this as a failed session
+    (`PowerShell exited with code 1`) rather than claiming success, matching
+    the documented "do not claim restored unless harness confirms" principle.
+    This is most likely because a session with zero real turns was never
+    registered as resumable by Copilot CLI's own internal session tracking,
+    not a wrong-flag/wrong-ID bug in the adapter — but this has not been
+    confirmed against a Copilot CLI session that had at least one real,
+    credit-consuming turn before being stopped. Re-test restore after at
+    least one real exchange has happened in a Copilot CLI session before
+    treating this as a confirmed, scoped limitation vs. a genuine adapter
+    bug.
 - The WebView bridge currently receives terminal chunks as base64 events.
   Evaluate event volume and backpressure with long-running/high-output
   harnesses; do not switch to text decoding in Go.
@@ -334,34 +411,42 @@ Known gaps and risks:
   The opaque pseudoconsole handle cannot be checked with `GetHandleInformation`;
   its successful close and cleared field remain verified. Existing tests also
   assert cleared resource fields, idempotent close, and manager
-  pipe/supervisor cleanup. A comprehensive native handle-leak check remains
-  open.
+  pipe/supervisor cleanup. The bundled-ConPTY spike measured no handle growth
+  over 10 start/close cycles with `OpenConsole.exe`, versus +16 with inbox
+  ConPTY, so the residue is inbox console-host behavior; see
+  [`02-conpty-integration.md`](02-conpty-integration.md#bundled-conpty).
 
 ## Recommended next actions
 
-1. Run the bundled-ConPTY spike (decided): load a newer `conpty.dll` +
-   `OpenConsole.exe` behind a loader switch in `internal/conpty`, keep inbox
-   ConPTY as fallback, and compare both using the terminal fixture for
-   mouse-mode passthrough (`CSI ? 1000 h`/`CSI ? 1006 h`), device-status and
-   cursor-report delivery (hypothesis: inbox ConPTY answers them itself), and
-   the residual console-host process handle. Record license, Windows 10
-   support, and packaging. Adopt only if mouse modes pass through; do not
-   force xterm mouse tracking.
+1. Done: the bundled-ConPTY spike passed and was adopted. `conpty.StartPreferred`
+   uses `conpty.dll` + `OpenConsole.exe` from the executable directory (placed
+   by `scripts/fetch-conpty.ps1`) and falls back to inbox ConPTY. Run the
+   opt-in comparison with `TAUSHELL_CONPTY_SPIKE_DLL=<abs path to conpty.dll>
+   go test -v -run TestConPTYBackendSpike ./internal/conpty`.
 2. Run user-authorized, non-destructive Claude Code and Copilot CLI hosted
    walkthroughs with the user's existing sign-ins: start, short read-only
    prompt, stop, restore/resume. Record Home-displayed executable path and
    version; TauShell uses the first PATH match.
-3. In parallel (decided), implement Step 3 tool metadata/version ranges,
-   capability probes, and confirmed winget installs, plus Step 4 session
-   templates with argv preview; neither depends on the terminal path.
+3. Done: Step 3 tool metadata/version ranges, capability probes, and
+   confirmed winget installs are implemented (`internal/tools`,
+   `cmd/taushell/tools_windows.go`, Home/Setup frontend). Done: Step 4
+   session templates with argv preview (`Adapter.DefaultLaunchArgs()`,
+   `GetSessionTemplate`/`PreviewSessionLaunch`); editable full-YAML preview
+   and offer-to-start-after-creation remain outstanding. Does not depend on
+   the terminal path.
    Missing-WebView2 verification is deferred to a manual Windows Sandbox/VM
    check; rely on registry-detection unit tests until then.
-4. Add Wails-host close integration coverage and complete the keyboard-only
-   workflow.
+4. Done: keyboard-only workflow and Wails-host close integration coverage.
    A mocked-browser smoke verified frontend Home/End and arrow-key tab
    selection, and a production-host smoke verified Home/Right switching after
    fixing tab-strip layout; native left/right overflow controls also scrolled
-   eight inert fixture tabs.
+   eight inert fixture tabs. A zero-click production smoke confirmed window
+   launch seeds tab-strip focus and a full keyboard walk can create a
+   session; multi-tab keyboard switching was verified using the
+   `terminal-fixture` binary as a harmless stand-in harness (no live
+   credentials). Automated real-window `OnBeforeClose` CI coverage is an
+   accepted limitation (see Known gaps) given current mocked-unit-test plus
+   manual-smoke coverage.
 5. Run `npm ci`, `npm run build`, `go test -count=1 ./...`, `go vet ./...`, and
    a production-tagged build after code changes. Re-run the executable startup
    smoke test when changing host/runtime code.

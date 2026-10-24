@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { app, Session, SessionEvent, SystemStatus } from "./bridge";
+import { app, InstallResult, LaunchPreview, Session, SessionEvent, SystemStatus, ToolStatus } from "./bridge";
 import "./style.css";
 
 type Tab = { id: string; name: string };
@@ -92,13 +92,16 @@ function App() {
   const [closeRequest, setCloseRequest] = useState<Session | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [installing, setInstalling] = useState("");
+  const [toolNotice, setToolNotice] = useState<InstallResult | null>(null);
+  const [setupDismissed, setSetupDismissed] = useState(false);
   const showError = (source: string, failure: unknown) => setError(reportFrontendFailure(source, failure));
 
-  const refresh = async () => {
+  const refresh = async (redetectTools = false) => {
     try {
       const [nextSessions, nextStatus] = await Promise.all([
         app().GetSessions(),
-        status ? Promise.resolve(status) : app().GetSystemStatus(),
+        status && !redetectTools ? Promise.resolve(status) : app().GetSystemStatus(),
       ]);
       setSessions(nextSessions);
       setBackgroundTerminalIds((current) => current.filter((id) =>
@@ -248,13 +251,32 @@ function App() {
     }
   };
   const terminalIds = Array.from(new Set([...tabs.map((tab) => tab.id), ...backgroundTerminalIds]));
+  const installTool = async (tool: ToolStatus) => {
+    setInstalling(tool.id);
+    setToolNotice(null);
+    try {
+      const result = await app().InstallTool(tool.id);
+      setToolNotice(result);
+      if (result.outcome === "installed" || result.outcome === "failed") await refresh(true);
+    } catch (err) {
+      showError("ui.install-tool", err);
+    } finally {
+      setInstalling("");
+    }
+  };
+  const openSetupPage = (tool: ToolStatus) => {
+    app().OpenToolSetupPage(tool.id).catch((err) => showError("ui.open-setup-page", err));
+  };
+  const powershell = status?.tools.find((tool) => tool.id === "powershell");
+  const showSetup = Boolean(powershell && !toolUsable(powershell) && !setupDismissed);
+  const toolActions = { status, installing, notice: toolNotice, onInstall: (tool: ToolStatus) => void installTool(tool), onOpenSetup: openSetupPage, onDismissNotice: () => setToolNotice(null) };
 
   return (
     <div className="app">
       <header className="topbar">
         <div className="brand"><span className="brand-mark">T</span><span>TauShell</span></div>
         <div className="window-caption">Local AI sessions</div>
-        <button className="icon-button" title="Refresh" onClick={() => void refresh()}>R</button>
+        <button className="icon-button" title="Refresh sessions and re-detect tools" onClick={() => void refresh(true)}>R</button>
       </header>
       <div className="workspace">
         <aside className="sidebar">
@@ -305,7 +327,8 @@ function App() {
           {error && <div className="error-banner">{error}<button onClick={() => setError("")}>Dismiss</button></div>}
           <section className="main-content">
             <div id="panel-home" className={`home-container ${selected ? "hidden" : ""}`} role="tabpanel" aria-labelledby="tab-home" tabIndex={0}>
-              <Home sessions={sessions} status={status} busy={busy} onNew={() => setDialogOpen(true)} onLaunch={launch} />
+              {showSetup && powershell ? <Setup powershell={powershell} actions={toolActions} onRecheck={() => void refresh(true)} onContinue={() => setSetupDismissed(true)} /> :
+                <Home sessions={sessions} status={status} busy={busy} tools={toolActions} onNew={() => setDialogOpen(true)} onLaunch={launch} />}
             </div>
             {terminalIds.map((id) => {
               const tab = tabs.find((current) => current.id === id);
@@ -338,10 +361,11 @@ function App() {
   );
 }
 
-function Home({ sessions, status, busy, onNew, onLaunch }: {
+function Home({ sessions, status, busy, tools, onNew, onLaunch }: {
   sessions: Session[];
   status: SystemStatus | null;
   busy: boolean;
+  tools: ToolActions;
   onNew: () => void;
   onLaunch: (session: Session, mode: "start" | "restore" | "fresh") => void;
 }) {
@@ -365,9 +389,10 @@ function Home({ sessions, status, busy, onNew, onLaunch }: {
                 <button className="primary-button" disabled={busy} onClick={() => onLaunch(session, "start")}>Start</button>}
           </div>
         </article>)}</div>}
-      <div className="tools-panel"><div><h2>Installed tools</h2><p className="muted">Detected on this machine</p></div><div className="tool-list">
-        <ToolRow name="PowerShell 7" tool={status?.powershell} /><ToolRow name="Claude Code" tool={status?.claudeCode} /><ToolRow name="GitHub Copilot CLI" tool={status?.copilotCLI} />
+      <div className="tools-panel"><div><h2>Installed tools</h2><p className="muted">Detected on this machine{status && !status.wingetAvailable && " \u2014 winget is unavailable; Install uses vendor setup links instead"}</p></div><div className="tool-list">
+        {status?.tools.map((tool) => <ToolRow key={tool.id} tool={tool} actions={tools} />) ?? <p className="muted">Checking...</p>}
       </div></div>
+      {toolNoticeBanner(tools)}
       {status?.diagnosticsLogPath && <p className="muted diagnostic-path">Diagnostic log: <code>{status.diagnosticsLogPath}</code></p>}
     </div>
     {freshSession && <div className="modal-backdrop"><div className="modal confirm-modal">
@@ -379,9 +404,65 @@ function Home({ sessions, status, busy, onNew, onLaunch }: {
   );
 }
 
-function ToolRow({ name, tool }: { name: string; tool?: SystemStatus["powershell"] }) {
-  const label = tool?.installed ? tool.version || "Installed" : tool ? "Not found" : "Checking...";
-  return <div className="tool-row" title={tool?.error}><span className={`status-dot ${tool?.installed ? "online" : ""}`} /><strong>{name}</strong><span>{label}</span>{tool?.executablePath && <code className="tool-path">{tool.executablePath}</code>}</div>;
+type ToolActions = {
+  status: SystemStatus | null;
+  installing: string;
+  notice: InstallResult | null;
+  onInstall: (tool: ToolStatus) => void;
+  onOpenSetup: (tool: ToolStatus) => void;
+  onDismissNotice: () => void;
+};
+
+function toolUsable(tool: ToolStatus): boolean {
+  return tool.installed && !tool.error && tool.support !== "below-minimum" &&
+    (tool.capabilities ?? []).every((capability) => capability.available);
+}
+
+function toolNoticeBanner(tools: ToolActions) {
+  if (!tools.notice) return null;
+  const tone = tools.notice.outcome === "installed" ? "notice-success" : tools.notice.outcome === "failed" ? "notice-error" : "notice-info";
+  return <div className={`tool-notice ${tone}`}>
+    <span>{tools.notice.message}</span>
+    {tools.notice.vendorUrl && <a href={tools.notice.vendorUrl} target="_blank" rel="noreferrer">Open vendor setup page</a>}
+    <button className="icon-button" onClick={tools.onDismissNotice}>x</button>
+  </div>;
+}
+
+function Setup({ powershell, actions, onRecheck, onContinue }: {
+  powershell: ToolStatus;
+  actions: ToolActions;
+  onRecheck: () => void;
+  onContinue: () => void;
+}) {
+  return <div className="home setup-screen">
+    <div className="hero"><div><p className="eyebrow">FIRST-RUN SETUP</p><h1>PowerShell 7 is required.</h1>
+      <p className="muted">TauShell hosts every session through PowerShell 7. Install it, then re-check to continue.</p></div></div>
+    <div className="tools-panel"><div className="tool-list"><ToolRow tool={powershell} actions={actions} /></div></div>
+    {toolNoticeBanner(actions)}
+    <div className="modal-actions"><button className="secondary-button" onClick={onRecheck}>Re-check</button>
+      <button className="text-button" onClick={onContinue}>Continue without PowerShell 7</button></div>
+  </div>;
+}
+
+function ToolRow({ tool, actions }: { tool: ToolStatus; actions: ToolActions }) {
+  const usable = toolUsable(tool);
+  const label = tool.installed ? tool.version || "Installed" : "Not found";
+  const supportNote = tool.installed && tool.support === "below-minimum" ? `below minimum ${tool.minimum}` :
+    tool.installed && tool.support === "untested" ? `untested (tested: ${tool.testedRange})` : "";
+  const unavailableCapabilities = (tool.capabilities ?? []).filter((capability) => !capability.available);
+  const installing = actions.installing === tool.id;
+  const title = [tool.error, ...(tool.warnings ?? [])].filter(Boolean).join("\n");
+  return <div className="tool-row" title={title || undefined}>
+    <span className={`status-dot ${usable ? "online" : tool.installed ? "warn" : ""}`} />
+    <strong>{tool.name}</strong>
+    <span>{label}{supportNote && <span className="tool-support-note"> ({supportNote})</span>}</span>
+    {tool.executablePath && <code className="tool-path">{tool.executablePath}</code>}
+    {unavailableCapabilities.length > 0 && <span className="tool-warning">missing: {unavailableCapabilities.map((capability) => capability.option).join(", ")}</span>}
+    {!tool.installed && <button className="secondary-button tool-action" disabled={installing} onClick={() => actions.onInstall(tool)}>
+      {installing ? "Installing..." : tool.install.wingetId && actions.status?.wingetAvailable ? "Install" : "Setup instructions"}
+    </button>}
+    {!tool.installed && <button className="text-button" onClick={() => actions.onOpenSetup(tool)}>Vendor page</button>}
+  </div>;
 }
 
 const terminalInstances = new Map<string, Terminal>();
@@ -508,6 +589,10 @@ function TerminalPane({ session, visible, busy, onLaunch, onError }: {
   return <div className="terminal-view"><div className="terminal-toolbar"><span className={`status-dot ${session.runningHere ? "online" : ""}`} />{session.id} | {session.tool} | {session.workingDir}<span className="terminal-status">{session.runningHere ? "Connected" : session.status || "Not started"}</span>{!session.runningHere && <button className="primary-button terminal-action" disabled={busy} onClick={() => onLaunch(session, session.hasResumeId ? "restore" : "start")}>{session.hasResumeId ? "Restore" : "Start"}</button>}</div><div className="terminal-container" ref={container} /></div>;
 }
 
+function parseLaunchArgs(text: string): string[] {
+  return text.split(/\r?\n/).map((arg) => arg.trim()).filter(Boolean);
+}
+
 function CreateSession({ recentFolders, onClose, onCreated, onError }: {
   recentFolders: string[];
   onClose: () => void;
@@ -518,15 +603,52 @@ function CreateSession({ recentFolders, onClose, onCreated, onError }: {
   const [tool, setTool] = useState<Session["tool"]>("claude-code");
   const [workingDir, setWorkingDir] = useState("");
   const [launchArgs, setLaunchArgs] = useState("");
+  const [templateText, setTemplateText] = useState<string | null>(null);
+  const [preview, setPreview] = useState<LaunchPreview | null>(null);
+  const [previewError, setPreviewError] = useState("");
   const [saving, setSaving] = useState(false);
   const chooseDirectory = async () => {
     try { const path = await app().SelectWorkingDirectory(); if (path) setWorkingDir(path); } catch (err) { onError(err); }
   };
+  // Prefill with the harness-specific template on first load and whenever
+  // the user switches tool while the field still matches the prior
+  // template verbatim (i.e. they have not customized it yet).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const template = await app().GetSessionTemplate(tool);
+        if (cancelled) return;
+        const text = template.launchArgs.join("\n");
+        setLaunchArgs((current) => (templateText === null || current === templateText ? text : current));
+        setTemplateText(text);
+      } catch (err) { if (!cancelled) onError(err); }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tool]);
+  // Preview the effective executable and discrete argument list before
+  // saving, including any launch argument TauShell cannot verify against
+  // the installed harness's own --help output.
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      (async () => {
+        try {
+          const result = await app().PreviewSessionLaunch(tool, parseLaunchArgs(launchArgs));
+          if (!cancelled) { setPreview(result); setPreviewError(""); }
+        } catch (err) {
+          if (!cancelled) { setPreview(null); setPreviewError(err instanceof Error ? err.message : String(err)); }
+        }
+      })();
+    }, 300);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [tool, launchArgs]);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setSaving(true);
     try {
-      const session = await app().CreateSession(name, tool, workingDir, launchArgs.split(/\r?\n/).map((arg) => arg.trim()).filter(Boolean));
+      const session = await app().CreateSession(name, tool, workingDir, parseLaunchArgs(launchArgs));
       onCreated(session);
     } catch (err) { onError(err); } finally { setSaving(false); }
   };
@@ -536,11 +658,19 @@ function CreateSession({ recentFolders, onClose, onCreated, onError }: {
       <label>Session name<input required autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. API refactor" /></label>
       <label>AI harness<select value={tool} onChange={(event) => setTool(event.target.value as Session["tool"])}><option value="claude-code">Claude Code</option><option value="copilot-cli">GitHub Copilot CLI</option></select></label>
       <label>Project folder<div className="folder-row"><input required list="recent-project-folders" value={workingDir} onChange={(event) => setWorkingDir(event.target.value)} placeholder="Choose a local project folder" /><datalist id="recent-project-folders">{recentFolders.map((folder) => <option key={folder} value={folder} />)}</datalist><button type="button" className="secondary-button" onClick={() => void chooseDirectory()}>Browse</button></div></label>
-      <label>Additional launch arguments <span className="optional">(optional, one per line)</span><textarea rows={3} value={launchArgs} onChange={(event) => setLaunchArgs(event.target.value)} placeholder="--model&#10;sonnet" /></label>
+      <label>Launch arguments <span className="optional">(editable template, one per line)</span><textarea rows={3} value={launchArgs} onChange={(event) => setLaunchArgs(event.target.value)} placeholder="--model&#10;sonnet" /></label>
+      <div className="launch-preview">
+        {previewError ? <p className="tool-warning">{previewError}</p> : preview && <>
+          <p className="muted">Will run:</p>
+          <code className="launch-command">{[preview.executable, ...preview.arguments].join(" ")}</code>
+          {preview.warnings.map((warning) => <p key={warning} className="tool-warning">{warning}</p>)}
+        </>}
+      </div>
       <p className="form-note">A YAML session definition is saved locally. No session starts until you choose Start.</p>
       <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button" disabled={saving}>{saving ? "Creating..." : "Create session"}</button></div>
     </form>
   </div></div>;
 }
+
 
 createRoot(document.getElementById("root")!).render(<AppErrorBoundary><App /></AppErrorBoundary>);

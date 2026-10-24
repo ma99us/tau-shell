@@ -11,7 +11,7 @@ PowerShell and harnesses must continue to behave as interactive console applicat
 ## Phase 1 constraints
 
 - Target Windows 10 (the current development system is Windows 10 22H2, build 19045) and PowerShell 7.
-- Use the Windows ConPTY APIs; do not replace PowerShell or depend on a custom shell.
+- Use the Windows ConPTY APIs; do not replace PowerShell or depend on a custom shell. Prefer the bundled `Microsoft.Windows.Console.ConPTY` (`conpty.dll` + `OpenConsole.exe` next to `taushell.exe`) and fall back to inbox kernel32 ConPTY when it is absent or fails to load; see "Bundled ConPTY" below.
 - Keep the host ends of the input/output pipes alive for the session and close the ConPTY-side ends after child process creation. Drain output concurrently with input handling to avoid pipe-buffer deadlocks.
 - Apply UTF-8 console encodings and code page 65001 inside the managed PowerShell process, not as a machine-wide setting. Restore any host console modes/code pages changed by the CLI on exit.
 - Forward keyboard input, including Ctrl+C, and propagate local terminal size changes using `ResizePseudoConsole`.
@@ -117,3 +117,41 @@ are test-only metadata and do not include the input bytes themselves.
 This fixture tests the WebView2/xterm/bridge/PowerShell/ConPTY transport; it
 does not test either real harness's UI, CLI compatibility, authentication, or
 conversation restore. Do not count it as a provider walkthrough.
+
+## Bundled ConPTY
+
+The findings above are inbox Windows 10 ConPTY behavior. A spike compared it
+with `Microsoft.Windows.Console.ConPTY` 1.25.260930003 (MIT, Microsoft-signed,
+documented for Windows 10 build 17763+), loaded through `StartWithLibrary` in
+`internal/conpty`. `TestConPTYBackendSpike` (opt-in through
+`TAUSHELL_CONPTY_SPIKE_DLL`) drives the terminal fixture directly, replies to
+queries the way xterm.js would, injects SGR mouse reports, and counts process
+handles across ten start/close cycles. On Windows 10 build 19045:
+
+| Behavior | Inbox ConPTY | Bundled ConPTY |
+|---|---|---|
+| `CSI ? 1000 h` / `CSI ? 1006 h` reach the host | No (consumed) | Yes |
+| SGR mouse input reaches the fixture | No | Yes |
+| Cursor-position query (`CSI 6 n`) | Answered by ConPTY with its own position; never reaches the host | Forwarded; the host reply reaches the fixture |
+| Device-status query (`CSI 5 n`) | Forwarded, but the host reply is swallowed | Forwarded; the host reply reaches the fixture |
+| Handle-count delta after 10 cycles | +16 (exited console-host handles) | 0 |
+
+This confirms the hypothesis that inbox ConPTY answers cursor reports itself
+and explains the earlier device-status loss. It also resolves the residual
+per-cycle console-host handle: it does not occur with the bundled host.
+
+TauShell therefore adopts the bundled ConPTY. `conpty.StartPreferred` uses
+`conpty.dll` when both it and `OpenConsole.exe` are present in the executable's
+directory and falls back to inbox ConPTY otherwise. A present bundle that fails
+to load is reported as a diagnostics warning, not silently ignored. Both the
+desktop session manager and the CLI terminal host log the selected backend.
+`scripts/fetch-conpty.ps1` places the pinned, hash- and signature-verified x64
+files next to the build; they are not committed.
+
+A production Wails smoke with the bundled files and an isolated profile logged
+`ConPTY backend selected backend=bundled`. The startup device-status reply from
+xterm.js reached the fixture, and native clicks in the WebView terminal reached
+the fixture as SGR press/release reports. After the app process was stopped,
+no `OpenConsole.exe`, PowerShell, or fixture processes remained. xterm.js now
+enables mouse tracking only when the harness requests it, so normal selection
+is unchanged for applications that do not.

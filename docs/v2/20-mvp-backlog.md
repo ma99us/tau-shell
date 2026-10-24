@@ -3,17 +3,17 @@
 ## Phase 1: local Windows desktop GUI (TUI removed)
 
 - Completed migration: the Bubble Tea TUI and its TUI-only dependencies were removed. `list`, `start <session-id>`, and explicit `restore <session-id>` remain available as CLI operations; no TUI fallback is planned.
-- In progress: a Go/Wails WebView2 host, bundled React/xterm.js launcher, local tabs, session creation, tool inventory, session lifecycle bridge, and shutdown confirmation are implemented. The host/window/terminal and both supported harnesses have not passed the end-to-end Windows 10 feasibility gate. See [`docs/v1/08-UI-Design.md`](../v1/08-UI-Design.md) and [`docs/v1/09-UI-Implementation-Plan.md`](../v1/09-UI-Implementation-Plan.md).
+- In progress: a Go/Wails WebView2 host, bundled React/xterm.js launcher, local tabs, session creation, tool inventory, session lifecycle bridge, and shutdown confirmation are implemented. A user-authorized, live-credential walkthrough exercised both supported harnesses (Claude Code, GitHub Copilot CLI) through the real hosted terminal on this Windows 10 machine; the remaining feasibility-gate gap is a clean environment without WebView2 installed. See [`docs/v1/08-UI-Design.md`](../v1/08-UI-Design.md) and [`docs/v1/09-UI-Implementation-Plan.md`](../v1/09-UI-Implementation-Plan.md).
 - Security hardening: the Windows host now cancels top-level WebView2 navigations outside the bundled `http://wails.localhost` origin before they load. Wails' bound-method origin validation remains a separate defense.
 - Session-manager lifecycle coverage is implemented for concurrent independent fake sessions, input/output/resize, process exit, failed restore preserving the resume ID, graceful and forced stop, and cleanup. This does not cover a real hosted xterm or harness.
-- Implemented basic executable and version detection for PowerShell 7, Claude Code, and Copilot CLI; Home shows the resolved executable path so PATH precedence is visible. Planned: minimum/tested ranges, required capability probes, out-of-range warnings, and confirmed setup flows. Do not silently pin or downgrade.
-- Implemented schema: strict YAML accepts ordered harness `launch_args`; managed session/resume arguments cannot be overridden. The UI currently accepts additional ordered arguments while creating a session; generated per-harness templates and a full editable configuration preview remain outstanding.
-- Planned setup: WebView2 and PowerShell 7 are TauShell host prerequisites; missing harnesses do not block Home. winget is optional; installation requires confirmation and falls back to official setup links.
+- Implemented executable detection, resolved version parsing, minimum/tested-version classification, and per-adapter capability probes (via `--help` option matching) for PowerShell 7, Claude Code, and Copilot CLI; Home shows each tool's resolved executable path, version, support classification, and any unmet capability. A first-run Setup screen blocks on a missing/unusable PowerShell 7 with a "continue without" escape hatch. Do not silently pin or downgrade.
+- Implemented schema: strict YAML accepts ordered harness `launch_args`; managed session/resume arguments cannot be overridden. Implemented generated per-harness launch-argument templates (Claude Code → `--dangerously-skip-permissions`, Copilot CLI → `--yolo`, via `Adapter.DefaultLaunchArgs()`), prefilled editably in the Create Session dialog without overwriting user edits, plus a live launch preview (`PreviewSessionLaunch`) showing the resolved executable and full effective argv and warning on options the installed harness does not support.
+- **Planned setup:** WebView2 and PowerShell 7 are TauShell host prerequisites; missing harnesses do not block Home. winget is optional; installation requires a confirmation dialog showing the exact winget command before it runs in a visible console (never silent/elevated), and the tool is always re-detected after winget exits — success is reported only once it becomes usable. When winget is unavailable or a tool has no winget package, Home instead links to the vendor's official setup page.
 - ConPTY host for PowerShell 7 on Windows 10, with automated Windows tests for output, exit codes, resizing, and child-process cleanup.
 - Implemented per-run JSON diagnostics at `%TEMP%\TauShell\taushell.log`; startup truncates the file and the UI exposes its location. Host/lifecycle, Wails, frontend runtime, React render, and operation failures are logged with sensitive payload boundaries. Prompt/terminal contents, credentials, and environment values are intentionally excluded.
 - Session registry and human-edited, per-session YAML definitions; keep mutable runtime state separate.
 - Start, interact with, stop, and explicitly restore TauShell-launched sessions.
-- Harness-specific launch/resume command construction for Claude Code and GitHub Copilot CLI uses explicit session IDs. A disposable Copilot CLI 1.0.100-1 provider-backed test confirmed conversation recovery via TauShell `restore`; Claude Code provider-backed recovery remains unverified.
+- Harness-specific launch/resume command construction for Claude Code and GitHub Copilot CLI uses explicit session IDs. A disposable Copilot CLI 1.0.100-1 provider-backed test confirmed conversation recovery via TauShell `restore`. A later live hosted-terminal walkthrough (real, user-authorized credentials) restoring a session that had zero real conversation turns found Copilot CLI rejects `--resume=<uuid>` (`Error: No session, task, or name matched`), and TauShell correctly reports this as a failed restore rather than a false success; most likely Copilot CLI never registers a turn-less session as resumable, consistent with the earlier CLI-level confirmation, but this has not been re-confirmed against a hosted session with at least one real turn. Claude Code's restore re-renders its first-run wizard when the original session never completed login, which is expected; a real completed-login Claude Code restore remains unverified.
 - Confirm before application shutdown when sessions are running; keep the Wails close callback nonblocking while confirmation and stopping run asynchronously. Attempt graceful interruption, then force-terminate any remaining processes in TauShell's job after a brief wait. A production-window smoke with an inert fixture verified that No leaves the app and session running and Yes closes the app after the fixture process exits; the fixture's PowerShell process exited with code 1, so graceful-stop success and forced-termination reporting still need separate verification.
 - Automated session-manager tests cover concurrent session I/O/resize, process exit, failed restore, graceful/forced stop, and inherited child cleanup. Shutdown tests also cover supervisor completion, idempotent close, rejecting starts after shutdown, retry after stop timeout or database-close failure, and keeping the window open when session checks or forced-stop reporting fail. Detached shell/broker launches such as PowerShell `Start-Process` can escape the ConPTY job; by design, those processes are unmanaged and are not subject to ancestry-based termination.
 - Windows 10 terminal compatibility: CLI and hosted sessions temporarily use UTF-8 console code pages and restore prior settings; session hosting also enables/restores virtual-terminal output mode. ConPTY tests cover supplementary-plane emoji input, Unicode/emoji output bytes, ANSI output, resizing, and process cleanup. The desktop embedded-terminal path needs separate end-to-end verification; TauShell must not rewrite arbitrary harness output.
@@ -25,21 +25,12 @@
   replies, split UTF-8 output, typed input, explicit exit, and live resize
   through the production WebView2, xterm.js, PowerShell 7, and ConPTY path.
   The fixture's explicit exit restored the preserved primary-screen marker.
-  A post-start device-status response is now confirmed at the Go bridge and
-  successfully written to ConPTY, but no corresponding input chunk reaches
-  the fixture. A post-start cursor query produces a fixture-visible
-  seven-byte response, although the bridge diagnostic did not identify its
-  source. Payload-free production diagnostics confirm native pointer events
-  reach the terminal container, but xterm's effective mouse-tracking mode
-  remains `none`. A direct ConPTY probe showed Windows ConPTY consumes
-  `CSI ? 1000 h` and `CSI ? 1006 h` before xterm receives them; directly
-  enabling tracking in xterm caused SGR mouse input to reach the Go bridge.
-  Do not force tracking unconditionally because it changes normal terminal
-  selection/input behavior. **Decided next spike:** evaluate a bundled newer
-  ConPTY (`conpty.dll` + `OpenConsole.exe`) against inbox ConPTY for mouse-mode
-  passthrough, device-status/cursor-report delivery (hypothesis: inbox ConPTY
-  answers these itself), and the per-cycle console-host handle; adopt only if
-  mouse modes pass through. Then verify these behaviors and conduct
+  Inbox Windows 10 ConPTY consumed mouse-mode requests, answered cursor
+  reports itself, and swallowed device-status replies. The bundled-ConPTY
+  spike passed: `Microsoft.Windows.Console.ConPTY` forwards all of these, and
+  a production smoke delivered real WebView clicks and the device-status reply
+  to the fixture. TauShell now prefers the bundled ConPTY
+  (`scripts/fetch-conpty.ps1`) and falls back to inbox. Remaining: conduct
   user-authorized non-destructive Claude Code and Copilot CLI hosted-terminal
   walkthroughs using the user's existing sign-ins.
 - **Host prerequisite:** registry-detection unit tests cover Phase 1; the
@@ -47,9 +38,13 @@
   a manual Windows Sandbox/VM check (the current machine has WebView2).
 - **Tool discovery/setup** and **session authoring** proceed in parallel with
   the feasibility gate (decided); they do not depend on the terminal path.
-- **Tool discovery/setup:** declare minimum and tested version ranges, probe
-  required CLI capabilities, add confirmed winget installs, and provide
-  official vendor-link fallbacks.
+- **Tool discovery/setup: done.** `internal/tools` declares minimum/tested
+  version ranges and per-adapter capability lists, probes installed versions
+  and `--help` output, and `cmd/taushell` wires confirmed winget installs
+  (visible console, re-detection-gated success) with official vendor-link
+  fallbacks when winget is absent or a tool has no package. Verified via unit
+  tests and a production Wails smoke of the Home/Setup rendering; a live
+  winget install run itself was not exercised.
 - **Session authoring:** generate harness-specific editable YAML defaults,
   preview and validate effective discrete argv before saving, and offer to
   start after creation.
@@ -61,22 +56,28 @@
   a production-host smoke found and fixed the missing tab-strip flex layout,
   then verified Home/Right focus and selection switching between Home and one
   stopped fixture tab. With eight inert fixture tabs open, native left/right
-  controls scrolled through the overflow. A mouse click seeded focus, so a
-  complete keyboard-only walkthrough remains unverified. Basic accessible tab
+  controls scrolled through the overflow. A complete keyboard-only
+  walkthrough (zero mouse clicks) is now verified: window launch seeds
+  tab-strip focus, `Tab`/`Enter`/typed text can create a session end to end,
+  and multi-tab switching between Home and a running session tab works via
+  the left-sidebar list entries, verified with the harmless `terminal-fixture`
+  binary standing in for a real harness. Basic accessible tab
   navigation and horizontal overflow controls are implemented in the frontend.
   The session form suggests up to five recently used folders, persisted in
   WebView local storage.
 - **Shutdown/recovery:** a repeated native test verifies process, job, and
   input/output pipe handles are invalidated after ConPTY close; the opaque
   pseudoconsole is checked through successful close and cleared state. Wails-
-  host close integration tests remain open. The comprehensive handle-leak
-  item stays open: the residual per-cycle handle to the exited console host
-  is tracked in the bundled-ConPTY spike. Broaden stale-runtime reconciliation beyond the tested
+  host close integration tests remain open. The per-cycle handle to the
+  exited console host is inbox-ConPTY behavior; the bundled ConPTY showed no
+  handle growth over 10 cycles. Broaden stale-runtime reconciliation beyond the tested
   abandoned-starting, recent-starting, missing/exited-PID, and
   live-other-window cases.
-- **Harness compatibility:** complete provider-backed Claude Code and Copilot
-  CLI hosted-terminal walkthroughs; the current Copilot restore evidence is
-  CLI/provider-level only, not hosted xterm coverage.
+- **Harness compatibility:** provider-backed Claude Code and Copilot CLI
+  hosted-terminal walkthroughs are done (both render correctly end to end,
+  user-authorized, live credentials); hosted-terminal restore for a session
+  with at least one real conversation turn (as opposed to zero-turn sessions)
+  remains unverified for both harnesses.
 
 The detailed step dependencies and acceptance criteria remain in
 [`docs/v1/09-UI-Implementation-Plan.md`](../v1/09-UI-Implementation-Plan.md).

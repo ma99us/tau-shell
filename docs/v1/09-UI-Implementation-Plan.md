@@ -80,32 +80,62 @@ and tests demonstrated to be UI-independent and correct for the GUI.
   reaching xterm; a temporary xterm-side mode enable forwarded SGR reports to
   the Go bridge. An isolated browser-side xterm check also emitted the
   expected device-status and SGR mouse responses.
-  Missing-runtime behavior and Claude Code/Copilot CLI hosted-terminal
-  walkthroughs remain unverified.
+  The bundled-ConPTY spike resolved these protocol gaps: with
+  `Microsoft.Windows.Console.ConPTY` next to the executable, the production
+  host selected the bundled backend, xterm's device-status reply reached the
+  fixture, and native WebView clicks reached it as SGR reports. TauShell now
+  prefers the bundled ConPTY and falls back to inbox ConPTY.
+  Missing-runtime behavior (deferred to a manual Sandbox/VM check) and Claude
+  Code/Copilot CLI hosted-terminal walkthroughs remain unverified.
 - **Step 2 (host and bridge): partial.** The no-argument Windows entry point,
   bundled local asset server, WebView2 registry precheck, typed bound methods,
   standalone CLI path, and top-level local-origin navigation guard exist.
   The external navigation denial is smoke-verified; untrusted-origin bridge
   dispatch has not been separately exercised.
-- **Step 3 (discovery/install): partial.** Home displays executable paths and
-  `--version` output for PowerShell 7, Claude Code, and Copilot CLI, making
-  PATH precedence visible. Minimum/tested ranges, capability probes, setup
-  flows, winget consent, and installation are not implemented.
-- **Step 4 (session manager): foundation implemented.** Process lifecycle has
-  been extracted from the TUI, and start/restore/fresh, input, resize, output
-  events, and bounded stop operations are wired. Windows fake-process tests
-  cover concurrent independent I/O/resize, process exit, restore failure,
-  graceful/forced shutdown, cleanup, supervisor and pipe-handle completion,
-  and retry after stop or database-close failure. Recovery tests cover an
-  abandoned startup, recent starting state, running records with missing or
-  exited process IDs, and a live session owned by another window. App-close
-  error handling now keeps the window open when session checks or
-  forced-shutdown reporting fail. Process tests verify
-  explicit ConPTY resource clearing and idempotent close. A repeated native
-  check confirms process, job, and input/output pipe handles are invalidated
-  after close; the opaque pseudoconsole handle remains covered by successful
-  `ClosePseudoConsole` and cleared state. Wails-host close integration and a
-  comprehensive native handle-leak check remain open.
+- **Step 3 (discovery/install): done.** `internal/tools` detects PowerShell 7,
+  Claude Code, and Copilot CLI (executable path, resolved version, tested/
+  minimum-version classification, and per-adapter capability probes via
+  `--help` option matching). Home renders each tool's status, executable path,
+  and any unmet capability or below-minimum/untested warning. A first-run
+  Setup screen blocks on a missing/unusable PowerShell 7 with a "continue
+  without" escape hatch. Install uses a user-confirmed native dialog showing
+  the exact winget command before running it in a visible console window
+  (never silent/elevated); after winget exits, the tool is always re-detected
+  and success is reported only if it becomes usable. When winget is
+  unavailable or a tool has no winget package, Home instead links to the
+  vendor's official setup page. Verified on the dev machine (all three tools
+  detected as tested/usable) and via a production Wails smoke test of the new
+  Home/Setup rendering. The Install-button winget flow itself was exercised
+  only through its declined-confirmation and concurrency-guard paths in
+  automated tests, not a live winget run.
+- **Step 4 (session manager): foundation implemented; templates/preview
+  done.** Process lifecycle has been extracted from the TUI, and
+  start/restore/fresh, input, resize, output events, and bounded stop
+  operations are wired. Windows fake-process tests cover concurrent
+  independent I/O/resize, process exit, restore failure, graceful/forced
+  shutdown, cleanup, supervisor and pipe-handle completion, and retry after
+  stop or database-close failure. Recovery tests cover an abandoned startup,
+  recent starting state, running records with missing or exited process IDs,
+  and a live session owned by another window. App-close error handling now
+  keeps the window open when session checks or forced-shutdown reporting
+  fail. Process tests verify explicit ConPTY resource clearing and idempotent
+  close. A repeated native check confirms process, job, and input/output pipe
+  handles are invalidated after close; the opaque pseudoconsole handle
+  remains covered by successful `ClosePseudoConsole` and cleared state.
+  Per-harness session templates (Claude Code →
+  `--dangerously-skip-permissions`, Copilot CLI → `--yolo`) are now exposed
+  through `Adapter.DefaultLaunchArgs()`, prefilled (without clobbering user
+  edits) in the Create Session dialog, and backed by a live
+  `PreviewSessionLaunch` bound method that resolves the effective executable,
+  validates against reserved managed-identity arguments via the shared
+  `session.ValidateLaunchArgs`, probes unsupported options against the
+  harness's own `--help` output, and renders the full effective argv
+  (including the managed `--session-id` placeholder) before save. Verified
+  with new Go unit tests (`internal/harness`, `internal/session`,
+  `cmd/taushell`) and an isolated-profile UI smoke test confirming prefill,
+  live preview, and an unsupported-option warning for both harnesses. Wails
+  host close integration and a comprehensive native handle-leak check remain
+  open.
 - **Step 5 (launcher/tabs): partial.** Home, session creation, tabs, terminal
   panes, and stop-or-background tab close are implemented. Tab IDs and
   selection are stored in WebView local storage and are not auto-launched.
@@ -191,6 +221,13 @@ and tests demonstrated to be UI-independent and correct for the GUI.
   Windows 10 support, and packaging/signing implications. Adopt the bundled
   ConPTY only if it passes mouse modes through; otherwise record the evidence
   and return for a mouse-support decision. Do not force xterm mouse tracking.
+  **Result:** passed and adopted. Bundled ConPTY 1.25.260930003 forwarded
+  mouse-mode controls, SGR mouse input, and device-status/cursor-position
+  replies, and left no per-cycle handle residue; inbox ConPTY consumed mouse
+  modes, answered cursor reports itself, swallowed device-status replies, and
+  left +16 handles over 10 cycles. A production Wails smoke with the bundled
+  files delivered real WebView clicks and the startup device-status reply to
+  the fixture. See [`02-conpty-integration.md`](../v2/02-conpty-integration.md#bundled-conpty).
 - Verify how a missing WebView2 runtime is detected and handed off before the
   WebView can render. The bootstrap path must use a minimal native Windows
   surface or an equivalent independently available mechanism. **Decided:**
