@@ -1,10 +1,15 @@
 package harness
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/ma99us/tau-shell/internal/session"
 )
@@ -14,16 +19,31 @@ type Adapter interface {
 	FindExecutable() (string, error)
 	StartArgs(harnessSessionID string) []string
 	ResumeArgs(harnessSessionID string) []string
+	// CheckResume reports why the harness cannot resume harnessSessionID, or
+	// nil when it can or when that cannot be determined.
+	CheckResume(harnessSessionID string) error
 	// DefaultLaunchArgs returns the recommended editable launch_args preset
 	// for a new session with this harness. These are user-editable template
 	// defaults, not TauShell-managed identity arguments.
 	DefaultLaunchArgs() []string
+	// GracefulExit returns the ordered input steps that make the harness quit
+	// on its own so it can flush its conversation state, or nil when only a
+	// plain interrupt is known.
+	GracefulExit() []ExitStep
+}
+
+// ExitStep is one terminal input write followed by a pause.
+type ExitStep struct {
+	Input string
+	Pause time.Duration
 }
 
 type cliAdapter struct {
-	id          session.Harness
-	executable  string
-	defaultArgs []string
+	id           session.Harness
+	executable   string
+	defaultArgs  []string
+	resumeCheck  func(harnessSessionID string) error
+	gracefulExit []ExitStep
 }
 
 func For(id session.Harness) (Adapter, error) {
@@ -31,10 +51,44 @@ func For(id session.Harness) (Adapter, error) {
 	case session.ClaudeCode:
 		return cliAdapter{id: id, executable: "claude", defaultArgs: []string{"--dangerously-skip-permissions"}}, nil
 	case session.CopilotCLI:
-		return cliAdapter{id: id, executable: "copilot", defaultArgs: []string{"--yolo"}}, nil
+		return cliAdapter{id: id, executable: "copilot", defaultArgs: []string{"--yolo"}, resumeCheck: checkCopilotResume, gracefulExit: []ExitStep{
+			{Input: "\x03", Pause: 400 * time.Millisecond},
+			{Input: "/exit", Pause: 200 * time.Millisecond},
+			{Input: "\r"},
+		}}, nil
 	default:
 		return nil, fmt.Errorf("unsupported harness %q", id)
 	}
+}
+
+// checkCopilotResume relies on Copilot CLI's own session store: a session that
+// never had a conversation turn has no events.jsonl and cannot be resumed.
+// This is an undocumented internal layout, so it fails open when the store
+// itself is absent.
+func checkCopilotResume(harnessSessionID string) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	root := filepath.Join(home, ".copilot", "session-state")
+	return checkCopilotResumeIn(root, harnessSessionID)
+}
+
+func checkCopilotResumeIn(root, harnessSessionID string) error {
+	if _, err := os.Stat(root); err != nil {
+		return nil
+	}
+	if _, err := os.Stat(filepath.Join(root, harnessSessionID, "events.jsonl")); errors.Is(err, fs.ErrNotExist) {
+		return errors.New("GitHub Copilot CLI has no recorded conversation for this session yet; use Start fresh")
+	}
+	return nil
+}
+
+func (adapter cliAdapter) CheckResume(harnessSessionID string) error {
+	if adapter.resumeCheck == nil {
+		return nil
+	}
+	return adapter.resumeCheck(harnessSessionID)
 }
 
 func (adapter cliAdapter) ID() session.Harness {
@@ -55,6 +109,10 @@ func (adapter cliAdapter) StartArgs(harnessSessionID string) []string {
 
 func (adapter cliAdapter) ResumeArgs(harnessSessionID string) []string {
 	return []string{"--resume", harnessSessionID}
+}
+
+func (adapter cliAdapter) GracefulExit() []ExitStep {
+	return append([]ExitStep(nil), adapter.gracefulExit...)
 }
 
 func (adapter cliAdapter) DefaultLaunchArgs() []string {

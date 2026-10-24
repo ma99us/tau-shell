@@ -55,6 +55,11 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { failed: bool
   }
 }
 
+// A resize can race with session stop; that is not a user-facing failure.
+function isStoppedSessionError(error: unknown): boolean {
+  return errorDetails(error).message.includes("is not running");
+}
+
 function readRecentFolders(): string[] {
   try {
     const parsed: unknown = JSON.parse(localStorage.getItem(recentFoldersKey) ?? "[]");
@@ -90,6 +95,7 @@ function App() {
   const tabListRef = useRef<HTMLDivElement>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [closeRequest, setCloseRequest] = useState<Session | null>(null);
+  const [deleteRequest, setDeleteRequest] = useState<Session | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [installing, setInstalling] = useState("");
@@ -250,6 +256,20 @@ function App() {
       setBusy(false);
     }
   };
+  const deleteSession = async (session: Session) => {
+    setBusy(true);
+    try {
+      await app().DeleteSession(session.id);
+      removeTab(session.id);
+      setDeleteRequest(null);
+      await refresh();
+    } catch (err) {
+      setDeleteRequest(null);
+      showError("ui.delete-session", err);
+    } finally {
+      setBusy(false);
+    }
+  };
   const terminalIds = Array.from(new Set([...tabs.map((tab) => tab.id), ...backgroundTerminalIds]));
   const installTool = async (tool: ToolStatus) => {
     setInstalling(tool.id);
@@ -283,10 +303,13 @@ function App() {
           <div className="sidebar-heading">SESSIONS <button className="add-button" onClick={() => setDialogOpen(true)}>+</button></div>
           <button className={`nav-row ${selected ? "" : "active"}`} onClick={() => setSelected("")}>Home</button>
           {sessions.map((session) => (
-            <button className={`session-row ${selected === session.id ? "active" : ""}`} key={session.id} onClick={() => openTab(session)}>
-              <span className={`status-dot ${session.runningHere ? "online" : ""}`} />
-              <span className="session-row-text"><strong>{session.name}</strong><small>{session.tool === "claude-code" ? "Claude Code" : "GitHub Copilot CLI"}</small></span>
-            </button>
+            <div className={`session-item ${selected === session.id ? "active" : ""}`} key={session.id}>
+              <button className={`session-row ${selected === session.id ? "active" : ""}`} onClick={() => openTab(session)}>
+                <span className={`status-dot ${session.runningHere ? "online" : ""}`} />
+                <span className="session-row-text"><strong>{session.name}</strong><small>{session.tool === "claude-code" ? "Claude Code" : "GitHub Copilot CLI"}</small></span>
+              </button>
+              <button className="delete-button" aria-label={`Delete ${session.name}`} title="Delete session" onClick={() => setDeleteRequest(session)}>x</button>
+            </div>
           ))}
           <div className="sidebar-foot">Local machine only</div>
         </aside>
@@ -328,7 +351,7 @@ function App() {
           <section className="main-content">
             <div id="panel-home" className={`home-container ${selected ? "hidden" : ""}`} role="tabpanel" aria-labelledby="tab-home" tabIndex={0}>
               {showSetup && powershell ? <Setup powershell={powershell} actions={toolActions} onRecheck={() => void refresh(true)} onContinue={() => setSetupDismissed(true)} /> :
-                <Home sessions={sessions} status={status} busy={busy} tools={toolActions} onNew={() => setDialogOpen(true)} onLaunch={launch} />}
+                <Home sessions={sessions} status={status} busy={busy} tools={toolActions} onNew={() => setDialogOpen(true)} onLaunch={launch} onDelete={setDeleteRequest} />}
             </div>
             {terminalIds.map((id) => {
               const tab = tabs.find((current) => current.id === id);
@@ -347,7 +370,18 @@ function App() {
         setSessions((current) => [...current, session]);
         setRecentFolders((current) => [session.workingDir, ...current.filter((folder) => folder.toLowerCase() !== session.workingDir.toLowerCase())].slice(0, 5));
         setDialogOpen(false);
+        void launch(session, "start");
       }} onError={(failure) => showError("ui.create-session", failure)} />}
+      {deleteRequest && <div className="modal-backdrop"><div className="modal confirm-modal">
+        <div className="modal-heading"><div><p className="eyebrow">DELETE SESSION</p><h2>Delete {deleteRequest.name}?</h2></div></div>
+        {deleteRequest.runningHere ?
+          <p className="muted">This session is running. Close its tab and stop it before deleting.</p> :
+          <p className="muted">This permanently removes the session definition and its saved resume ID from TauShell. {deleteRequest.hasResumeId && "Its harness conversation can no longer be restored by TauShell. "}Your project folder and the harness's own data are not touched. This cannot be undone.</p>}
+        <div className="modal-actions">
+          <button className="secondary-button" onClick={() => setDeleteRequest(null)}>Cancel</button>
+          <button className="danger-button" disabled={busy || deleteRequest.runningHere} onClick={() => void deleteSession(deleteRequest)}>{busy ? "Deleting..." : "Delete session"}</button>
+        </div>
+      </div></div>}
       {closeRequest && <div className="modal-backdrop"><div className="modal confirm-modal">
         <div className="modal-heading"><div><p className="eyebrow">CLOSE SESSION TAB</p><h2>{closeRequest.name} is running</h2></div></div>
         <p className="muted">Stop its PowerShell and harness process, or keep it running in the background?</p>
@@ -361,13 +395,14 @@ function App() {
   );
 }
 
-function Home({ sessions, status, busy, tools, onNew, onLaunch }: {
+function Home({ sessions, status, busy, tools, onNew, onLaunch, onDelete }: {
   sessions: Session[];
   status: SystemStatus | null;
   busy: boolean;
   tools: ToolActions;
   onNew: () => void;
   onLaunch: (session: Session, mode: "start" | "restore" | "fresh") => void;
+  onDelete: (session: Session) => void;
 }) {
   const [freshSession, setFreshSession] = useState<Session | null>(null);
   return (
@@ -377,15 +412,15 @@ function Home({ sessions, status, busy, tools, onNew, onLaunch }: {
         <div><p className="eyebrow">LOCAL SESSION WORKSPACE</p><h1>Pick up where you left off.</h1><p className="muted">Keep your PowerShell AI harness sessions organized, resumable, and close at hand.</p></div>
         <button className="primary-button" onClick={onNew}>Create session</button>
       </div>
-      <div className="section-title"><div><h2>Your sessions</h2><p className="muted">Sessions are never started automatically.</p></div></div>
+      <div className="section-title"><div><h2>Your sessions</h2><p className="muted">Existing sessions are never started automatically.</p></div></div>
       {sessions.length === 0 ? <div className="empty-card"><div className="empty-icon">+</div><h3>No sessions yet</h3><p>Create a session to connect a project folder to Claude Code or GitHub Copilot CLI.</p><button className="primary-button" onClick={onNew}>Create your first session</button></div> :
         <div className="session-grid">{sessions.map((session) => <article className="session-card" key={session.id}>
-          <div className="card-top"><div className="tool-icon">{session.tool === "claude-code" ? "C" : "G"}</div><span className={`state-pill ${session.runningHere ? "running" : ""}`}>{session.runningHere ? "Running" : session.status}</span></div>
+          <div className="card-top"><div className="tool-icon">{session.tool === "claude-code" ? "C" : "G"}</div><span className={`state-pill ${session.runningHere ? "running" : ""}`}>{session.runningHere ? "Running" : session.status}</span><button className="delete-button" aria-label={`Delete ${session.name}`} title="Delete session" onClick={() => onDelete(session)}>x</button></div>
           <h3>{session.name}</h3><p className="path">{session.workingDir}</p><p className="session-meta">{session.id} | {session.tool}</p>
           {session.lastError && <p className="card-error">{session.lastError}</p>}
           <div className="card-actions">
             {session.runningHere ? <button className="primary-button" onClick={() => onLaunch(session, "start")}>Open terminal</button> :
-              session.hasResumeId ? <><button className="primary-button" disabled={busy} onClick={() => onLaunch(session, "restore")}>Restore</button><button className="text-button" disabled={busy} onClick={() => setFreshSession(session)}>Start fresh</button></> :
+              session.hasResumeId ? <><button className="primary-button" disabled={busy || !!session.resumeNote} title={session.resumeNote} onClick={() => onLaunch(session, "restore")}>Restore</button><button className="text-button" disabled={busy} onClick={() => setFreshSession(session)}>Start fresh</button></> :
                 <button className="primary-button" disabled={busy} onClick={() => onLaunch(session, "start")}>Start</button>}
           </div>
         </article>)}</div>}
@@ -552,7 +587,7 @@ function TerminalPane({ session, visible, busy, onLaunch, onError }: {
     const resize = () => {
       try {
         fit.fit();
-        if (runningRef.current) void app().ResizeTerminal(session.id, terminal!.cols, terminal!.rows).catch((err) => onError(err));
+        if (runningRef.current) void app().ResizeTerminal(session.id, terminal!.cols, terminal!.rows).catch((err) => { if (!isStoppedSessionError(err)) onError(err); });
       } catch (error) {
         reportFrontendFailure("ui.terminal-layout", error);
       }
@@ -579,14 +614,14 @@ function TerminalPane({ session, visible, busy, onLaunch, onError }: {
     requestAnimationFrame(() => {
       try {
         fit.fit();
-        if (session.runningHere) void app().ResizeTerminal(session.id, terminal.cols, terminal.rows).catch((err) => onError(err));
+        if (session.runningHere) void app().ResizeTerminal(session.id, terminal.cols, terminal.rows).catch((err) => { if (!isStoppedSessionError(err)) onError(err); });
       } catch (error) {
         reportFrontendFailure("ui.terminal-layout", error);
       }
     });
   }, [visible, session?.id, session?.runningHere]);
   if (!session) return <div className="terminal-missing">Session configuration is unavailable.</div>;
-  return <div className="terminal-view"><div className="terminal-toolbar"><span className={`status-dot ${session.runningHere ? "online" : ""}`} />{session.id} | {session.tool} | {session.workingDir}<span className="terminal-status">{session.runningHere ? "Connected" : session.status || "Not started"}</span>{!session.runningHere && <button className="primary-button terminal-action" disabled={busy} onClick={() => onLaunch(session, session.hasResumeId ? "restore" : "start")}>{session.hasResumeId ? "Restore" : "Start"}</button>}</div><div className="terminal-container" ref={container} /></div>;
+  return <div className="terminal-view"><div className="terminal-toolbar"><span className={`status-dot ${session.runningHere ? "online" : ""}`} />{session.id} | {session.tool} | {session.workingDir}<span className="terminal-status">{session.runningHere ? "Connected" : session.status || "Not started"}</span>{!session.runningHere && (session.hasResumeId && session.resumeNote ? <><button className="primary-button terminal-action" disabled title={session.resumeNote}>Restore</button><button className="text-button terminal-action" disabled={busy} title={session.resumeNote} onClick={() => onLaunch(session, "fresh")}>Start fresh</button></> : <button className="primary-button terminal-action" disabled={busy} onClick={() => onLaunch(session, session.hasResumeId ? "restore" : "start")}>{session.hasResumeId ? "Restore" : "Start"}</button>)}</div><div className="terminal-container" ref={container} /></div>;
 }
 
 function parseLaunchArgs(text: string): string[] {
@@ -655,7 +690,7 @@ function CreateSession({ recentFolders, onClose, onCreated, onError }: {
   return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="modal">
     <div className="modal-heading"><div><p className="eyebrow">NEW WORKSPACE</p><h2>Create a session</h2></div><button className="icon-button" onClick={onClose}>x</button></div>
     <form onSubmit={(event) => void submit(event)}>
-      <label>Session name<input required autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. API refactor" /></label>
+      <label>Session name <span className="optional">(optional; defaults to the project or folder name)</span><input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. API refactor" /></label>
       <label>AI harness<select value={tool} onChange={(event) => setTool(event.target.value as Session["tool"])}><option value="claude-code">Claude Code</option><option value="copilot-cli">GitHub Copilot CLI</option></select></label>
       <label>Project folder<div className="folder-row"><input required list="recent-project-folders" value={workingDir} onChange={(event) => setWorkingDir(event.target.value)} placeholder="Choose a local project folder" /><datalist id="recent-project-folders">{recentFolders.map((folder) => <option key={folder} value={folder} />)}</datalist><button type="button" className="secondary-button" onClick={() => void chooseDirectory()}>Browse</button></div></label>
       <label>Launch arguments <span className="optional">(editable template, one per line)</span><textarea rows={3} value={launchArgs} onChange={(event) => setLaunchArgs(event.target.value)} placeholder="--model&#10;sonnet" /></label>
@@ -666,7 +701,7 @@ function CreateSession({ recentFolders, onClose, onCreated, onError }: {
           {preview.warnings.map((warning) => <p key={warning} className="tool-warning">{warning}</p>)}
         </>}
       </div>
-      <p className="form-note">A YAML session definition is saved locally. No session starts until you choose Start.</p>
+      <p className="form-note">A YAML session definition is saved locally and the session starts immediately.</p>
       <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button" disabled={saving}>{saving ? "Creating..." : "Create session"}</button></div>
     </form>
   </div></div>;

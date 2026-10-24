@@ -48,6 +48,10 @@ func (manager *closeTestManager) Stop(context.Context, string) error {
 	return errors.New("unexpected Stop call")
 }
 
+func (manager *closeTestManager) Delete(context.Context, string) error {
+	return errors.New("unexpected Delete call")
+}
+
 func (manager *closeTestManager) StopAll(ctx context.Context) error {
 	manager.stopAllCalls++
 	return manager.stopAll(ctx)
@@ -112,6 +116,31 @@ func TestCreateSessionReturnsSavedSessionWithoutListing(t *testing.T) {
 	}
 	if len(config.LaunchArgs) != len(launchArgs) || config.LaunchArgs[0] != launchArgs[0] || config.LaunchArgs[1] != launchArgs[1] {
 		t.Fatalf("saved launch args = %v, want %v", config.LaunchArgs, launchArgs)
+	}
+}
+
+func TestCreateSessionDeducesUniqueNameFromProject(t *testing.T) {
+	application := &App{configDirectory: filepath.Join(t.TempDir(), "sessions")}
+	project := filepath.Join(t.TempDir(), "folder-name")
+	if err := os.Mkdir(project, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "package.json"), []byte(`{"name":"My App"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	first, err := application.CreateSession("  ", string(session.ClaudeCode), project, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := application.CreateSession("", string(session.ClaudeCode), project, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Name != "My App" || first.ID != "my-app" || second.Name != "My App (2)" || second.ID != "my-app-2" {
+		t.Fatalf("deduced sessions = %+v, %+v", first, second)
+	}
+	if _, err := application.CreateSession("", string(session.ClaudeCode), "", nil); err == nil {
+		t.Fatal("empty name and folder succeeded")
 	}
 }
 

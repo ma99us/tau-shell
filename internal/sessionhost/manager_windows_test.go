@@ -462,6 +462,113 @@ func TestManagerRestoreFailurePreservesResumeID(t *testing.T) {
 	}
 }
 
+func TestManagerDeleteRemovesConfigAndRuntime(t *testing.T) {
+	manager, _, _ := newLifecycleTestManager(t, "gone", "kept")
+	ctx := context.Background()
+	if _, err := manager.store.BeginFresh(ctx, "gone", session.ClaudeCode); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.store.Finish(ctx, "gone", session.StatusStopped, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Delete(ctx, "gone"); err != nil {
+		t.Fatal(err)
+	}
+	snapshots, err := manager.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshots) != 1 || snapshots[0].ID != "kept" {
+		t.Fatalf("sessions after delete = %+v, want only kept", snapshots)
+	}
+	runtime, err := manager.store.Runtime(ctx, "gone")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.HarnessSessionID != "" || runtime.Status != session.StatusNeverStarted {
+		t.Errorf("runtime after delete = %+v, want cleared", runtime)
+	}
+	if err := manager.Delete(ctx, "gone"); err == nil {
+		t.Error("deleting a missing session succeeded")
+	}
+}
+
+func TestManagerDeleteRefusesRunningSession(t *testing.T) {
+	manager, _, _ := newLifecycleTestManager(t, "live")
+	ctx := context.Background()
+	if _, err := manager.Start(ctx, "live", false, 80, 24); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = manager.Stop(context.Background(), "live") })
+	if err := manager.Delete(ctx, "live"); err == nil || !strings.Contains(err.Error(), "running") {
+		t.Fatalf("delete running error = %v, want running refusal", err)
+	}
+	if _, err := session.FindConfig(manager.configDirectory, "live"); err != nil {
+		t.Errorf("config removed despite refusal: %v", err)
+	}
+}
+
+func useCopilotSession(t *testing.T, manager *Manager, id string) {
+	t.Helper()
+	config, err := session.FindConfig(manager.configDirectory, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := session.DeleteConfig(manager.configDirectory, id); err != nil {
+		t.Fatal(err)
+	}
+	config.Tool = session.CopilotCLI
+	if _, err := session.SaveConfig(manager.configDirectory, config); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestManagerStopUsesHarnessGracefulExit(t *testing.T) {
+	manager, factory, _ := newLifecycleTestManager(t, "copilot")
+	useCopilotSession(t, manager, "copilot")
+	ctx := context.Background()
+	if _, err := manager.Start(ctx, "copilot", false, 80, 24); err != nil {
+		t.Fatal(err)
+	}
+	process := factory.process("copilot")
+	// The fake quits only when it receives the /exit command, not on interrupt.
+	process.setIgnoreInterrupt(true)
+	go func() {
+		for !strings.Contains(process.input(), "/exit\r") {
+			time.Sleep(10 * time.Millisecond)
+		}
+		process.exit(0)
+	}()
+	if err := manager.Stop(ctx, "copilot"); err != nil {
+		t.Fatal(err)
+	}
+	if input := process.input(); input != "\x03/exit\r" {
+		t.Errorf("graceful exit input = %q, want Ctrl+C then /exit", input)
+	}
+	if current := manager.get("copilot"); current != nil && current.wasForced() {
+		t.Error("graceful exit was recorded as forced")
+	}
+}
+
+func TestManagerStopFallsBackWhenGracefulExitIgnored(t *testing.T) {
+	previous := gracefulExitWait
+	gracefulExitWait = 100 * time.Millisecond
+	t.Cleanup(func() { gracefulExitWait = previous })
+	manager, factory, _ := newLifecycleTestManager(t, "stubborn")
+	useCopilotSession(t, manager, "stubborn")
+	ctx := context.Background()
+	if _, err := manager.Start(ctx, "stubborn", false, 80, 24); err != nil {
+		t.Fatal(err)
+	}
+	factory.process("stubborn").setIgnoreInterrupt(true)
+	if err := manager.Stop(ctx, "stubborn"); err != nil {
+		t.Fatal(err)
+	}
+	if current := manager.get("stubborn"); current == nil || !current.wasForced() {
+		t.Error("ignored graceful exit did not fall back to forced termination")
+	}
+}
+
 func countManagerSupervisorGoroutines() int {
 	var dump bytes.Buffer
 	if err := pprof.Lookup("goroutine").WriteTo(&dump, 2); err != nil {

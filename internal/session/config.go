@@ -174,6 +174,16 @@ func FindConfig(directory, id string) (Config, error) {
 	return config, nil
 }
 
+func DeleteConfig(directory, id string) error {
+	if !idPattern.MatchString(id) {
+		return fmt.Errorf("invalid session id %q", id)
+	}
+	if err := os.Remove(filepath.Join(directory, id+".yaml")); err != nil {
+		return fmt.Errorf("delete session config %q: %w", id, err)
+	}
+	return nil
+}
+
 func ListConfigs(directory string) ([]Config, error) {
 	entries, err := os.ReadDir(directory)
 	if err != nil {

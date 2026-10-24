@@ -981,3 +981,63 @@ h3 {
     padding: 20px 14px 26px;
   }
 }
+
+.session-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.session-item .session-row {
+  padding-right: 32px;
+}
+
+.session-item .session-row.active + .delete-button,
+.session-item:hover .delete-button {
+  color: #c0c6d0;
+}
+
+.session-item .delete-button {
+  position: absolute;
+  right: 6px;
+}
+
+.delete-button {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #717986;
+  font-size: 12px;
+}
+
+.delete-button:hover:not(:disabled),
+.delete-button:focus-visible {
+  border-color: #6b3a3a;
+  background: #3a1d1d;
+  color: #ffb4b4;
+}
+
+.danger-button {
+  min-height: 34px;
+  padding: 0 13px;
+  border: 1px solid #8a3d3d;
+  border-radius: 6px;
+  background: #b94a4a;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.danger-button:hover:not(:disabled) {
+  background: #d05858;
+}
+
+@media (max-width: 620px) {
+  .session-item .delete-button {
+    display: none;
+  }
+}

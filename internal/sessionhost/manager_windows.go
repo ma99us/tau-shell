@@ -25,6 +25,9 @@ const (
 	terminateWait        = 5 * time.Second
 )
 
+// gracefulExitWait is how long a harness gets to quit after its exit input.
+var gracefulExitWait = 8 * time.Second
+
 type EventKind string
 
 const (
@@ -48,6 +51,7 @@ type Snapshot struct {
 	LastError   string                `json:"lastError,omitempty"`
 	RunningHere bool                  `json:"runningHere"`
 	HasResumeID bool                  `json:"hasResumeId"`
+	ResumeNote  string                `json:"resumeNote,omitempty"`
 }
 
 type managedSession struct {
@@ -128,7 +132,7 @@ func (manager *Manager) List(ctx context.Context) ([]Snapshot, error) {
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, Snapshot{
+		snapshot := Snapshot{
 			ID:          config.ID,
 			Name:        config.Name,
 			Tool:        config.Tool,
@@ -136,7 +140,15 @@ func (manager *Manager) List(ctx context.Context) ([]Snapshot, error) {
 			Status:      runtime.Status,
 			LastError:   runtime.LastError,
 			HasResumeID: runtime.HarnessSessionID != "",
-		})
+		}
+		if snapshot.HasResumeID {
+			if adapter, adapterErr := harness.For(config.Tool); adapterErr == nil {
+				if resumeErr := adapter.CheckResume(runtime.HarnessSessionID); resumeErr != nil {
+					snapshot.ResumeNote = resumeErr.Error()
+				}
+			}
+		}
+		result = append(result, snapshot)
 	}
 	manager.mu.Lock()
 	for index := range result {
@@ -191,8 +203,12 @@ func (manager *Manager) start(ctx context.Context, id string, restoring, fresh b
 	if runtime.Status == session.StatusRunning || runtime.Status == session.StatusStarting {
 		return Snapshot{}, fmt.Errorf("session %q is active in another TauShell process", id)
 	}
+	if restoring && runtime.HarnessSessionID != "" {
+		if resumeErr := adapter.CheckResume(runtime.HarnessSessionID); resumeErr != nil {
+			return Snapshot{}, resumeErr
+		}
+	}
 	if fresh {
-		runtime, err = manager.store.BeginFresh(ctx, id, config.Tool)
 	} else {
 		runtime, err = manager.store.Begin(ctx, id, config.Tool, restoring)
 	}
@@ -269,6 +285,34 @@ func (manager *Manager) Resize(id string, columns, rows int) error {
 		return fmt.Errorf("resize session %q: %w", id, err)
 	}
 	return nil
+}
+
+// Delete removes a session's YAML and runtime state. It refuses active sessions
+// and never touches the harness's own conversation data or the working directory.
+func (manager *Manager) Delete(ctx context.Context, id string) error {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	if manager.closed {
+		return errors.New("session manager is shutting down")
+	}
+	if current := manager.sessions[id]; current != nil && current.isRunning() {
+		return fmt.Errorf("session %q is running; stop it before deleting", id)
+	}
+	if _, err := session.FindConfig(manager.configDirectory, id); err != nil {
+		return err
+	}
+	runtime, err := manager.recoverRuntime(ctx, id)
+	if err != nil {
+		return err
+	}
+	if runtime.Status == session.StatusRunning || runtime.Status == session.StatusStarting {
+		return fmt.Errorf("session %q is active in another TauShell process", id)
+	}
+	if err := session.DeleteConfig(manager.configDirectory, id); err != nil {
+		return err
+	}
+	delete(manager.sessions, id)
+	return manager.store.Delete(ctx, id)
 }
 
 func (manager *Manager) Stop(ctx context.Context, id string) error {
@@ -349,6 +393,12 @@ func (manager *Manager) stop(ctx context.Context, current *managedSession) error
 	if !current.isRunning() {
 		return nil
 	}
+	if current.gracefulExit(ctx) {
+		return nil
+	}
+	if !current.isRunning() {
+		return nil
+	}
 	if err := current.process.Interrupt(); err != nil {
 		if !current.isRunning() {
 			return nil
@@ -373,6 +423,36 @@ func (manager *Manager) stop(ctx context.Context, current *managedSession) error
 		return fmt.Errorf("force-terminate session %q: %w", current.config.ID, err)
 	}
 	return waitForSession(ctx, current, terminateWait)
+}
+
+// gracefulExit asks the harness to quit by itself and reports whether the
+// session ended. A false result means the caller must fall back to interrupt
+// and forced termination.
+func (current *managedSession) gracefulExit(ctx context.Context) bool {
+	adapter, err := harness.For(current.config.Tool)
+	if err != nil {
+		return false
+	}
+	steps := adapter.GracefulExit()
+	if len(steps) == 0 {
+		return false
+	}
+	for _, step := range steps {
+		if err := current.process.Write([]byte(step.Input)); err != nil {
+			diagnostics.Warn("graceful exit input failed", err, "session_id", current.config.ID)
+			return false
+		}
+		if step.Pause > 0 {
+			select {
+			case <-time.After(step.Pause):
+			case <-current.done:
+				return true
+			case <-ctx.Done():
+				return false
+			}
+		}
+	}
+	return waitForSession(ctx, current, gracefulExitWait) == nil
 }
 
 func waitForSession(ctx context.Context, current *managedSession, timeout time.Duration) error {

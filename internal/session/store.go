@@ -73,6 +73,15 @@ func (store *Store) Close() error {
 	return nil
 }
 
+func (store *Store) Delete(ctx context.Context, sessionID string) error {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if _, err := store.db.ExecContext(ctx, `DELETE FROM session_runtime WHERE session_id = ?`, sessionID); err != nil {
+		return fmt.Errorf("delete runtime state for %q: %w", sessionID, err)
+	}
+	return nil
+}
+
 func (store *Store) Runtime(ctx context.Context, sessionID string) (Runtime, error) {
 	return readRuntime(ctx, store.db, sessionID)
 }

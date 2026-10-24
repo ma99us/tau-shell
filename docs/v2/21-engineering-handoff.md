@@ -1,6 +1,6 @@
 # Engineering Handoff
 
-**Updated:** 2026-10-22
+**Updated:** 2026-10-24
 **Project state:** Phase 1 desktop migration in progress; not release-ready.
 
 This is the implementation handoff for the next engineering session. The
@@ -38,6 +38,13 @@ interaction decisions and feasibility gate are in
   loop. The Home tool inventory shows the resolved executable path and
   detected version so PATH precedence is visible. The shutdown prompt uses
   Yes/No responses and defaults safely to No.
+  Sessions can be deleted from Home cards and the sidebar (`x`, with a
+  confirmation warning): `DeleteSession` removes the YAML and the runtime row,
+  refuses running/starting sessions, and never touches the harness's own data
+  or the working directory.
+  The session name is optional: when blank, `CreateSession` uses the project
+  name from `package.json`, `go.mod`, `Cargo.toml`, or `pyproject.toml` in the
+  folder, else the folder name, adding ` (2)`, ` (3)` on collisions.
   Session creation returns its never-started snapshot from the
   validated configuration after saving, without rereading the full session
   list; an unrelated listing failure can no longer make a successful save look
@@ -195,8 +202,8 @@ coverage remains open.
 The Step 1 WebView2/xterm.js feasibility gate is substantially closed: both
 supported harnesses have now been exercised end-to-end inside the hosted
 terminal with real, signed-in credentials on this Windows 10 machine (see
-below). The remaining gap is a clean environment without WebView2 installed,
-plus completing an actual OAuth login flow for Claude Code (deliberately not
+below). A clean-environment test without WebView2 will not be performed (user
+decision; the existing prompt is accepted as working). Also open: completing an actual OAuth login flow for Claude Code (deliberately not
 attempted, to avoid live browser-based authentication during automated
 testing). The visible window alone is still not evidence that terminal
 behavior, harness restore, or application security has passed in general —
@@ -297,9 +304,9 @@ Known gaps and risks:
   as a separate guard on bound-method dispatch. Origin-policy unit tests,
   a production host smoke test, and a production-mode WebView2 smoke that
   attempted a `.invalid` external navigation all passed on this machine.
-- Exercise the missing-WebView2 native prompt and download handoff. Current
-  runtime detection and prompt exist, but this machine has WebView2 installed
-  and the missing-runtime path has not been tested in a clean environment.
+- Missing-WebView2 native prompt and download handoff: runtime detection and
+  prompt exist; a clean-environment test will not be performed (user
+  decision) and the path is accepted as working.
 - Tool detection, version support ranges, capability probes, first-run
   PowerShell setup, winget consent/install actions, and vendor-link fallback
   are implemented in `internal/tools` and wired through
@@ -316,7 +323,7 @@ Known gaps and risks:
   `Adapter.DefaultLaunchArgs()` and the new `GetSessionTemplate`/
   `PreviewSessionLaunch` bound methods, verified with new Go unit tests and an
   isolated-profile UI smoke test for both harnesses.
-  Editable full-YAML preview and offer-to-start-after-creation remain
+  Editable full-YAML preview remains
   incomplete. The session form now suggests up to five recently created
   session folders, persisted in WebView local storage.
 - Tabs and selected tab persist in WebView local storage. They do not
@@ -361,13 +368,19 @@ Known gaps and risks:
     (`PowerShell exited with code 1`) rather than claiming success, matching
     the documented "do not claim restored unless harness confirms" principle.
     This is most likely because a session with zero real turns was never
-    registered as resumable by Copilot CLI's own internal session tracking,
-    not a wrong-flag/wrong-ID bug in the adapter — but this has not been
-    confirmed against a Copilot CLI session that had at least one real,
-    credit-consuming turn before being stopped. Re-test restore after at
-    least one real exchange has happened in a Copilot CLI session before
-    treating this as a confirmed, scoped limitation vs. a genuine adapter
-    bug.
+    registered as resumable by Copilot CLI's own internal session tracking.
+    Decision (user): Restore is now disabled for such sessions. The Copilot
+    adapter's `CheckResume` requires
+    `~\.copilot\session-state\<id>\events.jsonl` (present for sessions with
+    turns, absent for zero-turn ones; undocumented Copilot internals, so it
+    fails open if the session-state folder is missing). Home and the toolbar
+    show Restore disabled with the reason and keep Start fresh; the backend
+    also refuses a restore with the same message. Covered by unit tests; a
+    production-window smoke against the real zero-turn `copilot-smoke-1`
+    session confirmed Home shows Restore disabled (Start fresh available) for
+    it while the Claude Code session's Restore stays enabled. The session
+        toolbar variant (Restore disabled, Start fresh enabled) was also
+        confirmed; tooltip hover text was not visually captured.
 - The WebView bridge currently receives terminal chunks as base64 events.
   Evaluate event volume and backpressure with long-running/high-output
   harnesses; do not switch to text decoding in Go.
@@ -423,19 +436,20 @@ Known gaps and risks:
    by `scripts/fetch-conpty.ps1`) and falls back to inbox ConPTY. Run the
    opt-in comparison with `TAUSHELL_CONPTY_SPIKE_DLL=<abs path to conpty.dll>
    go test -v -run TestConPTYBackendSpike ./internal/conpty`.
-2. Run user-authorized, non-destructive Claude Code and Copilot CLI hosted
-   walkthroughs with the user's existing sign-ins: start, short read-only
-   prompt, stop, restore/resume. Record Home-displayed executable path and
-   version; TauShell uses the first PATH match.
+2. Done: real Claude Code and Copilot CLI walkthroughs (see Known gaps).
+   Remaining manual checks: Claude Code restore after a completed login, and
+   Copilot restore of a session with at least one real turn hosted in the app.
+   Test sessions `kbd-test-1` and `copilot-smoke-1` were removed from the dev
+   profile with the new delete feature.
 3. Done: Step 3 tool metadata/version ranges, capability probes, and
    confirmed winget installs are implemented (`internal/tools`,
    `cmd/taushell/tools_windows.go`, Home/Setup frontend). Done: Step 4
    session templates with argv preview (`Adapter.DefaultLaunchArgs()`,
    `GetSessionTemplate`/`PreviewSessionLaunch`); editable full-YAML preview
-   and offer-to-start-after-creation remain outstanding. Does not depend on
+   remains outstanding. A newly created session is now selected and started automatically. Does not depend on
    the terminal path.
-   Missing-WebView2 verification is deferred to a manual Windows Sandbox/VM
-   check; rely on registry-detection unit tests until then.
+   A clean-Windows-10/missing-WebView2 test will not be performed (user
+   decision); registry-detection unit tests are the coverage.
 4. Done: keyboard-only workflow and Wails-host close integration coverage.
    A mocked-browser smoke verified frontend Home/End and arrow-key tab
    selection, and a production-host smoke verified Home/Right switching after
@@ -481,9 +495,36 @@ covering the desktop app. Run the frontend build first because Go embeds its
 output. Generated frontend files are part of the application build input, not
 a substitute for frontend source.
 
-Go is not currently on this checkout's PATH. The latest Windows verification
-used a temporary Go 1.27.2 archive downloaded from the official Go distribution
-and verified against SHA-256
-`1314008898BD40DF77AF4B014F777F08873DBDFBCD3D92308728EE03304FE04F`; the
-archive and extracted toolchain were removed after verification. Do not
-hard-code machine-specific toolchain paths in project scripts.
+Go is installed at `C:\Program Files\Go\bin` but is not on this machine's
+default PATH; add it per shell (`$env:Path += ";C:\Program Files\Go\bin"`).
+Do not hard-code machine-specific toolchain paths in project scripts; local
+VS Code terminal settings may configure the installed toolchain path.
+
+VS Code launch/tasks/settings in `.vscode/` are ignored workspace-local files,
+not included in a fresh checkout (see
+[`17-contributor-guide.md`](17-contributor-guide.md)). The icon generator is
+tracked, but its PNG/ICO and `.syso` outputs are ignored; run it before building
+to include the custom app icon.
+
+## Quick start for the next session
+
+- **Graceful stop:** `Manager.stop` first runs the adapter's `GracefulExit`
+  input (Copilot CLI: Ctrl+C, `/exit`, Enter) and waits up to 8 s for the
+  harness and `pwsh` to quit. If that is absent, fails, or times out, it falls
+  back to a single Ctrl+C (3 s) and then force-termination, which is shown as
+  "Graceful interrupt failed or timed out". Claude Code still uses the
+  Ctrl+C-only path until a real probe shows `/exit` is safe for it. Unit tests
+  use fake processes; the real Copilot `/exit` path is not yet verified in a
+  hosted session, nor that a later Restore resumes after it. Stop/shutdown
+  timeouts were raised to 25 s to fit the longer sequence.
+
+1. Read "Product boundaries", "Do not overstate current readiness", and
+   "Known gaps" here, then [`22-local-attention-notifications.md`](22-local-attention-notifications.md)
+   only if notifications come up (later phase, unscheduled).
+2. Build and verify with the commands in the contributor guide. Check
+   `git status` for the current workspace state; commit only when the owner
+   asks.
+3. Latest change: Copilot Restore gating (`Adapter.CheckResume`,
+   `Snapshot.ResumeNote`; Restore disabled with Start fresh when Copilot has no
+   `events.jsonl` for the session). It relies on Copilot's undocumented
+   session-store layout and fails open if the store is missing.

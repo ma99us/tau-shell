@@ -7,6 +7,7 @@ export type Session = {
   lastError?: string;
   runningHere: boolean;
   hasResumeId: boolean;
+  resumeNote?: string;
 };
 
 export type SessionEvent = {
@@ -77,6 +78,7 @@ type WailsApp = {
   WriteTerminalBinary(id: string, input: string): Promise<void>;
   ResizeTerminal(id: string, columns: number, rows: number): Promise<void>;
   StopSession(id: string): Promise<void>;
+  DeleteSession(id: string): Promise<void>;
 };
 
 type WailsRuntime = {

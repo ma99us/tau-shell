@@ -63,6 +63,7 @@ type desktopSessionManager interface {
 	Write(string, []byte) error
 	Resize(string, int, int) error
 	Stop(context.Context, string) error
+	Delete(context.Context, string) error
 	StopAll(context.Context) error
 	Close(context.Context) error
 }
@@ -128,7 +129,7 @@ func runDesktop() error {
 			Theme: windowsOptions.Dark,
 		},
 	})
-	closeCtx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	closeCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 	closeErr := application.manager.Close(closeCtx)
 	if runErr != nil {
@@ -312,15 +313,34 @@ func (application *App) CreateSession(name, toolName, workingDir string, launchA
 		diagnostics.Info("session created", "session_id", snapshot.ID, "tool", snapshot.Tool)
 	}()
 	name = strings.TrimSpace(name)
-	if name == "" {
-		return sessionhost.Snapshot{}, errors.New("session name must not be empty")
+	deduced := name == ""
+	if deduced {
+		if strings.TrimSpace(workingDir) == "" {
+			return sessionhost.Snapshot{}, errors.New("project folder must not be empty")
+		}
+		name = deduceSessionName(workingDir)
 	}
-	id := strings.Trim(sessionIDPattern.ReplaceAllString(strings.ToLower(name), "-"), "-")
-	if len(id) > 63 {
-		id = strings.TrimRight(id[:63], "-")
+	makeID := func(name string) string {
+		id := strings.Trim(sessionIDPattern.ReplaceAllString(strings.ToLower(name), "-"), "-")
+		if len(id) > 63 {
+			id = strings.TrimRight(id[:63], "-")
+		}
+		return id
 	}
+	id := makeID(name)
 	if id == "" {
 		return sessionhost.Snapshot{}, errors.New("session name must include at least one letter or number")
+	}
+	if deduced {
+		// A deduced name must not collide with an existing session.
+		base := name
+		for n := 2; ; n++ {
+			if _, statErr := os.Stat(filepath.Join(application.configDirectory, id+".yaml")); errors.Is(statErr, os.ErrNotExist) {
+				break
+			}
+			name = fmt.Sprintf("%s (%d)", base, n)
+			id = makeID(name)
+		}
 	}
 	config := session.Config{
 		ID:         id,
@@ -462,8 +482,19 @@ func (application *App) ResizeTerminal(id string, columns, rows int) (err error)
 	return application.manager.Resize(id, columns, rows)
 }
 
+func (application *App) DeleteSession(id string) (err error) {
+	defer func() {
+		if err != nil {
+			diagnostics.Error("delete session failed", err, "session_id", id)
+		} else {
+			diagnostics.Info("session deleted", "session_id", id)
+		}
+	}()
+	return application.manager.Delete(context.Background(), id)
+}
+
 func (application *App) StopSession(id string) (err error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 	defer func() {
 		if err != nil {
@@ -610,7 +641,7 @@ func (application *App) confirmShutdown(ctx context.Context) bool {
 		diagnostics.Info("shutdown cancelled by user")
 		return true
 	}
-	stopCtx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	stopCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 	if err := application.manager.StopAll(stopCtx); err != nil {
 		diagnostics.Error("stop sessions for shutdown failed", err)
@@ -696,7 +727,7 @@ func (application *App) reportForcedShutdowns(ctx context.Context, names []strin
 }
 
 func (application *App) shutdown(ctx context.Context) {
-	stopCtx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	stopCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 	if err := application.manager.Close(stopCtx); err != nil {
 		diagnostics.Error("close session manager during Wails shutdown failed", err)
