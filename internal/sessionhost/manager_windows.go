@@ -45,6 +45,7 @@ type Event struct {
 type Snapshot struct {
 	ID          string                `json:"id"`
 	Name        string                `json:"name"`
+	Color       string                `json:"color,omitempty"`
 	Tool        session.Harness       `json:"tool"`
 	WorkingDir  string                `json:"workingDir"`
 	Status      session.RuntimeStatus `json:"status"`
@@ -135,6 +136,7 @@ func (manager *Manager) List(ctx context.Context) ([]Snapshot, error) {
 		snapshot := Snapshot{
 			ID:          config.ID,
 			Name:        config.Name,
+			Color:       config.Color,
 			Tool:        config.Tool,
 			WorkingDir:  config.WorkingDir,
 			Status:      runtime.Status,
@@ -158,6 +160,22 @@ func (manager *Manager) List(ctx context.Context) ([]Snapshot, error) {
 	}
 	manager.mu.Unlock()
 	return result, nil
+}
+
+// UpdateDisplay persists a new name or color ("name" or "color") for a session
+// and applies it to the running session, if any, without touching its process.
+func (manager *Manager) UpdateDisplay(id, field, value string) error {
+	config, err := session.UpdateConfigField(manager.configDirectory, id, field, value)
+	if err != nil {
+		return err
+	}
+	if current := manager.get(id); current != nil {
+		current.mu.Lock()
+		current.config.Name = config.Name
+		current.config.Color = config.Color
+		current.mu.Unlock()
+	}
+	return nil
 }
 
 func (manager *Manager) Start(ctx context.Context, id string, restoring bool, columns, rows int) (Snapshot, error) {
@@ -616,7 +634,7 @@ func (manager *Manager) recoverRuntime(ctx context.Context, id string) (session.
 				return runtime, nil
 			}
 		case session.StatusRunning:
-			alive, err := session.IsProcessAlive(runtime.ProcessID)
+			alive, err := session.RuntimeProcessAlive(runtime)
 			if err != nil {
 				return session.Runtime{}, err
 			}
@@ -671,6 +689,7 @@ func (current *managedSession) snapshot() Snapshot {
 	return Snapshot{
 		ID:          current.config.ID,
 		Name:        current.config.Name,
+		Color:       current.config.Color,
 		Tool:        current.config.Tool,
 		WorkingDir:  current.config.WorkingDir,
 		Status:      current.status,

@@ -416,6 +416,27 @@ Known gaps and risks:
 - Multiple Claude Code versions exist on the machine: npm Claude Code 2.1.133
   is earlier on PATH than the winget 2.1.302 binary. Do not silently change
   PATH; use the explicit winget path for any authorized 2.1.302 check.
+- Terminal sizing: xterm's `FitAddon.fit()` is a silent no-op until the first
+  render measures a cell, which leaves `cols/rows` at 80x24. `launch()` awaits
+  `fitTerminalNow` before `StartSession`, and the size is re-sent 0.5 s and 2 s
+  after start because a resize during harness initialization can be lost.
+  Padding for the terminal lives on `.xterm` (the fit addon does not subtract
+  its parent's padding). The terminal has `scrollback: 0` and no scrollbar by
+  design: scrolling belongs to the harness.
+- Clipboard keys use the Wails runtime clipboard (native, no WebView2 prompt):
+  Ctrl+C copies only with a selection, so Ctrl+C still interrupts the harness
+  otherwise.
+- Session `name` and `color` are edited in place in the YAML
+  (`session.UpdateConfigField`, preserving comments); `id` and the file name
+  never change. Recovery of a `running` runtime row checks the process
+  creation time against the row's update time so a reused PID is not mistaken
+  for a live session.
+- Go-side confirmations (shutdown, forced-stop notice, tool installs) go
+  through `App.messageDialog`, which shows an in-app modal via the
+  `dialog-request` event and `AnswerDialog` (`cmd/taushell/dialog_windows.go`)
+  once the page has called `DialogHostReady`. Before that, or if it never
+  registers, it falls back to the native Wails message box. Only the
+  pre-window WebView2 prompt and the startup error box stay native.
 - PowerShell `Start-Process` can detach a child outside the ConPTY job.
   TauShell intentionally manages only job members and must not infer ancestry
   or kill detached processes.
@@ -444,14 +465,13 @@ Known gaps and risks:
   ConPTY, so the residue is inbox console-host behavior; see
   [`02-conpty-integration.md`](02-conpty-integration.md#bundled-conpty).
 
-## Model field
+## Model selection
 
-The Create dialog shows an optional Model field only when the selected
-harness's `--help` lists `--model` (an optional capability: it never makes a
-tool unusable or adds a warning). The field rewrites the `--model <value>`
-pair inside the editable launch arguments, so the YAML `launch_args` and the
-"Will run" preview stay the single source of truth. No model list is shipped.
-Verified in the real window with Claude Code (preview showed `--model sonnet`).
+The Create dialog has no Model field. A model can still be set by adding
+`--model <value>` to the editable launch arguments. A current-model display and
+picker in the session top bar is planned; it must be capability-gated on the
+harness's `--model` option and must read the live model from the harness rather
+than from `launch_args`. No model list is shipped.
 
 ## Recommended next actions
 

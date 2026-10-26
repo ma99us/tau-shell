@@ -2,9 +2,14 @@ package session
 
 import (
 	"fmt"
+	"time"
 
 	"golang.org/x/sys/windows"
 )
+
+// pidReuseSlack absorbs clock granularity between process creation and the
+// runtime row's update time.
+const pidReuseSlack = 2 * time.Second
 
 func IsProcessAlive(processID int) (bool, error) {
 	if processID < 1 {
@@ -30,4 +35,27 @@ func IsProcessAlive(processID int) (bool, error) {
 	default:
 		return false, fmt.Errorf("unexpected process wait result 0x%x for %d", event, processID)
 	}
+}
+
+// RuntimeProcessAlive reports whether the process recorded for a running
+// session is still the one TauShell launched. A live process created after
+// the runtime row was marked running is an unrelated process that reused the
+// PID, for example after a reboot.
+func RuntimeProcessAlive(runtime Runtime) (bool, error) {
+	alive, err := IsProcessAlive(runtime.ProcessID)
+	if err != nil || !alive {
+		return alive, err
+	}
+	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(runtime.ProcessID))
+	if err != nil {
+		// Identity cannot be checked; keep the session rather than fail a live one.
+		return true, nil
+	}
+	defer windows.CloseHandle(handle)
+	var creation, exit, kernel, user windows.Filetime
+	if err := windows.GetProcessTimes(handle, &creation, &exit, &kernel, &user); err != nil {
+		return true, nil
+	}
+	started := time.Unix(0, creation.Nanoseconds())
+	return !started.After(runtime.UpdatedAt.Add(pidReuseSlack)), nil
 }

@@ -124,9 +124,8 @@ Files: `frontend/src/bridge.ts`, `frontend/src/main.tsx`,
 2. `main.tsx`: add the display name where it is hard-coded (sidebar subtitle,
    Home card icon letter, the "AI harness" `<select>`, the empty-state text).
    Prefer replacing the ternaries with a small `harnessLabels` lookup when you
-   touch them. The Model field and launch preview are capability-driven and
-   need no change: the field appears when the tool status reports an
-   available `--model` capability.
+   touch them. The launch preview is capability-driven and need no change; a
+   future model widget will be gated on the available `--model` capability.
 3. `attention.ts`: add a branch in `readHarnessSignal(tool, terminal, title)`
    returning `"working"` or `"idle"` from tool-specific cues:
    - Claude Code reads the terminal title (spinner glyph vs idle glyph).
@@ -155,8 +154,7 @@ reason, move that behavior into the adapter instead.
    edit `TestedFrom`/`TestedBefore` to confirm the out-of-range warning path.
 3. Create dialog: choose the harness; the launch arguments prefill with the
    defaults, the "Will run" preview shows `--session-id <new-session-id>`, and
-   typing a reserved arg (`--resume`) is rejected. The Model field appears only
-   if `--model` is detected.
+   typing a reserved arg (`--resume`) is rejected.
 4. Real session smoke test: create, start, type into it, quit it
    (graceful-exit path: confirm it exits without "force-terminated", or that
    the visible forced-termination notice appears if no exit steps exist),

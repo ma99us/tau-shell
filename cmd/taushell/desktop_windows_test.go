@@ -52,6 +52,10 @@ func (manager *closeTestManager) Delete(context.Context, string) error {
 	return errors.New("unexpected Delete call")
 }
 
+func (manager *closeTestManager) UpdateDisplay(string, string, string) error {
+	return errors.New("unexpected UpdateDisplay call")
+}
+
 func (manager *closeTestManager) StopAll(ctx context.Context) error {
 	manager.stopAllCalls++
 	return manager.stopAll(ctx)

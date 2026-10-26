@@ -1,6 +1,8 @@
 # Phase 1 Desktop UI Implementation Plan
 
-**Status:** In progress; the WebView2/xterm.js feasibility gate has not passed. Implements
+**Status:** Phase 1 implemented and verified on the development Windows 10
+machine except for the items left unchecked in the completion checklist below.
+Implements
 [08-UI-Design.md](./08-UI-Design.md).
 
 Build a Windows desktop application around the existing Go session manager and
@@ -478,29 +480,36 @@ This is explicitly not a prerequisite for the first GUI release.
 
 ## 6. Completion checklist
 
-- [ ] Go/WebView2 host and terminal component pass the Windows 10 feasibility
+- [x] Go/WebView2 host and terminal component pass the Windows 10 feasibility
       gate with Claude Code and Copilot CLI.
-- [ ] Startup detects WebView2, PowerShell 7, supported harnesses, versions,
+- [x] Startup detects WebView2, PowerShell 7, supported harnesses, versions,
       and declared tool dependencies.
-- [ ] Missing host prerequisites lead to a usable setup path; missing
-      harnesses do not block Home.
-- [ ] Installs require confirmation, use known package/source identifiers, and
-      are re-verified after completion.
-- [ ] Compatibility ranges and capability probes report untested versions and
+- [x] Missing host prerequisites lead to a usable setup path; missing
+      harnesses do not block Home. (A clean-machine missing-WebView2 run was
+      declined by the owner; registry-detection unit tests are the coverage.)
+- [x] Installs require confirmation, use known package/source identifiers, and
+      are re-verified after completion. (A live winget install was not run.)
+- [x] Compatibility ranges and capability probes report untested versions and
       regressions without silent pinning/downgrades.
-- [ ] New-session flow chooses a work folder and harness and writes editable
+- [x] New-session flow chooses a work folder and harness and writes editable
       YAML with the selected template's ordered launch arguments.
 - [ ] Local UI bridge is narrow, validated, and restricted to trusted assets.
-- [ ] Home/session launcher and tabbed embedded-terminal workspace are usable.
-- [ ] Multiple sessions run concurrently with correct isolated terminal state.
+      (Top-level navigation is blocked and tested; frame navigation and
+      negative bridge-dispatch tests remain open.)
+- [x] Home/session launcher and tabbed embedded-terminal workspace are usable.
+- [x] Multiple sessions run concurrently with correct isolated terminal state.
 - [ ] Start, restore, confirmed fresh start, close/background, and shutdown
-      semantics are tested.
+      semantics are tested. (Open: restore of a session with at least one real
+      conversation turn, hosted, for both harnesses.)
 - [ ] Startup restores launcher/tab metadata without starting harnesses.
-- [ ] `list`, `start`, and `restore` remain usable without the desktop UI.
-- [ ] No-argument launch opens the desktop GUI; there is no TUI fallback or
+      (Implemented; persisted-tab restoration across app restarts is not yet
+      verified in the desktop host.)
+- [x] `list`, `start`, and `restore` remain usable without the desktop UI.
+- [x] No-argument launch opens the desktop GUI; there is no TUI fallback or
       second interactive frontend.
-- [ ] Bubble Tea and TUI-only rendering/input dependencies are removed unless
+- [x] Bubble Tea and TUI-only rendering/input dependencies are removed unless
       dependency analysis proves a separate non-UI use.
-- [ ] UTF-8, Unicode/emoji, ANSI, resize, input routing, and child cleanup pass
+- [x] UTF-8, Unicode/emoji, ANSI, resize, input routing, and child cleanup pass
       on Windows.
 - [ ] README and active product docs match the shipped implementation.
+      (README and the backlog were reconciled on 2026-10-25; keep them aligned.)

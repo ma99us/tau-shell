@@ -1,6 +1,7 @@
 export type Session = {
   id: string;
   name: string;
+  color?: string;
   tool: "claude-code" | "copilot-cli";
   workingDir: string;
   status: string;
@@ -8,6 +9,16 @@ export type Session = {
   runningHere: boolean;
   hasResumeId: boolean;
   resumeNote?: string;
+};
+
+export type DialogRequest = {
+  id: string;
+  kind: "info" | "warning" | "error" | "question";
+  title: string;
+  message: string;
+  buttons: string[];
+  defaultButton: string;
+  cancelButton: string;
 };
 
 export type SessionEvent = {
@@ -81,11 +92,17 @@ type WailsApp = {
   ResizeTerminal(id: string, columns: number, rows: number): Promise<void>;
   StopSession(id: string): Promise<void>;
   DeleteSession(id: string): Promise<void>;
+  RenameSession(id: string, name: string): Promise<void>;
+  SetSessionColor(id: string, color: string): Promise<void>;
+  DialogHostReady(): Promise<DialogRequest[]>;
+  AnswerDialog(id: string, choice: string): Promise<void>;
 };
 
 type WailsRuntime = {
-  EventsOnMultiple(name: string, callback: (event: SessionEvent) => void, maxCallbacks: number): void;
+  EventsOnMultiple(name: string, callback: (event: any) => void, maxCallbacks: number): void;
   EventsOff(name: string): void;
+  ClipboardGetText(): Promise<string>;
+  ClipboardSetText(text: string): Promise<boolean>;
 };
 
 declare global {

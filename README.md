@@ -20,32 +20,37 @@ confirmation path. The session manager is UI-independent, and harness IDs and
 runtime metadata remain outside session YAML.
 
 Keeping a live session in the background retains its xterm instance and buffer
-until the app closes; sessions are never auto-launched after restart. Browser
-smokes with a mocked bridge exercised background output and xterm handling for
-split UTF-8/emoji, ANSI, alternate screen, terminal queries, mouse reporting,
-resize, and keyboard input. The production WebView2/ConPTY path has not passed
-those end-to-end checks.
+until the app closes; sessions are never auto-launched after restart. The
+terminal has no scrollbar or scrollback of its own: scrolling is left to the
+harness. Ctrl+C copies when text is selected (otherwise it is sent to the
+harness), Ctrl+V and Shift+Insert paste, and Ctrl+Shift+C always copies.
+Right-click a session in the sidebar or its tab to rename it or change its
+color. New sessions are named after the project folder.
 
-**The desktop feasibility gate is not yet complete.** The Go package and
-frontend compile and their current tests pass, but neither supported harness
-has passed a hosted-terminal walkthrough on the target Windows environment.
-Missing-runtime behavior, installer/setup flows, full terminal protocol
-compatibility, and provider-backed Claude Code restore remain outstanding.
-Treat the UI as an early implementation, not a verified release. Top-level
-navigation outside the bundled `http://wails.localhost` origin is blocked and
-smoke-tested; frame navigation and cross-origin bridge denial are not separately
-tested.
+**The desktop feasibility gate has passed on the development Windows 10
+machine.** A deterministic fixture verified Unicode/emoji, ANSI, cursor
+movement, terminal queries, typed input and live resize through the production
+WebView2, xterm.js, PowerShell 7 and ConPTY path, and user-authorized
+hosted-terminal walkthroughs rendered both Claude Code and Copilot CLI end to
+end. Inbox Windows 10 ConPTY consumes mouse-mode requests and device-status
+replies, so TauShell prefers the bundled ConPTY (see below). Treat the UI as an
+early implementation, not a verified release: top-level navigation outside the
+bundled `http://wails.localhost` origin is blocked and smoke-tested, but frame
+navigation and cross-origin bridge denial are not separately tested.
 
 Implemented: PowerShell 7 hosted through ConPTY; human-edited YAML with separate SQLite runtime state; built-in Claude Code and Copilot CLI command adapters; UTF-8/code-page setup; and desktop close confirmation with graceful interruption followed by bounded force termination.
 
 Automated Windows ConPTY tests verify PowerShell output/exit codes, resizing,
-and that forced termination stops direct job-child fixtures. Shell/broker
-launches detached outside TauShell's Job Object remain unmanaged.
+and that forced termination stops direct job-child fixtures. Session-manager
+tests run real ConPTY processes to check that a graceful stop is reported as a
+clean stop and an ignored interrupt is reported as force-terminated. Runtime
+recovery treats a recorded PID that now belongs to a newer process as stale.
+Shell/broker launches detached outside TauShell's Job Object remain unmanaged.
 
-Remaining work includes end-to-end WebView2/xterm.js testing with both
-harnesses, terminal protocol/Unicode/ANSI validation, prerequisite setup and
-confirmed install flows, and provider-backed restore with Claude Code. A
-disposable Copilot CLI provider-backed restore smoke test passed. TauShell must
+Remaining work: restoring a session that has at least one real conversation
+turn (Copilot CLI, and Claude Code after a completed login), a live winget
+install run, and frame-navigation/bridge-denial tests. A disposable Copilot CLI
+provider-backed restore smoke test passed. TauShell must
 not rewrite harness output; glyph rendering depends on the selected terminal
 renderer and installed fonts.
 
@@ -83,6 +88,7 @@ npm ci
 npm run build
 Pop-Location
 go test ./...
+python build\windows\gen_icon.py
 go build -tags production -ldflags "-H=windowsgui" -o taushell.exe ./cmd/taushell
 .\scripts\fetch-conpty.ps1
 ```

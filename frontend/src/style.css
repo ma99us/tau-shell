@@ -870,18 +870,26 @@ h3 {
   min-width: 0;
   min-height: 0;
   flex: 1;
-  padding: 10px 12px;
   overflow: hidden;
   background: #0c0e12;
 }
 
+/* FitAddon subtracts padding from .xterm but not from its parent, so padding must live here. */
 .terminal-container .xterm {
   width: 100%;
   height: 100%;
+  padding: 10px 12px;
 }
 
 .terminal-container .xterm-viewport {
+  overflow: hidden !important;
   background-color: #0c0e12;
+  scrollbar-width: none;
+}
+
+/* Scrolling belongs to the harness; TauShell shows no scrollbar. */
+.terminal-container .xterm .xterm-scrollable-element > .scrollbar {
+  display: none !important;
 }
 
 .terminal-missing {
@@ -1185,4 +1193,85 @@ h3 {
   .session-item .delete-button {
     display: none;
   }
+}
+/* Session colors tint the row/tab; the selected state is a lighter tint of the same color so it stays visible on any hue. */
+.session-item[data-colored] .session-row,
+.tab-item[data-colored] {
+  border-color: color-mix(in srgb, var(--session-color) 55%, transparent);
+  background: color-mix(in srgb, var(--session-color) 30%, #12151b);
+}
+
+.session-item[data-colored] .session-row:hover,
+.tab-item[data-colored]:hover {
+  background: color-mix(in srgb, var(--session-color) 42%, #12151b);
+}
+
+.session-item[data-colored] .session-row.active,
+.tab-item[data-colored].active {
+  border-color: color-mix(in srgb, var(--session-color) 30%, #fff);
+  background: color-mix(in srgb, var(--session-color) 52%, #12151b);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--session-color) 30%, #fff);
+  color: #fff;
+}
+
+.session-item[data-colored] .session-row-text small {
+  color: color-mix(in srgb, var(--session-color) 25%, #cfd5df);
+}
+
+.context-menu {
+  position: fixed;
+  z-index: 30;
+  width: 204px;
+  padding: 5px;
+  border: 1px solid #373e49;
+  border-radius: 8px;
+  background: #171b22;
+  box-shadow: 0 12px 36px #000a;
+}
+
+.context-menu-item {
+  display: block;
+  width: 100%;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  font-size: 12px;
+  text-align: left;
+}
+
+.context-menu-item:not(:disabled):hover,
+.context-menu-item:focus-visible {
+  background: #232932;
+}
+
+.context-menu-label {
+  padding: 7px 9px 3px;
+  color: #858e9c;
+  font-size: 10px;
+}
+
+.color-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 3px 9px 8px;
+}
+
+.color-swatch {
+  width: 19px;
+  height: 19px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+}
+
+.color-swatch:hover,
+.color-swatch.selected {
+  border-color: #fff;
+}
+
+.dialog-message {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }

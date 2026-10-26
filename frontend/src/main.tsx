@@ -1,9 +1,9 @@
-import { Component, ErrorInfo, FormEvent, KeyboardEvent, ReactNode, useEffect, useRef, useState } from "react";
+import { Component, CSSProperties, ErrorInfo, FormEvent, KeyboardEvent, MouseEvent, ReactNode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { app, InstallResult, LaunchPreview, Session, SessionEvent, SystemStatus, ToolStatus } from "./bridge";
+import { app, DialogRequest, InstallResult, LaunchPreview, Session, SessionEvent, SystemStatus, ToolStatus } from "./bridge";
 import "./style.css";
 import { readHarnessSignal } from "./attention";
 
@@ -142,6 +142,9 @@ function App() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [closeRequest, setCloseRequest] = useState<Session | null>(null);
   const [deleteRequest, setDeleteRequest] = useState<Session | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; session: Session } | null>(null);
+  const [dialogs, setDialogs] = useState<DialogRequest[]>([]);
+  const [renameRequest, setRenameRequest] = useState<Session | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [installing, setInstalling] = useState("");
@@ -197,6 +200,22 @@ function App() {
   useEffect(() => {
     localStorage.setItem(savedTabsKey, JSON.stringify(tabs));
   }, [tabs]);
+
+  // Go-side confirmations (shutdown, installs) render here instead of as native message boxes.
+  useEffect(() => {
+    const runtime = window.runtime;
+    if (!runtime) return;
+    const add = (request: DialogRequest) => setDialogs((current) => current.some((item) => item.id === request.id) ? current : [...current, request]);
+    runtime.EventsOnMultiple("dialog-request", add, -1);
+    app().DialogHostReady().then((pending) => pending.forEach(add)).catch((err) => showError("ui.dialog-host", err));
+    return () => runtime.EventsOff("dialog-request");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const answerDialog = (request: DialogRequest, choice: string) => {
+    setDialogs((current) => current.filter((item) => item.id !== request.id));
+    app().AnswerDialog(request.id, choice).catch((err) => showError("ui.dialog-answer", err));
+  };
 
   useEffect(() => {
     localStorage.setItem(recentFoldersKey, JSON.stringify(recentFolders));
@@ -259,12 +278,20 @@ function App() {
     try {
       openTab(session);
       const terminal = await waitForTerminal(session.id);
+      await fitTerminalNow(session.id);
       const started = mode === "restore"
         ? await app().RestoreSession(session.id, terminal.cols, terminal.rows)
         : mode === "fresh"
           ? await app().StartFresh(session.id, terminal.cols, terminal.rows)
           : await app().StartSession(session.id, terminal.cols, terminal.rows);
       openTab(started);
+      // A resize sent while the harness is still initializing can be lost, so repeat it once it is up.
+      for (const delay of [500, 2000]) {
+        window.setTimeout(() => {
+          const current = terminalInstances.get(started.id);
+          if (current) void app().ResizeTerminal(started.id, current.cols, current.rows).catch((err) => { if (!isStoppedSessionError(err)) showError("ui.terminal-layout", err); });
+        }, delay);
+      }
       await refresh();
     } catch (err) {
       showError("ui.session-launch", err);
@@ -320,6 +347,19 @@ function App() {
     }
   };
   const terminalIds = Array.from(new Set([...tabs.map((tab) => tab.id), ...backgroundTerminalIds]));
+  const openMenu = (event: MouseEvent, session: Session) => {
+    event.preventDefault();
+    setMenu({ x: event.clientX, y: event.clientY, session });
+  };
+  const updateSession = async (source: string, update: () => Promise<void>) => {
+    try {
+      await update();
+      await refresh();
+    } catch (err) {
+      showError(source, err);
+    }
+  };
+  const colorOf = (id: string) => sessions.find((current) => current.id === id)?.color;
   const installTool = async (tool: ToolStatus) => {
     setInstalling(tool.id);
     setToolNotice(null);
@@ -352,7 +392,7 @@ function App() {
           <div className="sidebar-heading"><span className="sidebar-title">SESSIONS</span> <button className="add-button" title="Create session" onClick={() => setDialogOpen(true)}>+</button></div>
           <button className={`nav-row ${selected ? "" : "active"}`} title="Home" onClick={() => setSelected("")}>Home</button>
           {sessions.map((session) => (
-            <div className={`session-item ${selected === session.id ? "active" : ""}`} key={session.id}>
+            <div className={`session-item ${selected === session.id ? "active" : ""}`} key={session.id} style={sessionColorStyle(session.color)} data-colored={session.color ? "" : undefined} onContextMenu={(event) => openMenu(event, session)}>
               <button className={`session-row ${selected === session.id ? "active" : ""}`} title={session.name} onClick={() => openTab(session)}>
                 <StateIcon session={session} activity={activity[session.id]} />
                 <span className="session-row-text"><strong>{session.name}</strong><small>{session.tool === "claude-code" ? "Claude Code" : "GitHub Copilot CLI"}</small></span>
@@ -378,7 +418,7 @@ function App() {
                 onClick={() => setSelected("")}
               >Home</button>
               {tabs.map((tab) => (
-                <div className={`tab-item ${selected === tab.id ? "active" : ""}`} key={tab.id} role="presentation">
+                <div className={`tab-item ${selected === tab.id ? "active" : ""}`} key={tab.id} role="presentation" style={sessionColorStyle(colorOf(tab.id))} data-colored={colorOf(tab.id) ? "" : undefined} onContextMenu={(event) => { const session = sessions.find((current) => current.id === tab.id); if (session) openMenu(event, session); }}>
                   <button
                     id={`tab-${tab.id}`}
                     className="tab tab-label"
@@ -415,12 +455,17 @@ function App() {
           </section>
         </main>
       </div>
-      {dialogOpen && <CreateSession recentFolders={recentFolders} tools={status?.tools ?? []} onClose={() => setDialogOpen(false)} onCreated={(session) => {
+      {dialogOpen && <CreateSession recentFolders={recentFolders} onClose={() => setDialogOpen(false)} onCreated={(session) => {
         setSessions((current) => [...current, session]);
         setRecentFolders((current) => [session.workingDir, ...current.filter((folder) => folder.toLowerCase() !== session.workingDir.toLowerCase())].slice(0, 5));
         setDialogOpen(false);
         void launch(session, "start");
       }} onError={(failure) => showError("ui.create-session", failure)} />}
+      {menu && <SessionMenu x={menu.x} y={menu.y} session={menu.session} onClose={() => setMenu(null)}
+        onRename={() => { setRenameRequest(menu.session); setMenu(null); }}
+        onColor={(color) => { const id = menu.session.id; setMenu(null); void updateSession("ui.set-session-color", () => app().SetSessionColor(id, color)); }} />}
+      {renameRequest && <RenameDialog session={renameRequest} onClose={() => setRenameRequest(null)}
+        onRename={(name) => { const id = renameRequest.id; setRenameRequest(null); void updateSession("ui.rename-session", () => app().RenameSession(id, name)); }} />}
       {deleteRequest && <div className="modal-backdrop"><div className="modal confirm-modal">
         <div className="modal-heading"><div><p className="eyebrow">DELETE SESSION</p><h2>Delete {deleteRequest.name}?</h2></div></div>
         {deleteRequest.runningHere ?
@@ -440,8 +485,93 @@ function App() {
           <button className="primary-button" disabled={busy} onClick={() => void stopAndCloseTab(closeRequest)}>{busy ? "Stopping..." : "Stop and close"}</button>
         </div>
       </div></div>}
+      {dialogs[0] && <AppDialog request={dialogs[0]} onAnswer={(choice) => answerDialog(dialogs[0], choice)} />}
     </div>
   );
+}
+
+const dialogLabels: Record<DialogRequest["kind"], string> = { question: "CONFIRM", warning: "WARNING", error: "PROBLEM", info: "NOTICE" };
+
+function AppDialog({ request, onAnswer }: { request: DialogRequest; onAnswer: (choice: string) => void }) {
+  // Escape is the dialog's cancel button; a single-button dialog just closes with it.
+  const cancel = request.cancelButton || (request.buttons.length === 1 ? request.buttons[0] : "");
+  useEffect(() => {
+    if (!cancel) return;
+    const onKey = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") onAnswer(cancel); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [request.id, cancel]);
+  const initial = request.buttons.includes(request.defaultButton) ? request.defaultButton : request.buttons[0];
+  return <div className="modal-backdrop" role="alertdialog" aria-modal="true" aria-labelledby="app-dialog-title"><div className="modal confirm-modal">
+    <div className="modal-heading"><div><p className="eyebrow">{dialogLabels[request.kind] ?? "NOTICE"}</p><h2 id="app-dialog-title">{request.title}</h2></div></div>
+    <p className="muted dialog-message">{request.message}</p>
+    <div className="modal-actions">{request.buttons.map((button) =>
+      <button key={button} autoFocus={button === initial} className={button === initial ? "primary-button" : "secondary-button"} onClick={() => onAnswer(button)}>{button}</button>)}</div>
+  </div></div>;
+}
+
+const sessionColors = [
+  { name: "Red", value: "#e5534b" },
+  { name: "Orange", value: "#d9822b" },
+  { name: "Yellow", value: "#c9a227" },
+  { name: "Green", value: "#4c9f58" },
+  { name: "Teal", value: "#2fa4a4" },
+  { name: "Blue", value: "#4f8cff" },
+  { name: "Purple", value: "#9b73e6" },
+  { name: "Pink", value: "#d65a9b" },
+];
+
+function sessionColorStyle(color?: string): CSSProperties | undefined {
+  return color ? { "--session-color": color } as CSSProperties : undefined;
+}
+
+function SessionMenu({ x, y, session, onClose, onRename, onColor }: {
+  x: number;
+  y: number;
+  session: Session;
+  onClose: () => void;
+  onRename: () => void;
+  onColor: (color: string) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const closeOutside = (event: Event) => {
+      if (!(event.target instanceof Node && ref.current?.contains(event.target))) onClose();
+    };
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("mousedown", closeOutside, true);
+    window.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("blur", onClose);
+    window.addEventListener("resize", onClose);
+    ref.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    return () => {
+      window.removeEventListener("mousedown", closeOutside, true);
+      window.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("blur", onClose);
+      window.removeEventListener("resize", onClose);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return <div className="context-menu" role="menu" ref={ref} style={{ left: Math.min(x, window.innerWidth - 216), top: Math.min(y, window.innerHeight - 150) }}>
+    <button role="menuitem" className="context-menu-item" onClick={onRename}>Rename...</button>
+    <div className="context-menu-label">Color</div>
+    <div className="color-swatches">
+      {sessionColors.map((color) => <button key={color.value} role="menuitemradio" aria-checked={session.color === color.value} className={`color-swatch ${session.color === color.value ? "selected" : ""}`} style={{ background: color.value }} title={color.name} aria-label={color.name} onClick={() => onColor(color.value)} />)}
+    </div>
+    <button role="menuitem" className="context-menu-item" disabled={!session.color} onClick={() => onColor("")}>Default color</button>
+  </div>;
+}
+
+function RenameDialog({ session, onClose, onRename }: { session: Session; onClose: () => void; onRename: (name: string) => void }) {
+  const [name, setName] = useState(session.name);
+  const trimmed = name.trim();
+  return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="modal confirm-modal">
+    <div className="modal-heading"><div><p className="eyebrow">RENAME SESSION</p><h2>{session.name}</h2></div></div>
+    <form onSubmit={(event) => { event.preventDefault(); if (trimmed) onRename(trimmed); }}>
+      <label>Session name<input autoFocus maxLength={80} value={name} onFocus={(event) => event.target.select()} onChange={(event) => setName(event.target.value)} /></label>
+      <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button" disabled={!trimmed || trimmed === session.name}>Rename</button></div>
+    </form>
+  </div></div>;
 }
 
 function Home({ sessions, status, busy, tools, onNew, onLaunch, onDelete }: {
@@ -576,6 +706,20 @@ function StateIcon({ session, activity }: { session: Session; activity?: Activit
 const fitInstances = new Map<string, FitAddon>();
 const terminalReadyWaiters = new Map<string, Set<(terminal: Terminal) => void>>();
 
+// xterm reports a 0x0 cell until it first renders, so fit() right after open() is a silent no-op and cols/rows stay 80x24.
+async function fitTerminalNow(id: string) {
+  await document.fonts.ready;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const fit = fitInstances.get(id);
+    if (!fit) return;
+    if (fit.proposeDimensions()) {
+      fit.fit();
+      return;
+    }
+  }
+}
+
 function waitForTerminal(id: string): Promise<Terminal> {
   const terminal = terminalInstances.get(id);
   if (terminal) return Promise.resolve(terminal);
@@ -613,6 +757,29 @@ function notifyTerminalReady(id: string, terminal: Terminal) {
   waiters.forEach((resolve) => resolve(terminal));
 }
 
+// Windows Terminal convention: Ctrl+C copies only when text is selected (otherwise it is ^C
+// for the harness); Ctrl+V and Ctrl+Shift+C/V always paste/copy. Uses the native clipboard
+// because WebView2's navigator.clipboard needs a permission prompt.
+function handleClipboardKey(event: globalThis.KeyboardEvent, terminal: Terminal, onError: (error: unknown) => void): boolean {
+  if (!event.ctrlKey || event.altKey || event.metaKey) return true;
+  const key = event.key.toLowerCase();
+  const copy = key === "c" && (event.shiftKey || terminal.hasSelection());
+  const paste = key === "v";
+  if (!copy && !paste) return true;
+  // preventDefault stops the browser's own paste event from inserting the text a second time.
+  event.preventDefault();
+  if (event.type !== "keydown") return false;
+  if (copy) {
+    const text = terminal.getSelection();
+    if (text) {
+      void window.runtime.ClipboardSetText(text).then(() => terminal.clearSelection()).catch((error) => onError(error));
+    }
+  } else {
+    void window.runtime.ClipboardGetText().then((text) => { if (text) terminal.paste(text); }).catch((error) => onError(error));
+  }
+  return false;
+}
+
 function TerminalPane({ session, visible, busy, onLaunch, onError }: {
   session?: Session;
   visible: boolean;
@@ -639,13 +806,14 @@ function TerminalPane({ session, visible, busy, onLaunch, onError }: {
     container.current.addEventListener("pointerdown", onPointerDown, true);
     container.current.addEventListener("mousedown", onMouseDown, true);
     if (!terminal) {
-      terminal = new Terminal({ convertEol: false, cursorBlink: true, fontFamily: "Cascadia Code, Consolas, monospace", fontSize: 14, theme: { background: "#0c0e12", foreground: "#d8dce5", cursor: "#a4e1c0" } });
+      terminal = new Terminal({ convertEol: false, cursorBlink: true, scrollback: 0, fontFamily: "Cascadia Code, Consolas, monospace", fontSize: 14, theme: { background: "#0c0e12", foreground: "#d8dce5", cursor: "#a4e1c0" } });
       terminal.loadAddon(fit);
       terminal.open(container.current);
       terminalInstances.set(session.id, terminal);
       terminal.onTitleChange((title) => terminalTitles.set(session.id, title));
       terminal.onData((data) => { lastInputAt.set(session.id, Date.now()); void app().WriteTerminal(session.id, data).catch((err) => onError(err)); });
       terminal.onBinary((data) => { void app().WriteTerminalBinary(session.id, btoa(data)).catch((err) => onError(err)); });
+      terminal.attachCustomKeyEventHandler((event) => handleClipboardKey(event, terminal!, onError));
     } else {
       terminal.loadAddon(fit);
       terminal.open(container.current);
@@ -657,10 +825,19 @@ function TerminalPane({ session, visible, busy, onLaunch, onError }: {
       lastMouseTrackingMode = mode;
       void app().LogTerminalMouseTrackingMode(session.id, mode).catch((error) => onError(error));
     });
+    let pendingPtyResize: number | undefined;
+    let sentSize = "";
     const resize = () => {
       try {
         fit.fit();
-        if (runningRef.current) void app().ResizeTerminal(session.id, terminal!.cols, terminal!.rows).catch((err) => { if (!isStoppedSessionError(err)) onError(err); });
+        // Coalesce drag-resize bursts so the harness redraws once at the final size.
+        window.clearTimeout(pendingPtyResize);
+        pendingPtyResize = window.setTimeout(() => {
+          const size = `${terminal!.cols}x${terminal!.rows}`;
+          if (!runningRef.current || size === sentSize) return;
+          sentSize = size;
+          void app().ResizeTerminal(session.id, terminal!.cols, terminal!.rows).catch((err) => { if (!isStoppedSessionError(err)) onError(err); });
+        }, 100);
       } catch (error) {
         reportFrontendFailure("ui.terminal-layout", error);
       }
@@ -670,6 +847,7 @@ function TerminalPane({ session, visible, busy, onLaunch, onError }: {
     resize();
     notifyTerminalReady(session.id, terminal);
     return () => {
+      window.clearTimeout(pendingPtyResize);
       observer.disconnect();
       container.current?.removeEventListener("pointerdown", onPointerDown, true);
       container.current?.removeEventListener("mousedown", onMouseDown, true);
@@ -707,37 +885,12 @@ function parseLaunchArgs(text: string): string[] {
   return text.split(/\r?\n/).map((arg) => arg.trim()).filter(Boolean);
 }
 
-function modelFromArgs(text: string): string {
-  const args = parseLaunchArgs(text);
-  for (let index = 0; index < args.length; index++) {
-    if (args[index] === "--model") return args[index + 1] ?? "";
-    if (args[index].startsWith("--model=")) return args[index].slice("--model=".length);
-  }
-  return "";
-}
-
-// Keeps the launch-argument text as the single source of truth: the Model
-// field only rewrites the --model entry in it.
-function withModelArg(text: string, model: string): string {
-  const args = parseLaunchArgs(text);
-  const kept: string[] = [];
-  for (let index = 0; index < args.length; index++) {
-    if (args[index] === "--model") { index++; continue; }
-    if (args[index].startsWith("--model=")) continue;
-    kept.push(args[index]);
-  }
-  if (model.trim()) kept.push("--model", model.trim());
-  return kept.join("\n");
-}
-
-function CreateSession({ recentFolders, tools, onClose, onCreated, onError }: {
+function CreateSession({ recentFolders, onClose, onCreated, onError }: {
   recentFolders: string[];
-  tools: ToolStatus[];
   onClose: () => void;
   onCreated: (session: Session) => void;
   onError: (error: unknown) => void;
 }) {
-  const [name, setName] = useState("");
   const [tool, setTool] = useState<Session["tool"]>("claude-code");
   const [workingDir, setWorkingDir] = useState("");
   const [launchArgs, setLaunchArgs] = useState("");
@@ -749,8 +902,6 @@ function CreateSession({ recentFolders, tools, onClose, onCreated, onError }: {
   const [yamlText, setYamlText] = useState("");
   const [yamlDirty, setYamlDirty] = useState(false);
   const [yamlError, setYamlError] = useState("");
-  const modelSupported = (tools.find((candidate) => candidate.id === tool)?.capabilities ?? [])
-    .some((capability) => capability.option === "--model" && capability.available);
   const chooseDirectory = async () => {
     try { const path = await app().SelectWorkingDirectory(); if (path) setWorkingDir(path); } catch (err) { onError(err); }
   };
@@ -796,7 +947,7 @@ function CreateSession({ recentFolders, tools, onClose, onCreated, onError }: {
     const timer = setTimeout(() => {
       (async () => {
         try {
-          const text = await app().PreviewSessionYAML(name, tool, workingDir, parseLaunchArgs(launchArgs));
+          const text = await app().PreviewSessionYAML("", tool, workingDir, parseLaunchArgs(launchArgs));
           if (!cancelled) { setYamlText(text); setYamlError(""); }
         } catch (err) {
           if (!cancelled) setYamlError(err instanceof Error ? err.message : String(err));
@@ -804,25 +955,23 @@ function CreateSession({ recentFolders, tools, onClose, onCreated, onError }: {
       })();
     }, 300);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [yamlOpen, yamlDirty, name, tool, workingDir, launchArgs]);
+  }, [yamlOpen, yamlDirty, tool, workingDir, launchArgs]);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setSaving(true);
     try {
       const session = yamlOpen
         ? await app().CreateSessionFromYAML(yamlText)
-        : await app().CreateSession(name, tool, workingDir, parseLaunchArgs(launchArgs));
+        : await app().CreateSession("", tool, workingDir, parseLaunchArgs(launchArgs));
       onCreated(session);
     } catch (err) { onError(err); } finally { setSaving(false); }
   };
   return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="modal">
     <div className="modal-heading"><div><p className="eyebrow">NEW WORKSPACE</p><h2>Create a session</h2></div><button className="icon-button" onClick={onClose}>x</button></div>
     <form onSubmit={(event) => void submit(event)}>
-      <label>Session name <span className="optional">(optional; defaults to the project or folder name)</span><input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. API refactor" /></label>
+      <label>Project folder<div className="folder-row"><input autoFocus required list="recent-project-folders" value={workingDir} onChange={(event) => setWorkingDir(event.target.value)} placeholder="Choose a local project folder" /><datalist id="recent-project-folders">{recentFolders.map((folder) => <option key={folder} value={folder} />)}</datalist><button type="button" className="secondary-button" onClick={() => void chooseDirectory()}>Browse</button></div></label>
       <label>AI harness<select value={tool} onChange={(event) => setTool(event.target.value as Session["tool"])}><option value="claude-code">Claude Code</option><option value="copilot-cli">GitHub Copilot CLI</option></select></label>
-      <label>Project folder<div className="folder-row"><input required list="recent-project-folders" value={workingDir} onChange={(event) => setWorkingDir(event.target.value)} placeholder="Choose a local project folder" /><datalist id="recent-project-folders">{recentFolders.map((folder) => <option key={folder} value={folder} />)}</datalist><button type="button" className="secondary-button" onClick={() => void chooseDirectory()}>Browse</button></div></label>
-      {modelSupported && <label>Model <span className="optional">(optional; passed as --model, name or alias as the harness defines it)</span><input value={modelFromArgs(launchArgs)} onChange={(event) => setLaunchArgs(withModelArg(launchArgs, event.target.value))} placeholder="e.g. sonnet" /></label>}
-      <label>Launch arguments <span className="optional">(editable template, one per line)</span><textarea rows={3} value={launchArgs} onChange={(event) => setLaunchArgs(event.target.value)} placeholder="--model&#10;sonnet" /></label>
+      <label>Launch arguments <span className="optional">(editable template, one per line)</span><textarea rows={3} value={launchArgs} onChange={(event) => setLaunchArgs(event.target.value)} placeholder="--yolo" /></label>
       <div className="launch-preview">
         {previewError ? <p className="tool-warning">{previewError}</p> : preview && <>
           <p className="muted">Will run:</p>
@@ -838,7 +987,7 @@ function CreateSession({ recentFolders, tools, onClose, onCreated, onError }: {
           <p className="form-note">{yamlDirty ? "Edited by hand: the form fields above no longer change this text. " : "Follows the form until you edit it. "}The definition is validated and saved in normal form.{yamlDirty && <> <button type="button" className="text-button" onClick={() => setYamlDirty(false)}>Reset from form</button></>}</p>
         </>}
       </div>
-      <p className="form-note">A YAML session definition is saved locally and the session starts immediately.</p>
+      <p className="form-note">A YAML session definition is saved locally and the session starts immediately. The session is named after the project; right-click it to rename or recolor.</p>
       <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button" disabled={saving}>{saving ? "Creating..." : "Create session"}</button></div>
     </form>
   </div></div>;

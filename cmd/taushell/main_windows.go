@@ -283,7 +283,7 @@ func recoverRuntime(ctx context.Context, store *session.Store, id string) (sessi
 				return runtime, nil
 			}
 		case session.StatusRunning:
-			alive, err := session.IsProcessAlive(runtime.ProcessID)
+			alive, err := session.RuntimeProcessAlive(runtime)
 			if err != nil {
 				return session.Runtime{}, err
 			}

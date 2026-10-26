@@ -1,6 +1,7 @@
 package session
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"unicode"
 
 	"gopkg.in/yaml.v3"
 )
@@ -22,11 +24,15 @@ const (
 var (
 	idPattern          = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
 	environmentPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	colorPattern       = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 )
+
+const maxNameLength = 80
 
 type Config struct {
 	ID          string            `yaml:"id"`
 	Name        string            `yaml:"name"`
+	Color       string            `yaml:"color,omitempty"`
 	Tool        Harness           `yaml:"tool"`
 	WorkingDir  string            `yaml:"working_dir"`
 	LaunchArgs  []string          `yaml:"launch_args,omitempty"`
@@ -95,6 +101,9 @@ func (config Config) Validate() error {
 	}
 	if strings.TrimSpace(config.Name) == "" {
 		return fmt.Errorf("name must not be empty")
+	}
+	if config.Color != "" && !colorPattern.MatchString(config.Color) {
+		return fmt.Errorf("color %q must be a #rrggbb hex value", config.Color)
 	}
 	if !config.UTF8Enabled() {
 		return fmt.Errorf("powershell.utf8 cannot be disabled in the Windows 10 Phase 1 runtime")
@@ -181,6 +190,108 @@ func SaveConfig(directory string, config Config) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// UpdateConfigField rewrites one top-level field ("name" or "color") of an
+// existing session YAML in place, preserving the user's other keys and
+// comments. An empty color removes the key. The ID and filename never change.
+func UpdateConfigField(directory, id, key, value string) (Config, error) {
+	if !idPattern.MatchString(id) {
+		return Config{}, fmt.Errorf("invalid session id %q", id)
+	}
+	switch key {
+	case "name":
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return Config{}, errors.New("name must not be empty")
+		}
+		if len([]rune(value)) > maxNameLength {
+			return Config{}, fmt.Errorf("name must be at most %d characters", maxNameLength)
+		}
+		if strings.IndexFunc(value, unicode.IsControl) >= 0 {
+			return Config{}, errors.New("name must not contain control characters")
+		}
+	case "color":
+	default:
+		return Config{}, fmt.Errorf("unsupported session field %q", key)
+	}
+	path := filepath.Join(directory, id+".yaml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return Config{}, fmt.Errorf("read session config %q: %w", path, err)
+	}
+	var document yaml.Node
+	if err := yaml.Unmarshal(data, &document); err != nil {
+		return Config{}, fmt.Errorf("decode session config %q: %w", path, err)
+	}
+	if len(document.Content) != 1 || document.Content[0].Kind != yaml.MappingNode {
+		return Config{}, fmt.Errorf("session config %q must be a YAML mapping", path)
+	}
+	setMappingString(document.Content[0], key, value)
+	var encoded bytes.Buffer
+	encoder := yaml.NewEncoder(&encoded)
+	encoder.SetIndent(2)
+	if err := errors.Join(encoder.Encode(&document), encoder.Close()); err != nil {
+		return Config{}, fmt.Errorf("encode session config %q: %w", path, err)
+	}
+	updated, err := parseConfig(bytes.NewReader(encoded.Bytes()), fmt.Sprintf("%q", path))
+	if err != nil {
+		return Config{}, err
+	}
+	if updated.ID != id {
+		return Config{}, fmt.Errorf("session config filename %q does not match declared id %q", id, updated.ID)
+	}
+	return updated, replaceFile(path, encoded.Bytes())
+}
+
+func setMappingString(mapping *yaml.Node, key, value string) {
+	for index := 0; index+1 < len(mapping.Content); index += 2 {
+		if mapping.Content[index].Value != key {
+			continue
+		}
+		if value == "" {
+			mapping.Content = append(mapping.Content[:index], mapping.Content[index+2:]...)
+			return
+		}
+		mapping.Content[index+1] = stringNode(key, value)
+		return
+	}
+	if value == "" {
+		return
+	}
+	mapping.Content = append(mapping.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}, stringNode(key, value))
+}
+
+func stringNode(key, value string) *yaml.Node {
+	node := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value}
+	if key == "color" {
+		node.Style = yaml.DoubleQuotedStyle
+	}
+	return node
+}
+
+// replaceFile writes data beside path and renames it over path so a crash
+// cannot leave a truncated session definition.
+func replaceFile(path string, data []byte) error {
+	temp, err := os.CreateTemp(filepath.Dir(path), ".update-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temporary session config: %w", err)
+	}
+	writeErr := func() error {
+		if _, err := temp.Write(data); err != nil {
+			return err
+		}
+		return temp.Sync()
+	}()
+	if err := errors.Join(writeErr, temp.Close()); err != nil {
+		_ = os.Remove(temp.Name())
+		return fmt.Errorf("write temporary session config: %w", err)
+	}
+	if err := os.Rename(temp.Name(), path); err != nil {
+		_ = os.Remove(temp.Name())
+		return fmt.Errorf("replace session config %q: %w", path, err)
+	}
+	return nil
 }
 
 func FindConfig(directory, id string) (Config, error) {

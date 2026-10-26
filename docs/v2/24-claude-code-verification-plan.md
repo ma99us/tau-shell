@@ -20,7 +20,7 @@ Verified (any Claude Code version, no login):
   there on purpose.
 - Restoring a session that never got past first-run onboarding relaunches the
   wizard. That is the harness's own behavior, not a TauShell defect.
-- Create dialog preview shows `--model sonnet` when a model is entered.
+- Create dialog preview shows `--model sonnet` when `--model sonnet` is typed into the launch arguments.
 
 Never verified (the gaps this plan closes):
 
@@ -33,7 +33,7 @@ Never verified (the gaps this plan closes):
 | G5 | Graceful exit. Only Ctrl+C is sent; the "Graceful interrupt failed or timed out / force-terminated" notice is likely on every close. `/exit` or double Ctrl+C was never probed. | `gracefulExit` is empty for Claude in `harness.For`. |
 | G6 | No "cannot resume yet" check. A session that never had a turn may show Restore, and the harness may error or restart onboarding. | `resumeCheck` is nil for Claude. |
 | G7 | Default arg `--dangerously-skip-permissions` may show a one-time "Bypass Permissions" acceptance prompt or refuse to run in some setups (for example as administrator or outside a trusted folder). Never observed. | `defaultArgs` for Claude. |
-| G8 | `--model` aliases and values (`sonnet`, `opus`, full names), and whether a model chosen at creation persists on restore. | Create dialog Model field writes `--model <value>` into `launch_args`. |
+| G8 | `--model` aliases and values (`sonnet`, `opus`, full names), and whether a model chosen at creation persists on restore. | Launch arguments in the Create dialog write `--model <value>` into `launch_args`. |
 | G9 | Two installs exist on the dev PC (npm 2.1.133 first on PATH, winget 2.1.302). Behavior across both is unrecorded. Tested range is 2.1.133 to below 2.2.0. | `TestedFrom`/`TestedBefore` in the spec. |
 | G10 | Claude TUI behaviors through ConPTY/xterm: alternate screen, mouse, bracketed paste, Shift+Enter or other modified keys, Ctrl+key combos, resize reflow, wide glyphs and emoji, long output scrollback. | Generic terminal fixture results only. |
 | G11 | Session-ID reuse edge cases: `--session-id` with an ID Claude already used, `--resume` of an ID that does not exist, Start fresh after a real conversation. | `Manager.start`/`BeginFresh`. |
@@ -174,7 +174,7 @@ Ctrl+C, document that.
 1. With defaults, confirm the bypass flag works: no permission prompts and
    no refusal message. Note any one-time acceptance dialog and any
    restrictions (administrator shell, non-trusted folder).
-2. Create with Model = `sonnet`, then `opus`, then an invalid value. Check the
+2. Create with launch arguments `--model` `sonnet`, then `opus`, then an invalid value. Check the
    preview, the YAML `launch_args`, the model Claude reports in its UI, and
    the error for an invalid value (is it visible in the terminal and does the
    session show as failed rather than silently running?).

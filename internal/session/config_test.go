@@ -131,3 +131,40 @@ func TestValidateLaunchArgsStandaloneMatchesConfigValidate(t *testing.T) {
 		t.Fatalf("reserved argument not rejected without a filesystem-backed Config: %v", err)
 	}
 }
+
+func TestUpdateConfigFieldPreservesCommentsAndValidates(t *testing.T) {
+	directory := t.TempDir()
+	original := "# my notes\nid: keep-id\nname: Old Name\ntool: claude-code\nworking_dir: " + filepath.ToSlash(t.TempDir()) + "\n"
+	path := filepath.Join(directory, "keep-id.yaml")
+	if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := UpdateConfigField(directory, "keep-id", "name", "New: Name #1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := UpdateConfigField(directory, "keep-id", "color", "#4f8cff"); err != nil {
+		t.Fatal(err)
+	}
+	config, err := FindConfig(directory, "keep-id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.Name != "New: Name #1" || config.Color != "#4f8cff" || config.ID != "keep-id" {
+		t.Fatalf("unexpected config after update: %+v", config)
+	}
+	data, _ := os.ReadFile(path)
+	if !strings.Contains(string(data), "# my notes") {
+		t.Fatalf("comment was lost:\n%s", data)
+	}
+	if config, err = UpdateConfigField(directory, "keep-id", "color", ""); err != nil || config.Color != "" {
+		t.Fatalf("clearing color: %+v, %v", config, err)
+	}
+	for _, bad := range [][2]string{{"color", "red"}, {"name", "  "}, {"name", strings.Repeat("x", 81)}, {"tool", "x"}} {
+		if _, err := UpdateConfigField(directory, "keep-id", bad[0], bad[1]); err == nil {
+			t.Fatalf("UpdateConfigField(%q, %q) should fail", bad[0], bad[1])
+		}
+	}
+	if entries, _ := os.ReadDir(directory); len(entries) != 1 {
+		t.Fatalf("unexpected leftover files: %v", entries)
+	}
+}

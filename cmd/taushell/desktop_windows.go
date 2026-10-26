@@ -45,6 +45,8 @@ type App struct {
 	configDirectory        string
 	webViewVersion         string
 	showMessageDialog      func(context.Context, runtime.MessageDialogOptions) (string, error)
+	emitEvent              func(name string, data ...any)
+	dialogs                dialogBroker
 	requestQuit            func(context.Context)
 	forcedShutdownWarnings []string
 	terminalReports        sync.Map
@@ -64,6 +66,7 @@ type desktopSessionManager interface {
 	Resize(string, int, int) error
 	Stop(context.Context, string) error
 	Delete(context.Context, string) error
+	UpdateDisplay(id, field, value string) error
 	StopAll(context.Context) error
 	Close(context.Context) error
 }
@@ -408,6 +411,26 @@ func (application *App) CreateSession(name, toolName, workingDir string, launchA
 	return application.saveNewConfig(config)
 }
 
+// RenameSession changes only the display name; the session ID and file name stay fixed.
+func (application *App) RenameSession(id, name string) (err error) {
+	defer func() {
+		if err != nil {
+			diagnostics.Error("rename session failed", err, "session_id", id)
+		}
+	}()
+	return application.manager.UpdateDisplay(id, "name", name)
+}
+
+// SetSessionColor stores a #rrggbb accent color, or clears it when color is empty.
+func (application *App) SetSessionColor(id, color string) (err error) {
+	defer func() {
+		if err != nil {
+			diagnostics.Error("set session color failed", err, "session_id", id)
+		}
+	}()
+	return application.manager.UpdateDisplay(id, "color", color)
+}
+
 func (application *App) StartSession(id string, columns, rows int) (snapshot sessionhost.Snapshot, err error) {
 	defer logSessionOperation("start session", id, &snapshot, &err)
 	return application.manager.Start(context.Background(), id, false, columns, rows)
@@ -749,6 +772,10 @@ func (application *App) messageDialog(ctx context.Context, options runtime.Messa
 	if application.showMessageDialog != nil {
 		return application.showMessageDialog(ctx, options)
 	}
+	if choice, shown, err := application.inAppDialog(ctx, options); shown {
+		return choice, err
+	}
+	// The page is not up (or has not registered), so fall back to the native box.
 	return runtime.MessageDialog(ctx, options)
 }
 
