@@ -127,7 +127,7 @@ and tests demonstrated to be UI-independent and correct for the GUI.
   Per-harness session templates (Claude Code →
   `--dangerously-skip-permissions`, Copilot CLI → `--yolo`) are now exposed
   through `Adapter.DefaultLaunchArgs()`, prefilled (without clobbering user
-  edits) in the Create Session dialog, and backed by a live
+  edits) in the New Session dialog, and backed by a live
   `PreviewSessionLaunch` bound method that resolves the effective executable,
   validates against reserved managed-identity arguments via the shared
   `session.ValidateLaunchArgs`, probes unsupported options against the

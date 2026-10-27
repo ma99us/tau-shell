@@ -16,9 +16,8 @@ keeps core session management independent of any one AI provider.
 
 ## Status
 
-Phase 1 is under way and the desktop app is an early implementation, not a
-verified release. Remote access, phone/mobile integration, web dashboards and
-notifications are not part of Phase 1. The old Bubble Tea TUI has been removed
+Remote access, phone/mobile integration and web dashboards are not part of
+Phase 1; local attention alerts (taskbar flash and Windows toast) are. The old Bubble Tea TUI has been removed
 and no TUI fallback is planned.
 
 **Implemented**
@@ -50,8 +49,12 @@ and no TUI fallback is planned.
 bridge-denial tests, an automated Wails-host close test, and a live winget
 install run. See [`docs/v2/21-engineering-handoff.md`](docs/v2/21-engineering-handoff.md)
 and [`docs/v2/24-claude-code-verification-plan.md`](docs/v2/24-claude-code-verification-plan.md).
-Planned UI work (drag-and-drop reorder, "Open session", duplicate session) is
-listed in [`docs/v2/20-mvp-backlog.md`](docs/v2/20-mvp-backlog.md).
+Drag-and-drop reorder, clone session and local attention alerts are
+implemented (see [`docs/v2/20-mvp-backlog.md`](docs/v2/20-mvp-backlog.md)); they
+are covered by Go tests and a type-checked build, but the packaged window
+could not be driven, so the flash/toast and drag UI are not live-verified.
+Alerts are configured in `%USERPROFILE%\.tau_shell\config.yaml` (palette:
+"Edit settings...").
 
 ## Using TauShell
 

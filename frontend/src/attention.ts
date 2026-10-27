@@ -5,6 +5,22 @@ import type { Terminal } from "@xterm/xterm";
 // (callers fall back to output timing).
 export type HarnessSignal = "working" | "idle" | "input" | undefined;
 
+export type AttentionKind = "input" | "done";
+export const minWorkMsForDone = 3000;
+
+// Edge detector for background alerts: fires once when the harness starts
+// waiting for an answer, or when it stops working after a real piece of work
+// (not a brief blip and not a hand-off to a prompt).
+export function attentionEdge(
+  old: { working: boolean; input: boolean },
+  next: { working: boolean; input: boolean },
+  workedMs: number,
+): AttentionKind | undefined {
+  if (next.input && !old.input) return "input";
+  if (old.working && !next.working && !next.input && workedMs >= minWorkMsForDone) return "done";
+  return undefined;
+}
+
 const brailleSpinner = /^[\u2800-\u28FF\u25D0-\u25D3]/;
 // Claude Code 2.1.311 animates the title prefix with U+25D0-25D3 (half circles)
 // while working and shows U+2733 when idle; the trust-folder prompt footer is

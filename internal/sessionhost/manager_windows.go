@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime/debug"
+	"sort"
 	"sync"
 	"time"
 
@@ -122,6 +123,20 @@ func New(configDirectory, databasePath string, emit func(Event)) (*Manager, erro
 	}, nil
 }
 
+// HarnessModel reports the model the harness last recorded for the session,
+// or "" when unknown or the session has no harness conversation yet.
+func (manager *Manager) HarnessModel(ctx context.Context, id string) (string, error) {
+	config, err := session.FindConfig(manager.configDirectory, id)
+	if err != nil {
+		return "", err
+	}
+	runtime, err := manager.store.Runtime(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	return harness.CurrentModel(config.Tool, runtime.HarnessSessionID), nil
+}
+
 func (manager *Manager) List(ctx context.Context) ([]Snapshot, error) {
 	configs, err := session.ListConfigs(manager.configDirectory)
 	if err != nil {
@@ -159,7 +174,83 @@ func (manager *Manager) List(ctx context.Context) ([]Snapshot, error) {
 		}
 	}
 	manager.mu.Unlock()
+	if err := manager.applyOrder(ctx, result); err != nil {
+		return nil, err
+	}
 	return result, nil
+}
+
+// applyOrder sorts snapshots by the saved display order; sessions without a
+// saved position keep their relative order after the ordered ones.
+func (manager *Manager) applyOrder(ctx context.Context, snapshots []Snapshot) error {
+	order, err := manager.store.SessionOrder(ctx)
+	if err != nil {
+		return err
+	}
+	sort.SliceStable(snapshots, func(i, j int) bool {
+		left, leftOK := order[snapshots[i].ID]
+		right, rightOK := order[snapshots[j].ID]
+		if leftOK != rightOK {
+			return leftOK
+		}
+		return leftOK && left < right
+	})
+	return nil
+}
+
+// SetOrder saves the display order. Every id must be an existing session;
+// sessions not listed keep their current relative order after the listed ones.
+func (manager *Manager) SetOrder(ctx context.Context, ids []string) error {
+	snapshots, err := manager.List(ctx)
+	if err != nil {
+		return err
+	}
+	known := make(map[string]bool, len(snapshots))
+	for _, snapshot := range snapshots {
+		known[snapshot.ID] = true
+	}
+	final := make([]string, 0, len(snapshots))
+	seen := map[string]bool{}
+	for _, id := range ids {
+		if !known[id] {
+			return fmt.Errorf("unknown session %q", id)
+		}
+		if !seen[id] {
+			seen[id] = true
+			final = append(final, id)
+		}
+	}
+	for _, snapshot := range snapshots {
+		if !seen[snapshot.ID] {
+			final = append(final, snapshot.ID)
+		}
+	}
+	return manager.store.SetSessionOrder(ctx, final)
+}
+
+// PlaceAfter saves the display order with id directly after afterID. Both
+// sessions must already exist.
+func (manager *Manager) PlaceAfter(ctx context.Context, id, afterID string) error {
+	snapshots, err := manager.List(ctx)
+	if err != nil {
+		return err
+	}
+	ids := make([]string, 0, len(snapshots))
+	found := false
+	for _, snapshot := range snapshots {
+		if snapshot.ID == id {
+			continue
+		}
+		ids = append(ids, snapshot.ID)
+		if snapshot.ID == afterID {
+			ids = append(ids, id)
+			found = true
+		}
+	}
+	if !found {
+		return fmt.Errorf("unknown session %q", afterID)
+	}
+	return manager.store.SetSessionOrder(ctx, ids)
 }
 
 // UpdateDisplay persists a new name or color ("name" or "color") for a session

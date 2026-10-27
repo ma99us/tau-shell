@@ -58,6 +58,10 @@ func OpenStore(path string) (*Store, error) {
 			process_id INTEGER NOT NULL DEFAULT 0,
 			last_error TEXT NOT NULL DEFAULT '',
 			updated_at TEXT NOT NULL
+		);
+		CREATE TABLE IF NOT EXISTS session_order (
+			session_id TEXT PRIMARY KEY,
+			position INTEGER NOT NULL
 		)
 	`); err != nil {
 		_ = db.Close()
@@ -78,6 +82,54 @@ func (store *Store) Delete(ctx context.Context, sessionID string) error {
 	defer store.mu.Unlock()
 	if _, err := store.db.ExecContext(ctx, `DELETE FROM session_runtime WHERE session_id = ?`, sessionID); err != nil {
 		return fmt.Errorf("delete runtime state for %q: %w", sessionID, err)
+	}
+	if _, err := store.db.ExecContext(ctx, `DELETE FROM session_order WHERE session_id = ?`, sessionID); err != nil {
+		return fmt.Errorf("delete display order for %q: %w", sessionID, err)
+	}
+	return nil
+}
+
+// SessionOrder returns the saved display position of each session. Sessions
+// without a saved position are absent.
+func (store *Store) SessionOrder(ctx context.Context) (map[string]int, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	rows, err := store.db.QueryContext(ctx, `SELECT session_id, position FROM session_order`)
+	if err != nil {
+		return nil, fmt.Errorf("read session order: %w", err)
+	}
+	defer rows.Close()
+	order := map[string]int{}
+	for rows.Next() {
+		var id string
+		var position int
+		if err := rows.Scan(&id, &position); err != nil {
+			return nil, fmt.Errorf("read session order: %w", err)
+		}
+		order[id] = position
+	}
+	return order, rows.Err()
+}
+
+// SetSessionOrder replaces the saved display order with ids, in order.
+func (store *Store) SetSessionOrder(ctx context.Context, ids []string) error {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	tx, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("save session order: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM session_order`); err != nil {
+		return fmt.Errorf("save session order: %w", err)
+	}
+	for position, id := range ids {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO session_order (session_id, position) VALUES (?, ?)`, id, position); err != nil {
+			return fmt.Errorf("save session order: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("save session order: %w", err)
 	}
 	return nil
 }

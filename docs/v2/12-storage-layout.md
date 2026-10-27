@@ -11,8 +11,9 @@ Configuration is human-edited YAML; mutable runtime/session state is stored sepa
 ├─ sessions/
 │  └─ <session-id>.yaml
 ├─ prompts.yaml          (optional, hand-edited prompt presets)
+├─ config.yaml           (optional, hand-edited app settings: notifications)
 ├─ logs/
-└─ state.db
+└─ state.db              (runtime state and the shared session display order)
 ```
 
 The YAML file is the source of intended session configuration. The initial implementation in `internal/session/` stores TauShell-managed runtime metadata in SQLite, including the harness session UUID generated before first launch and the outcomes of launch/restore attempts. Session start uses an immediate SQLite write transaction to prevent two TauShell processes from launching the same session concurrently. Do not write runtime IDs back into hand-edited YAML.

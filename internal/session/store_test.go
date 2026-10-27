@@ -129,3 +129,34 @@ func TestBeginFreshReplacesSavedHarnessID(t *testing.T) {
 		t.Fatalf("fresh start reused harness session ID %q", fresh.HarnessSessionID)
 	}
 }
+
+func TestSessionOrderRoundTripAndDelete(t *testing.T) {
+	store, err := OpenStore(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	if order, err := store.SessionOrder(ctx); err != nil || len(order) != 0 {
+		t.Fatalf("empty order = %v, %v", order, err)
+	}
+	if err := store.SetSessionOrder(ctx, []string{"c", "a", "b"}); err != nil {
+		t.Fatal(err)
+	}
+	order, err := store.SessionOrder(ctx)
+	if err != nil || order["c"] != 0 || order["a"] != 1 || order["b"] != 2 {
+		t.Fatalf("order = %v, %v", order, err)
+	}
+	if err := store.Delete(ctx, "a"); err != nil {
+		t.Fatal(err)
+	}
+	if order, _ = store.SessionOrder(ctx); len(order) != 2 {
+		t.Fatalf("order after delete = %v", order)
+	}
+	if err := store.SetSessionOrder(ctx, []string{"b"}); err != nil {
+		t.Fatal(err)
+	}
+	if order, _ = store.SessionOrder(ctx); len(order) != 1 || order["b"] != 0 {
+		t.Fatalf("order after replace = %v", order)
+	}
+}

@@ -7,7 +7,7 @@
 - Security hardening: the Windows host now cancels top-level WebView2 navigations outside the bundled `http://wails.localhost` origin before they load. Wails' bound-method origin validation remains a separate defense.
 - Session-manager lifecycle coverage is implemented for concurrent independent fake sessions, input/output/resize, process exit, failed restore preserving the resume ID, graceful and forced stop, and cleanup. This does not cover a real hosted xterm or harness.
 - Implemented executable detection, resolved version parsing, minimum/tested-version classification, and per-adapter capability probes (via `--help` option matching) for PowerShell 7, Claude Code, and Copilot CLI; Home shows each tool's resolved executable path, version, support classification, and any unmet capability. A first-run Setup screen blocks on a missing/unusable PowerShell 7 with a "continue without" escape hatch. Do not silently pin or downgrade.
-- Implemented schema: strict YAML accepts ordered harness `launch_args`; managed session/resume arguments cannot be overridden. Implemented generated per-harness launch-argument templates (Claude Code → `--dangerously-skip-permissions`, Copilot CLI → `--yolo`, via `Adapter.DefaultLaunchArgs()`), prefilled editably in the Create Session dialog without overwriting user edits, plus a live launch preview (`PreviewSessionLaunch`) showing the resolved executable and full effective argv and warning on options the installed harness does not support.
+- Implemented schema: strict YAML accepts ordered harness `launch_args`; managed session/resume arguments cannot be overridden. Implemented generated per-harness launch-argument templates (Claude Code → `--dangerously-skip-permissions`, Copilot CLI → `--yolo`, via `Adapter.DefaultLaunchArgs()`), prefilled editably in the New Session dialog without overwriting user edits, plus a live launch preview (`PreviewSessionLaunch`) showing the resolved executable and full effective argv and warning on options the installed harness does not support.
 - **Planned setup:** WebView2 and PowerShell 7 are TauShell host prerequisites; missing harnesses do not block Home. winget is optional; installation requires a confirmation dialog showing the exact winget command before it runs in a visible console (never silent/elevated), and the tool is always re-detected after winget exits — success is reported only once it becomes usable. When winget is unavailable or a tool has no winget package, Home instead links to the vendor's official setup page.
 - ConPTY host for PowerShell 7 on Windows 10, with automated Windows tests for output, exit codes, resizing, and child-process cleanup.
 - Implemented per-run JSON diagnostics at `%TEMP%\TauShell\taushell.log`; startup truncates the file and the UI exposes its location. Host/lifecycle, Wails, frontend runtime, React render, and operation failures are logged with sensitive payload boundaries. Prompt/terminal contents, credentials, and environment values are intentionally excluded.
@@ -76,17 +76,28 @@
   rules and verification limits: [`08-UI-Design.md`](../v1/08-UI-Design.md#10-harness-widgets)
   and the handoff. Claude Code slash commands, `/model` and Esc interrupt are
   unverified (provider 401). No model field in the New Session dialog.
-- **UI improvements (planned, not implemented):**
-  - Drag-and-drop reordering of sessions with the mouse, from either the left
-    menu or the tab strip. Order must stay identical across Home tiles, left
-    menu items, and tabs, so the order needs to be persisted and shared rather
-    than derived from file names.
-  - Rename the "Open terminal" action on Home session tiles to "Open session".
-  - Duplicate a session from the right-click menu on a left-menu item or tab,
-    and from a button on the Home session tile. The copy reuses the source
-    session's working directory and harness and is opened as a new session
-    immediately, with no prompts. It must not copy runtime state (resume IDs,
-    restore outcome), and the YAML id and name must stay unique.
+- **UI improvements (implemented, not live-driven):**
+  - Drag-and-drop reordering from the left menu (expanded and collapsed), the
+    tab strip and Home tiles. One order is stored in `state.db`
+    (`session_order`) and shared by all three; it is not derived from file
+    names. No keyboard reorder yet (accessibility gap). Drag was verified by a
+    Go test of the order store/manager and a type-checked build; the packaged
+    window could not be driven.
+  - The session top bar shows the harness's current model right of the git
+    branch. It is read-only, from the harness's own log (Claude Code
+    `projects/*/<id>.jsonl`, Copilot CLI `session-state/<id>/events.jsonl`),
+    polled every 5 s; empty when unknown. Copilot verified against a real log,
+    Claude against a prior transcript; not yet seen live in the window.
+  - Home tile buttons are green and ordered Start fresh / Open (or Start),
+    Resume, Clone, pinned to the tile bottom. "Open terminal" is now "Open".
+    A gear button in the sidebar footer opens `config.yaml`; the collapse
+    toggle sits at the right of the footer.
+  - Clone from the right-click menu (sidebar row or tab) and a Home tile
+    button: the copy reuses all definition fields, gets a unique "Name (n)"
+    and id, sits right after the source, and starts immediately. Runtime
+    state is never copied. YAML comments are not preserved in the copy.
+  - Local attention alerts: see
+    [`22-local-attention-notifications.md`](./22-local-attention-notifications.md).
 - **Shutdown/recovery:** a repeated native test verifies process, job, and
   input/output pipe handles are invalidated after ConPTY close; the opaque
   pseudoconsole is checked through successful close and cleared state. Wails-
@@ -114,5 +125,5 @@ The detailed step dependencies and acceptance criteria remain in
 ## Later phases
 
 - Workspaces and group restore.
-- Notifications, mobile dashboard, remote interaction, and remote/web dashboard. A local-only slice (tab marker, taskbar flash) is pre-planned in [`22-local-attention-notifications.md`](./22-local-attention-notifications.md).
+- Remote/mobile access, web dashboards, and remote push notifications. Local attention alerts (taskbar flash and Windows toast) are in Phase 1: [`22-local-attention-notifications.md`](./22-local-attention-notifications.md).
 - General plugin SDK, rich attention detection, multi-agent orchestration, distributed execution, and cloud sync.

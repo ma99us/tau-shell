@@ -836,3 +836,34 @@ func (process *fakeSessionProcess) isClosed() bool {
 	defer process.mu.Unlock()
 	return process.closed
 }
+
+func TestSetOrderAndPlaceAfter(t *testing.T) {
+	manager, _, _ := newLifecycleTestManager(t, "a", "b", "c")
+	ctx := context.Background()
+	ids := func() string {
+		list, err := manager.List(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, snapshot := range list {
+			out = append(out, snapshot.ID)
+		}
+		return strings.Join(out, ",")
+	}
+	if err := manager.SetOrder(ctx, []string{"c", "a"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := ids(); got != "c,a,b" {
+		t.Fatalf("order = %s, want c,a,b", got)
+	}
+	if err := manager.SetOrder(ctx, []string{"nope"}); err == nil {
+		t.Fatal("unknown id accepted")
+	}
+	if err := manager.PlaceAfter(ctx, "b", "c"); err != nil {
+		t.Fatal(err)
+	}
+	if got := ids(); got != "c,b,a" {
+		t.Fatalf("order = %s, want c,b,a", got)
+	}
+}

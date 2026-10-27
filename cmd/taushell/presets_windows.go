@@ -40,6 +40,22 @@ func (application *App) GetPresets(sessionID string) (resolved []presets.Resolve
 	}), nil
 }
 
+// GetGitBranch returns the session working directory's current git branch,
+// or "" when it is not a git repository.
+func (application *App) GetGitBranch(sessionID string) (string, error) {
+	config, err := session.FindConfig(application.configDirectory, sessionID)
+	if err != nil {
+		return "", err
+	}
+	return presets.GitBranch(context.Background(), config.WorkingDir), nil
+}
+
+// GetSessionModel returns the model the harness last recorded for the
+// session, or "" when it is unknown.
+func (application *App) GetSessionModel(sessionID string) (string, error) {
+	return application.manager.HarnessModel(context.Background(), sessionID)
+}
+
 // OpenPresetsFile creates the commented example file if it is missing and
 // opens it in the default editor.
 func (application *App) OpenPresetsFile() (err error) {
@@ -49,7 +65,11 @@ func (application *App) OpenPresetsFile() (err error) {
 		}
 	}()
 	path := application.presetsPath()
-	if err := presets.EnsureExample(path); err != nil {
+	return application.openEditableFile(path, presets.EnsureExample)
+}
+
+func (application *App) openEditableFile(path string, ensure func(string) error) error {
+	if err := ensure(path); err != nil {
 		return fmt.Errorf("prepare %s: %w", path, err)
 	}
 	if application.openFile != nil {
@@ -61,6 +81,6 @@ func (application *App) OpenPresetsFile() (err error) {
 		return fmt.Errorf("open %s: %w", path, err)
 	}
 	go command.Wait()
-	diagnostics.Info("opened prompt presets file")
+	diagnostics.Info("opened editable file", "file", filepath.Base(path))
 	return nil
 }

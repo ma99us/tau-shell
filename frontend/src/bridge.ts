@@ -111,6 +111,12 @@ type WailsApp = {
   DeleteSession(id: string): Promise<void>;
   RenameSession(id: string, name: string): Promise<void>;
   SetSessionColor(id: string, color: string): Promise<void>;
+  SetSessionOrder(ids: string[]): Promise<void>;
+  NotifyAttention(id: string, kind: "input" | "done"): Promise<void>;
+  OpenSettingsFile(): Promise<void>;
+  GetGitBranch(sessionId: string): Promise<string>;
+  GetSessionModel(sessionId: string): Promise<string>;
+  DuplicateSession(id: string): Promise<Session>;
   DialogHostReady(): Promise<DialogRequest[]>;
   AnswerDialog(id: string, choice: string): Promise<void>;
 };

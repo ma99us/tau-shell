@@ -24,6 +24,8 @@ See [UI design](../v1/08-UI-Design.md) and
 - Capability-gated model selection, reusable prompt presets, and harness
   command widgets.
 - Broader harness/plugin support and workspace management.
-- Remote access, mobile control, notifications, web dashboards, multi-agent
-  orchestration, and distributed agents remain later-scope capabilities and
-  are not Phase 1 requirements.
+- Remote access, mobile control, remote push notifications, web dashboards,
+  multi-agent orchestration, and distributed agents remain later-scope
+  capabilities and are not Phase 1 requirements. Local attention alerts
+  (taskbar flash and Windows toast) are Phase 1; see
+  [`22-local-attention-notifications.md`](./22-local-attention-notifications.md).

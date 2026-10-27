@@ -57,10 +57,13 @@ type App struct {
 	toolInstaller          *tools.Installer
 	openURL                func(context.Context, string)
 	openFile               func(string) error
+	attention              attentionState
+	attentionHooks         *attentionHooks
 }
 
 type desktopSessionManager interface {
 	List(context.Context) ([]sessionhost.Snapshot, error)
+	HarnessModel(context.Context, string) (string, error)
 	Start(context.Context, string, bool, int, int) (sessionhost.Snapshot, error)
 	StartFresh(context.Context, string, int, int) (sessionhost.Snapshot, error)
 	Write(string, []byte) error
@@ -68,6 +71,8 @@ type desktopSessionManager interface {
 	Stop(context.Context, string) error
 	Delete(context.Context, string) error
 	UpdateDisplay(id, field, value string) error
+	SetOrder(context.Context, []string) error
+	PlaceAfter(ctx context.Context, id, afterID string) error
 	StopAll(context.Context) error
 	Close(context.Context) error
 }
@@ -149,6 +154,7 @@ func runDesktop() error {
 
 func (application *App) startup(ctx context.Context) {
 	application.ctx = ctx
+	application.initAttention()
 	diagnostics.Info("desktop UI ready", "webview2_version", application.webViewVersion)
 }
 
@@ -318,14 +324,7 @@ func (application *App) newConfig(name, toolName, workingDir string, launchArgs 
 		}
 		name = deduceSessionName(workingDir)
 	}
-	makeID := func(name string) string {
-		id := strings.Trim(sessionIDPattern.ReplaceAllString(strings.ToLower(name), "-"), "-")
-		if len(id) > 63 {
-			id = strings.TrimRight(id[:63], "-")
-		}
-		return id
-	}
-	id := makeID(name)
+	id := sessionIDFromName(name)
 	if id == "" {
 		return session.Config{}, errors.New("session name must include at least one letter or number")
 	}
@@ -337,7 +336,7 @@ func (application *App) newConfig(name, toolName, workingDir string, launchArgs 
 				break
 			}
 			name = fmt.Sprintf("%s (%d)", base, n)
-			id = makeID(name)
+			id = sessionIDFromName(name)
 		}
 	}
 	return session.Config{

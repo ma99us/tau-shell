@@ -59,6 +59,20 @@ WebView local storage contains presentation metadata (open tab IDs and
 selection) and up to five recently created session working-directory paths.
 It must not contain credentials, environment values, or other secret data.
 
+## Attention alerts
+
+Taskbar flash and Windows toasts are raised by Go, only when TauShell is not
+the foreground window, and carry just "TauShell" and "<session name> is
+waiting for your answer" / "<session name> finished": no paths, terminal
+content, prompts or environment values, in toasts or logs. The UI sends only a
+session id and an "input"/"done" kind. Toast support uses the vendored Wails
+notification API, which registers a per-user (HKCU, no elevation) AppUserModelId
+and COM class entry for `taushell.exe`. Clicking a toast reopens TauShell on
+that session; a cold start from a toast arrives as a COM `-Embedding` argument
+and opens the desktop. Windows Focus Assist or per-app settings can suppress
+toasts; TauShell does not claim a toast was seen. If toast setup fails it is
+logged and only the taskbar flash remains.
+
 ## Diagnostic logging
 
 The per-run log is stored under the current user's system temp directory and

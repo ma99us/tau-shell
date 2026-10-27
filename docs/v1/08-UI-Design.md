@@ -346,8 +346,9 @@ capabilities and the rules below.
   harness command and model widgets, the command palette, and tab shortcuts are
   implemented; see section 10.) Editable per-session CLI arguments and
   generated defaults are included.
-- Remote access, mobile apps, web dashboards/server mode, notifications, or
-  cloud synchronization.
+- Remote access, mobile apps, web dashboards/server mode, remote push
+  notifications, or cloud synchronization. (Local taskbar-flash and toast
+  attention alerts are included; see v2 doc 22.)
 - Multiple TauShell windows, detached tabs, split terminal panes, or tray-first
   operation.
 - Automatic session or conversation restore on application startup.

@@ -22,8 +22,9 @@ interaction decisions and feasibility gate are in
 - Windows 10 terminal encoding, Unicode/emoji bytes, ANSI output, and
   provider-preserving output remain requirements. TauShell must not rewrite
   harness output.
-- Do not add remote access, mobile integration, web dashboards, or
-  notifications in Phase 1. Do not inspect or modify `docs/.todo`.
+- Do not add remote access, mobile integration, or web dashboards in Phase 1.
+  Local attention alerts (taskbar flash and Windows toast) are in Phase 1; see
+  `22-local-attention-notifications.md`. Do not inspect or modify `docs/.todo`.
 
 ## Current implementation
 
@@ -364,7 +365,7 @@ Known gaps and risks:
   A production-host smoke starting from a fresh profile with zero mouse
   clicks confirmed `Tab` from window launch reaches the tab strip directly
   (seeding focus on "Home" without a click), and a further keyboard-only walk
-  (`Tab`/`Enter`/typed text) opened Create Session, filled every field, and
+  (`Tab`/`Enter`/typed text) opened New Session, filled every field, and
   submitted the dialog. Multi-tab switching with a second open session tab
   was then verified without invoking any live harness, by resolving
   `exec.LookPath("copilot")` to the checked-in `terminal-fixture` binary
@@ -627,7 +628,9 @@ to include the custom app icon.
 
 1. Read "Product boundaries", "Do not overstate current readiness", and
    "Known gaps" here, then [`22-local-attention-notifications.md`](22-local-attention-notifications.md)
-   only if notifications come up (later phase, unscheduled).
+   for the implemented (not live-verified) flash/toast alerts, shared session
+   order (`session_order` in `state.db`), clone session, and
+   `~/.tau_shell/config.yaml`.
 2. Build and verify with the commands in the contributor guide. Check
    `git status` for the current workspace state; commit only when the owner
    asks.

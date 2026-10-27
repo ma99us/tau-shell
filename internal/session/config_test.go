@@ -168,3 +168,20 @@ func TestUpdateConfigFieldPreservesCommentsAndValidates(t *testing.T) {
 		t.Fatalf("unexpected leftover files: %v", entries)
 	}
 }
+
+func TestConfigPresetsAreValidated(t *testing.T) {
+	workingDir := filepath.ToSlash(t.TempDir())
+	base := "id: test-session\nname: Test\ntool: copilot-cli\nworking_dir: " + workingDir + "\n"
+	config, err := ParseConfig(base + "presets:\n  - name: Review\n    text: Review {project}\n")
+	if err != nil || len(config.Presets) != 1 || config.Presets[0].Name != "Review" {
+		t.Fatalf("valid presets: %+v, %v", config.Presets, err)
+	}
+	for name, body := range map[string]string{
+		"duplicate": "presets:\n  - name: A\n    text: x\n  - name: a\n    text: y\n",
+		"no text":   "presets:\n  - name: A\n",
+	} {
+		if _, err := ParseConfig(base + body); err == nil {
+			t.Fatalf("%s presets were accepted", name)
+		}
+	}
+}

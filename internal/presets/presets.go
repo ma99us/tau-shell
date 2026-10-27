@@ -175,6 +175,12 @@ func contains(list []string, value string) bool {
 }
 
 func gitBranch(ctx context.Context, dir string) string {
+	return GitBranch(ctx, dir)
+}
+
+// GitBranch returns the current branch of the repository at dir, or "" when
+// dir is not a git working tree.
+func GitBranch(ctx context.Context, dir string) string {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	command := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD")

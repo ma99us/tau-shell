@@ -70,3 +70,24 @@ harness is idle; see
 [`08-UI-Design.md`](../v1/08-UI-Design.md#10-harness-widgets).
 
 The isolated [`spikes/session-config/`](../../spikes/session-config/) prototype records the earlier validation of strict YAML parsing and the separate runtime-state boundary.
+
+## Cloning a session
+
+"Clone" copies every definition field (harness, working directory, launch
+arguments, environment, PowerShell options, presets, color) into a new file
+named "<name> (n)" with a unique id. The copy is written by TauShell, so YAML
+comments in the source are not carried over. Runtime state is never copied.
+
+## App settings (`~/.tau_shell/config.yaml`)
+
+Optional and hand-edited; a missing file means defaults. Unknown fields and
+unsupported versions are rejected (reported once in the UI, defaults used).
+"Edit settings..." in the command palette creates a commented example only when
+the file is missing and never overwrites it. The file is re-read on every alert.
+
+```yaml
+version: 1
+notifications:
+  toast: true          # Windows toast while TauShell is in the background
+  taskbar_flash: true  # flash the taskbar button; both default to true
+```

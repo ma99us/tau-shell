@@ -19,13 +19,20 @@ import (
 type closeTestManager struct {
 	list         func(context.Context) ([]sessionhost.Snapshot, error)
 	stopAll      func(context.Context) error
+	placed       [][2]string
 	listCalls    int
 	stopAllCalls int
 }
 
+func (manager *closeTestManager) placeAfter() error { return nil }
+
 func (manager *closeTestManager) List(ctx context.Context) ([]sessionhost.Snapshot, error) {
 	manager.listCalls++
 	return manager.list(ctx)
+}
+
+func (manager *closeTestManager) HarnessModel(context.Context, string) (string, error) {
+	return "", nil
 }
 
 func (manager *closeTestManager) Start(context.Context, string, bool, int, int) (sessionhost.Snapshot, error) {
@@ -54,6 +61,14 @@ func (manager *closeTestManager) Delete(context.Context, string) error {
 
 func (manager *closeTestManager) UpdateDisplay(string, string, string) error {
 	return errors.New("unexpected UpdateDisplay call")
+}
+
+func (manager *closeTestManager) SetOrder(context.Context, []string) error {
+	return errors.New("unexpected SetOrder call")
+}
+
+func (manager *closeTestManager) PlaceAfter(context.Context, string, string) error {
+	return manager.placeAfter()
 }
 
 func (manager *closeTestManager) StopAll(ctx context.Context) error {
@@ -572,5 +587,29 @@ func TestForcedShutdownWarningFailureIsRetriedBeforeClose(t *testing.T) {
 	}
 	if len(messages) != 2 || !strings.Contains(messages[1], "API session") {
 		t.Fatalf("warning retry did not include the forced session: %v", messages)
+	}
+}
+
+func TestDuplicateSessionCopiesDefinitionWithUniqueName(t *testing.T) {
+	manager := &closeTestManager{}
+	application := &App{manager: manager, configDirectory: filepath.Join(t.TempDir(), "sessions")}
+	source, err := application.CreateSession("Api", string(session.ClaudeCode), t.TempDir(), []string{"--model", "sonnet"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := application.DuplicateSession(source.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := application.DuplicateSession(source.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Name != "Api (2)" || second.Name != "Api (3)" || first.ID == second.ID || first.ID == source.ID {
+		t.Fatalf("copies: %+v %+v", first, second)
+	}
+	config, err := session.FindConfig(application.configDirectory, first.ID)
+	if err != nil || len(config.LaunchArgs) != 2 || config.WorkingDir != source.WorkingDir {
+		t.Fatalf("copied config: %+v, %v", config, err)
 	}
 }

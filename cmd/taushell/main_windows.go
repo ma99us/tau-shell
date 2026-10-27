@@ -65,7 +65,7 @@ func runMain() (exitCode int) {
 }
 
 func run(args []string, stdout, stderr io.Writer) error {
-	if len(args) == 0 {
+	if len(args) == 0 || isToastActivationArg(args) {
 		return runDesktop()
 	}
 	return terminal.WithUTF8Console(func() error {
