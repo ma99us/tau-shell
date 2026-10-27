@@ -56,6 +56,7 @@ type App struct {
 	installMu              sync.Mutex
 	toolInstaller          *tools.Installer
 	openURL                func(context.Context, string)
+	openFile               func(string) error
 }
 
 type desktopSessionManager interface {
@@ -113,6 +114,7 @@ func runDesktop() error {
 		Height:             780,
 		MinWidth:           760,
 		MinHeight:          520,
+		WindowStartState:   options.Maximised,
 		AssetServer:        &assetserver.Options{Assets: assetFS},
 		Bind:               []interface{}{application},
 		Logger:             diagnostics.WailsLogger{},

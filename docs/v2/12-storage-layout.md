@@ -10,6 +10,7 @@ Configuration is human-edited YAML; mutable runtime/session state is stored sepa
 ~/.tau_shell/
 ├─ sessions/
 │  └─ <session-id>.yaml
+├─ prompts.yaml          (optional, hand-edited prompt presets)
 ├─ logs/
 └─ state.db
 ```

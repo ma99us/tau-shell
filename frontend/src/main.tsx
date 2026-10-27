@@ -3,10 +3,12 @@ import { createRoot } from "react-dom/client";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { app, DialogRequest, InstallResult, LaunchPreview, Session, SessionEvent, SystemStatus, ToolStatus } from "./bridge";
+import { app, DialogRequest, HarnessWidgets, InstallResult, LaunchPreview, Session, SessionEvent, SystemStatus, ToolStatus } from "./bridge";
 import "./style.css";
 import { readHarnessSignal } from "./attention";
+import { CommandPalette, HarnessToolbar, PaletteItem, planSend, sendNotice } from "./harnessActions";
 import { HarnessIcon, HomeIcon } from "./harnessIcons";
+import appIcon from "./assets/appicon.png";
 
 type Tab = { id: string; name: string };
 const savedTabsKey = "taushell.tabs.v1";
@@ -113,7 +115,9 @@ function App() {
           const signal = readHarnessSignal(session.tool, terminalInstances.get(id), terminalTitles.get(id) ?? "");
           if (signal === undefined && at === undefined) return;
           const old = previous[id] ?? { working: false, input: false, unseen: false };
-          const working = signal ? signal === "working" : now - at! < workingWindowMs;
+          // A live harness shows moving content (spinner/timer line); a "working" cue over an unchanged screen is stale (e.g. after an error).
+          const staleWorking = signal === "working" && screenUnchangedFor(id, terminalInstances.get(id), now) > staleWorkingMs;
+          const working = signal ? signal === "working" && !staleWorking : now - at! < workingWindowMs;
           const input = signal === "input";
           const seen = selectedRef.current === id && watching;
           let unseen = old.unseen;
@@ -147,6 +151,8 @@ function App() {
   const [dialogs, setDialogs] = useState<DialogRequest[]>([]);
   const [renameRequest, setRenameRequest] = useState<Session | null>(null);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [palette, setPalette] = useState<PaletteItem[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [installing, setInstalling] = useState("");
   const [toolNotice, setToolNotice] = useState<InstallResult | null>(null);
@@ -363,6 +369,85 @@ function App() {
   const colorOf = (id: string) => sessions.find((current) => current.id === id)?.color;
   // Tabs follow the same order as the sidebar and Home tiles, not the order they were opened.
   const orderedTabs = [...tabs].sort((a, b) => sessions.findIndex((s) => s.id === a.id) - sessions.findIndex((s) => s.id === b.id));
+
+  const toolFor = (session: Session) => status?.tools.find((tool) => tool.id === session.tool);
+  const harnessFor = (session: Session) => {
+    const tool = toolFor(session);
+    return session.runningHere && tool?.widgets ? { widgets: tool.widgets, modelSupported: Boolean(tool.capabilities?.some((capability) => capability.option === "--model" && capability.available)) } : undefined;
+  };
+  const sendFor = (session: Session) => (text: string, submit: boolean, label: string) =>
+    sendToSession(session, text, submit, label, setNotice, (message) => setError(message));
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(""), 6000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+
+  const openPalette = async () => {
+    const items: PaletteItem[] = [
+      { id: "app:new", group: "App", label: "New session", run: () => setDialogOpen(true) },
+      { id: "app:home", group: "App", label: "Go to Home", run: () => setSelected("") },
+      { id: "app:refresh", group: "App", label: "Refresh sessions and tools", run: () => void refresh(true) },
+    ];
+    sessions.forEach((session) => {
+      items.push({ id: `open:${session.id}`, group: "Session", label: `Open ${session.name}`, hint: session.runningHere ? "running" : session.status, run: () => openTab(session) });
+      if (!session.runningHere) {
+        const mode = session.hasResumeId ? "restore" : "start";
+        items.push({ id: `launch:${session.id}`, group: "Session", label: `${mode === "restore" ? "Resume" : "Start"} ${session.name}`, run: () => void launch(session, mode) });
+      }
+    });
+    const active = sessions.find((session) => session.id === selected);
+    const harness = active && harnessFor(active);
+    if (active && harness) {
+      const send = sendFor(active);
+      try {
+        (await app().GetPresets(active.id) ?? []).forEach((preset) =>
+          items.push({ id: `preset:${active.id}:${preset.name}`, group: "Prompt", label: preset.name, hint: preset.text.slice(0, 60), run: () => send(preset.text, preset.submit, `"${preset.name}"`) }));
+      } catch (err) {
+        showError("ui.presets", err);
+      }
+      harness.widgets.commands.forEach((command) =>
+        items.push({ id: `command:${active.tool}:${command.text}`, group: "Command", label: command.label, hint: command.text, run: () => send(command.text, true, command.text) }));
+      if (harness.modelSupported) {
+        items.push({ id: `model:${active.tool}:picker`, group: "Model", label: "Open the harness model picker", hint: "/model", run: () => send("/model", true, "/model") });
+        harness.widgets.models.forEach((model) =>
+          items.push({ id: `model:${active.tool}:${model}`, group: "Model", label: `Switch model to ${model}`, hint: `/model ${model}`, run: () => send(`/model ${model}`, true, `/model ${model}`) }));
+      }
+      items.push({ id: `interrupt:${active.tool}`, group: "Command", label: "Interrupt the harness", hint: "Esc", run: () => interruptSession(active, harness.widgets.interruptKeys) });
+    }
+    setPalette(items);
+  };
+
+  // Ctrl+1..9 selects the Nth open session tab, Ctrl+(Shift+)Tab cycles Home and tabs, Ctrl+Shift+P opens the palette.
+  const shortcutState = useRef({ ids: [] as string[], selected: "", paletteOpen: false, openPalette });
+  shortcutState.current = { ids: orderedTabs.map((tab) => tab.id), selected, paletteOpen: palette !== null, openPalette };
+  useEffect(() => {
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (!event.ctrlKey || event.altKey || event.metaKey) return;
+      const state = shortcutState.current;
+      const otherModalOpen = Boolean(document.querySelector(".modal, [role='dialog']:not(.palette)"));
+      if (event.shiftKey && event.key.toLowerCase() === "p") {
+        event.preventDefault();
+        if (state.paletteOpen) setPalette(null);
+        else if (!otherModalOpen) void state.openPalette();
+        return;
+      }
+      if (otherModalOpen || state.paletteOpen) return;
+      if (!event.shiftKey && /^[1-9]$/.test(event.key)) {
+        event.preventDefault();
+        const id = state.ids[Number(event.key) - 1];
+        if (id) setSelected(id);
+      } else if (event.key === "Tab") {
+        event.preventDefault();
+        const cycle = ["", ...state.ids];
+        const next = (cycle.indexOf(state.selected) + (event.shiftKey ? -1 : 1) + cycle.length) % cycle.length;
+        setSelected(cycle[next]);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   const installTool = async (tool: ToolStatus) => {
     setInstalling(tool.id);
     setToolNotice(null);
@@ -387,13 +472,14 @@ function App() {
     <div className="app">
       <div className="workspace">
         <aside className={`sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
-          <div className="sidebar-brand"><span className="brand-mark">T</span><span className="brand-text"><strong>TauShell</strong><small>Your AI sessions</small></span></div>
+          <div className="sidebar-brand"><img className="brand-mark" src={appIcon} alt="" /><span className="brand-text"><strong>TauShell</strong><small>Your AI sessions</small></span></div>
           <div className="sidebar-heading"><span className="sidebar-title">SESSIONS</span> <button className="add-button" title="Create session" onClick={() => setDialogOpen(true)}>+</button></div>
           <button className={`nav-row ${selected ? "" : "active"}`} title="Home" aria-label="Home" onClick={() => setSelected("")}><HomeIcon /></button>
           {sessions.map((session) => (
             <div className={`session-item ${selected === session.id ? "active" : ""}`} key={session.id} style={sessionColorStyle(session.color)} data-colored={session.color ? "" : undefined} onContextMenu={(event) => openMenu(event, session)}>
               <button className={`session-row ${selected === session.id ? "active" : ""}`} title={session.name} onClick={() => openTab(session)}>
                 <StateIcon session={session} activity={activity[session.id]} />
+                <span className="collapsed-only"><ProjectIcon session={session} /></span>
                 <span className="session-row-text"><strong>{session.name}</strong><small>{session.tool === "claude-code" ? "Claude Code" : "GitHub Copilot CLI"}</small></span>
               </button>
               <button className="delete-button" aria-label={`Delete ${session.name}`} title="Delete session" onClick={() => setDeleteRequest(session)}>x</button>
@@ -438,10 +524,11 @@ function App() {
             <button className="tab-scroll-button" aria-label="Scroll tabs right" disabled={!tabScroll.right} onClick={() => scrollTabs(1)}>&gt;</button>
           </div>
           {error && <div className="error-banner">{error}<button onClick={() => setError("")}>Dismiss</button></div>}
+          {notice && <div className="notice-banner" role="status">{notice}<button onClick={() => setNotice("")}>Dismiss</button></div>}
           <section className="main-content">
             <div id="panel-home" className={`home-container ${selected ? "hidden" : ""}`} role="tabpanel" aria-labelledby="tab-home" tabIndex={0}>
               {showSetup && powershell ? <Setup powershell={powershell} actions={toolActions} onRecheck={() => void refresh(true)} onContinue={() => setSetupDismissed(true)} /> :
-                <Home sessions={sessions} status={status} busy={busy} tools={toolActions} onNew={() => setDialogOpen(true)} onRefresh={() => void refresh(true)} onLaunch={launch} onDelete={setDeleteRequest} />}
+                <Home sessions={sessions} status={status} busy={busy} tools={toolActions} onNew={() => setDialogOpen(true)} onRefresh={() => void refresh(true)} onHome={() => setSelected("")} onLaunch={launch} onDelete={setDeleteRequest} />}
             </div>
             {terminalIds.map((id) => {
               const tab = tabs.find((current) => current.id === id);
@@ -449,7 +536,7 @@ function App() {
               if (!tab && !session?.runningHere) return null;
               return (
                 <div id={`panel-${id}`} className={`terminal-tab-content ${tab && selected === id ? "" : "hidden"}`} role="tabpanel" aria-labelledby={`tab-${id}`} tabIndex={0} key={id}>
-                  <TerminalPane session={session} visible={Boolean(tab && selected === id)} busy={busy} onLaunch={launch} onError={(failure) => showError("ui.terminal", failure)} />
+                  <TerminalPane session={session} visible={Boolean(tab && selected === id)} busy={busy} harness={session ? harnessFor(session) : undefined} onSend={session ? sendFor(session) : undefined} onInterrupt={() => { const harness = session && harnessFor(session); if (session && harness) interruptSession(session, harness.widgets.interruptKeys); }} onLaunch={launch} onError={(failure) => showError("ui.terminal", failure)} />
                 </div>
               );
             })}
@@ -487,6 +574,7 @@ function App() {
         </div>
       </div></div>}
       {dialogs[0] && <AppDialog request={dialogs[0]} onAnswer={(choice) => answerDialog(dialogs[0], choice)} />}
+      {palette && <CommandPalette items={palette} onClose={() => setPalette(null)} />}
     </div>
   );
 }
@@ -599,24 +687,36 @@ function RenameDialog({ session, onClose, onRename }: { session: Session; onClos
   </div></div>;
 }
 
-function Home({ sessions, status, busy, tools, onNew, onRefresh, onLaunch, onDelete }: {
+function Home({ sessions, status, busy, tools, onNew, onRefresh, onHome, onLaunch, onDelete }: {
   sessions: Session[];
   status: SystemStatus | null;
   busy: boolean;
   tools: ToolActions;
   onNew: () => void;
   onRefresh: () => void;
-  onLaunch: (session: Session, mode: "start" | "restore" | "fresh") => void;
+  onHome: () => void;
+  onLaunch: (session: Session, mode: "start" | "restore" | "fresh") => void | Promise<void>;
   onDelete: (session: Session) => void;
 }) {
   const [freshSession, setFreshSession] = useState<Session | null>(null);
+  const [resumeProgress, setResumeProgress] = useState("");
+  const resumable = sessions.filter((session) => !session.runningHere && session.hasResumeId && !session.resumeNote);
+  const resumeAll = async () => {
+    for (let index = 0; index < resumable.length; index++) {
+      setResumeProgress(`Resuming ${index + 1}/${resumable.length}: ${resumable[index].name}`);
+      await onLaunch(resumable[index], "restore");
+    }
+    setResumeProgress("");
+    onHome();
+  };
   return (
     <>
     <div className="home">
       <div className="hero">
         <div><p className="eyebrow">LOCAL SESSION WORKSPACE</p><h1>Pick up where you left off.</h1><p className="muted">Keep your PowerShell AI harness sessions organized, resumable, and close at hand.</p></div>
         <div className="hero-actions">
-          <button className="secondary-button" title="Reload sessions and re-detect tools" onClick={onRefresh}>Refresh</button>
+          {resumeProgress && <span className="muted">{resumeProgress}</span>}
+          <button className="secondary-button" disabled={busy || resumable.length === 0} title={resumable.length ? `Resume ${resumable.length} stopped session(s) that have a saved harness session` : "No stopped sessions with a saved harness session"} onClick={() => void resumeAll()}>Resume All</button>
           <button className="primary-button" onClick={onNew}>Create session</button>
         </div>
       </div>
@@ -628,11 +728,11 @@ function Home({ sessions, status, busy, tools, onNew, onRefresh, onLaunch, onDel
           {session.lastError && <p className="card-error">{session.lastError}</p>}
           <div className="card-actions">
             {session.runningHere ? <button className="primary-button" onClick={() => onLaunch(session, "start")}>Open terminal</button> :
-              session.hasResumeId ? <>{!session.resumeNote && <button className="primary-button" disabled={busy} onClick={() => onLaunch(session, "restore")}>Restore</button>}<button className="text-button" disabled={busy} title={session.resumeNote} onClick={() => setFreshSession(session)}>Start fresh</button></> :
+              session.hasResumeId ? <>{!session.resumeNote && <button className="primary-button" disabled={busy} onClick={() => onLaunch(session, "restore")}>Resume</button>}<button className="secondary-button" disabled={busy} title={session.resumeNote} onClick={() => setFreshSession(session)}>Start fresh</button></> :
                 <button className="primary-button" disabled={busy} onClick={() => onLaunch(session, "start")}>Start</button>}
           </div>
         </article>)}</div>}
-      <div className="tools-panel"><div><h2>Installed tools</h2><p className="muted">Detected on this machine{status && !status.wingetAvailable && " \u2014 winget is unavailable; Install uses vendor setup links instead"}</p></div><div className="tool-list">
+      <div className="tools-panel"><div className="tools-header"><div><h2>Installed tools</h2><p className="muted">Detected on this machine{status && !status.wingetAvailable && " \u2014 winget is unavailable; Install uses vendor setup links instead"}</p></div><button className="secondary-button" title="Reload sessions and re-detect tools" onClick={onRefresh}>Refresh</button></div><div className="tool-list">
         {status?.tools.map((tool) => <ToolRow key={tool.id} tool={tool} actions={tools} />) ?? <p className="muted">Checking...</p>}
       </div></div>
       {toolNoticeBanner(tools)}
@@ -716,6 +816,24 @@ const terminalTitles = new Map<string, string>();
 const echoWindowMs = 400;
 // Output newer than this means the session is "working"; older means "quiet".
 const workingWindowMs = 2500;
+// A harness "working" cue over an unchanged screen for this long is treated as stale.
+const staleWorkingMs = 15000;
+const screenState = new Map<string, { fingerprint: string; changedAt: number }>();
+
+// Milliseconds the visible screen has been identical (the title spinner is not part of the screen).
+function screenUnchangedFor(id: string, terminal: Terminal | undefined, now: number): number {
+  if (!terminal) return 0;
+  const buffer = terminal.buffer.active;
+  const rows: string[] = [];
+  for (let index = buffer.baseY; index < buffer.baseY + terminal.rows; index++) rows.push(buffer.getLine(index)?.translateToString(true) ?? "");
+  const fingerprint = rows.join("\n");
+  const known = screenState.get(id);
+  if (!known || known.fingerprint !== fingerprint) {
+    screenState.set(id, { fingerprint, changedAt: now });
+    return 0;
+  }
+  return now - known.changedAt;
+}
 
 type ActivityKind = "working" | "input" | "quiet" | "stopped" | "failed";
 type Activity = { working: boolean; input: boolean; unseen: boolean };
@@ -791,6 +909,9 @@ function notifyTerminalReady(id: string, terminal: Terminal) {
 // for the harness); Ctrl+V and Ctrl+Shift+C/V always paste/copy. Uses the native clipboard
 // because WebView2's navigator.clipboard needs a permission prompt.
 function handleClipboardKey(event: globalThis.KeyboardEvent, terminal: Terminal, onError: (error: unknown) => void): boolean {
+  // App shortcuts (tab switching, command palette) are handled at window level; the terminal must not consume them.
+  if (event.ctrlKey && !event.altKey && !event.metaKey &&
+    (event.key === "Tab" || (event.shiftKey && event.key.toLowerCase() === "p") || (!event.shiftKey && /^[1-9]$/.test(event.key)))) return false;
   if (!event.ctrlKey || event.altKey || event.metaKey) return true;
   const key = event.key.toLowerCase();
   const copy = key === "c" && (event.shiftKey || terminal.hasSelection());
@@ -810,10 +931,42 @@ function handleClipboardKey(event: globalThis.KeyboardEvent, terminal: Terminal,
   return false;
 }
 
-function TerminalPane({ session, visible, busy, onLaunch, onError }: {
+// Harness widgets type into the terminal through xterm so input accounting matches real typing.
+// What the harness shows decides whether text is submitted, only inserted, or refused.
+function sendToSession(session: Session, text: string, submit: boolean, label: string, notify: (message: string) => void, fail: (message: string) => void) {
+  const terminal = terminalInstances.get(session.id);
+  if (!terminal || !session.runningHere) {
+    fail(`${session.name} is not running, so nothing was sent.`);
+    return;
+  }
+  const plan = planSend(readHarnessSignal(session.tool, terminal, terminalTitles.get(session.id) ?? ""), submit);
+  if (plan === "blocked") {
+    fail(sendNotice(plan, label));
+    return;
+  }
+  if (text.includes("\n")) terminal.paste(text);
+  else terminal.input(text, true);
+  // Enter goes separately so the harness has finished handling the pasted text.
+  if (plan === "submit") window.setTimeout(() => terminal.input("\r", true), 150);
+  notify(sendNotice(plan, label));
+  window.setTimeout(() => terminal.focus(), 160);
+}
+
+function interruptSession(session: Session, keys: string[]) {
+  const terminal = terminalInstances.get(session.id);
+  if (!terminal || !session.runningHere) return;
+  // Separate presses with a gap so the harness sees them as distinct keys, not one escape sequence.
+  keys.forEach((key, index) => window.setTimeout(() => terminal.input(key, true), index * 250));
+  terminal.focus();
+}
+
+function TerminalPane({ session, visible, busy, harness, onSend, onInterrupt, onLaunch, onError }: {
   session?: Session;
   visible: boolean;
   busy: boolean;
+  harness?: { widgets: HarnessWidgets; modelSupported: boolean };
+  onSend?: (text: string, submit: boolean, label: string) => void;
+  onInterrupt: () => void;
   onLaunch: (session: Session, mode: "start" | "restore" | "fresh") => void;
   onError: (error: unknown) => void;
 }) {
@@ -908,7 +1061,7 @@ function TerminalPane({ session, visible, busy, onLaunch, onError }: {
     return () => window.clearTimeout(timer);
   }, [visible, session?.id, session?.runningHere]);
   if (!session) return <div className="terminal-missing">Session configuration is unavailable.</div>;
-  return <div className="terminal-view"><div className="terminal-toolbar"><span className={`status-dot ${session.runningHere ? "online" : ""}`} />{session.id} | {session.tool} | {session.workingDir}<span className="terminal-status">{session.runningHere ? "Connected" : session.status || "Not started"}</span>{!session.runningHere && (session.hasResumeId && session.resumeNote ? <button className="text-button terminal-action" disabled={busy} title={session.resumeNote} onClick={() => onLaunch(session, "fresh")}>Start fresh</button> : <button className="primary-button terminal-action" disabled={busy} onClick={() => onLaunch(session, session.hasResumeId ? "restore" : "start")}>{session.hasResumeId ? "Restore" : "Start"}</button>)}</div><div className="terminal-container" ref={container} /></div>;
+  return <div className="terminal-view"><div className="terminal-toolbar"><span className={`status-dot ${session.runningHere ? "online" : ""}`} />{session.id} | {session.tool} | {session.workingDir}<span className="terminal-status">{session.runningHere ? "Connected" : session.status || "Not started"}</span>{!session.runningHere && (session.hasResumeId && session.resumeNote ? <button className="secondary-button terminal-action" disabled={busy} title={session.resumeNote} onClick={() => onLaunch(session, "fresh")}>Start fresh</button> : <button className="primary-button terminal-action" disabled={busy} onClick={() => onLaunch(session, session.hasResumeId ? "restore" : "start")}>{session.hasResumeId ? "Resume" : "Start"}</button>)}{harness && onSend && <HarnessToolbar session={session} widgets={harness.widgets} modelSupported={harness.modelSupported} send={onSend} interrupt={onInterrupt} onError={onError} />}</div><div className="terminal-container" ref={container} /></div>;
 }
 
 function parseLaunchArgs(text: string): string[] {

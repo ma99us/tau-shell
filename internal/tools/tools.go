@@ -33,6 +33,27 @@ type Capability struct {
 	Optional bool `json:"optional,omitempty"`
 }
 
+// Command is a harness slash command offered as a quick action. TauShell only
+// types it into the terminal; it cannot confirm the harness applied it.
+type Command struct {
+	Label string `json:"label"`
+	Text  string `json:"text"`
+}
+
+// Widgets declares the quality-of-life actions an adapter supports. The lists
+// were checked against the harness versions in the tested range.
+type Widgets struct {
+	Commands []Command `json:"commands"`
+	// Models are suggestions for the live "/model <id>" action; users can
+	// also enter a custom model ID.
+	Models []string `json:"models"`
+	// InterruptKeys are sent in order, with a short gap, to interrupt a working
+	// harness. Copilot CLI needs Esc twice; a single Esc was verified not to stop it.
+	InterruptKeys []string `json:"interruptKeys"`
+	// CompactText is the command behind the Compact quick action.
+	CompactText string `json:"compactText"`
+}
+
 // InstallSource identifies a maintained winget package and the vendor's
 // official setup instructions used when winget is unavailable.
 type InstallSource struct {
@@ -55,6 +76,7 @@ type Spec struct {
 	TestedFrom   string
 	TestedBefore string
 	Capabilities []Capability
+	Widgets      *Widgets
 	Install      InstallSource
 }
 
@@ -93,6 +115,18 @@ var specs = []Spec{
 			{Name: "Resume a conversation", Option: "--resume"},
 			{Name: "Select a model", Option: "--model", Optional: true},
 		},
+		Widgets: &Widgets{
+			Commands: []Command{
+				{Label: "Compact conversation", Text: "/compact"},
+				{Label: "Clear conversation", Text: "/clear"},
+				{Label: "Show context usage", Text: "/context"},
+				{Label: "Show cost", Text: "/cost"},
+				{Label: "Help", Text: "/help"},
+			},
+			Models:        []string{"default", "sonnet", "opus", "haiku"},
+			InterruptKeys: []string{"\x1b"},
+			CompactText:   "/compact",
+		},
 		Install: InstallSource{
 			WingetID:  "Anthropic.ClaudeCode",
 			Source:    "winget",
@@ -111,6 +145,18 @@ var specs = []Spec{
 			{Name: "Start with a TauShell session ID", Option: "--session-id"},
 			{Name: "Resume a conversation", Option: "--resume"},
 			{Name: "Select a model", Option: "--model", Optional: true},
+		},
+		Widgets: &Widgets{
+			Commands: []Command{
+				{Label: "Compact conversation", Text: "/compact"},
+				{Label: "Clear conversation", Text: "/clear"},
+				{Label: "Show context usage", Text: "/context"},
+				{Label: "Show usage", Text: "/usage"},
+				{Label: "Help", Text: "/help"},
+			},
+			Models:        []string{"auto", "claude-sonnet-5.5", "claude-opus-5.5", "claude-haiku-5.5"},
+			InterruptKeys: []string{"\x1b", "\x1b"},
+			CompactText:   "/compact",
 		},
 		Install: InstallSource{
 			WingetID:  "GitHub.Copilot",
@@ -225,6 +271,7 @@ type Status struct {
 	Capabilities   []CapabilityStatus `json:"capabilities"`
 	Warnings       []string           `json:"warnings"`
 	Error          string             `json:"error,omitempty"`
+	Widgets        *Widgets           `json:"widgets,omitempty"`
 	Install        InstallSource      `json:"install"`
 }
 
@@ -273,6 +320,7 @@ func Detect(ctx context.Context, environment Environment, spec Spec) Status {
 		TestedRange: spec.TestedRange(),
 		Support:     SupportUnknown,
 		Warnings:    []string{},
+		Widgets:     spec.Widgets,
 		Install:     spec.Install,
 	}
 	for _, capability := range spec.Capabilities {

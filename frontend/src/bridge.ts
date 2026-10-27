@@ -42,7 +42,22 @@ export type ToolStatus = {
   capabilities: { name: string; option: string; optional?: boolean; available: boolean }[] | null;
   warnings: string[] | null;
   error?: string;
+  widgets?: HarnessWidgets;
   install: { wingetId?: string; source?: string; vendorUrl: string };
+};
+
+export type HarnessWidgets = {
+  commands: { label: string; text: string }[];
+  models: string[];
+  interruptKeys: string[];
+  compactText: string;
+};
+
+export type ResolvedPreset = {
+  name: string;
+  text: string;
+  submit: boolean;
+  unknown?: string[];
 };
 
 export type InstallResult = {
@@ -75,6 +90,8 @@ type WailsApp = {
   GetSystemStatus(): Promise<SystemStatus>;
   InstallTool(id: string): Promise<InstallResult>;
   OpenToolSetupPage(id: string): Promise<void>;
+  GetPresets(sessionId: string): Promise<ResolvedPreset[] | null>;
+  OpenPresetsFile(): Promise<void>;
   LogFrontendFailure(source: string, message: string, stack: string): Promise<void>;
   LogTerminalPointerEvent(id: string, event: "pointerdown" | "mousedown"): Promise<void>;
   LogTerminalMouseTrackingMode(id: string, mode: "none" | "x10" | "vt200" | "drag" | "any"): Promise<void>;

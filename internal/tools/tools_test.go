@@ -57,6 +57,12 @@ func TestDeclaredSpecsAreValid(t *testing.T) {
 		if len(spec.Capabilities) == 0 {
 			t.Errorf("%s: no capabilities declared", spec.ID)
 		}
+		if spec.ID != PowerShell {
+			widgets := spec.Widgets
+			if widgets == nil || len(widgets.Commands) == 0 || 			len(widgets.Models) == 0 || len(widgets.InterruptKeys) == 0 || widgets.CompactText == "" {
+							t.Errorf("%s: harness must declare widget commands, models, interrupt keys and compact text", spec.ID)
+			}
+		}
 	}
 }
 

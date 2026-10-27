@@ -12,6 +12,8 @@ import (
 	"unicode"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/ma99us/tau-shell/internal/presets"
 )
 
 type Harness string
@@ -40,6 +42,9 @@ type Config struct {
 	PowerShell  struct {
 		UTF8 *bool `yaml:"utf8"`
 	} `yaml:"powershell,omitempty"`
+	// Presets are session-level prompt presets merged over the global
+	// prompts.yaml entries by name.
+	Presets []presets.Preset `yaml:"presets,omitempty"`
 }
 
 func (config Config) UTF8Enabled() bool {
@@ -125,6 +130,9 @@ func (config Config) Validate() error {
 		if !environmentPattern.MatchString(name) {
 			return fmt.Errorf("invalid environment variable name %q", name)
 		}
+	}
+	if err := presets.Validate(config.Presets); err != nil {
+		return fmt.Errorf("presets: %w", err)
 	}
 	if err := ValidateLaunchArgs(config.Tool, config.LaunchArgs); err != nil {
 		return err

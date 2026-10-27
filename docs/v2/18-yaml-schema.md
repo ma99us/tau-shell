@@ -39,4 +39,34 @@ Do not store secret values in YAML; secret-reference support requires a
 separately designed secret provider and is outside the current Phase 1 scope.
 This schema may evolve with explicit compatibility handling.
 
+## Prompt presets
+
+Prompt presets are user-authored text TauShell types into a running harness.
+They are plain prompts, not validated harness commands.
+
+Global presets live in `~/.tau_shell/prompts.yaml`. A missing file means no
+presets; an invalid file is reported in the Prompts menu, not ignored. The file
+is rejected on unknown fields, a missing `name`/`text`, or duplicate names
+(case-insensitive). "Edit presets..." in the Prompts menu creates a commented
+example only when the file is missing, then opens it; TauShell never overwrites
+it.
+
+```yaml
+version: 1
+presets:
+  - name: Review uncommitted changes
+    text: "Review the uncommitted changes in {project} on branch {branch}."
+    tools: [claude-code, copilot-cli]   # optional; default is all harnesses
+    submit: true                        # optional; false = insert only
+```
+
+A session YAML may add a `presets:` list in the same entry format. Session
+entries are appended after the global ones and replace a global preset with the
+same name. Variables: `{project}` (working-directory name), `{dir}`,
+`{session}` (session name), `{branch}` (current git branch, empty outside a
+repository), `{date}` (YYYY-MM-DD). Unknown `{name}` tokens are left as written.
+Do not put secrets in presets. `submit: true` presses Enter only when the
+harness is idle; see
+[`08-UI-Design.md`](../v1/08-UI-Design.md#10-harness-widgets).
+
 The isolated [`spikes/session-config/`](../../spikes/session-config/) prototype records the earlier validation of strict YAML parsing and the separate runtime-state boundary.

@@ -67,6 +67,16 @@ taushell restore <session-id>
   (initials, tinted with the session color when one is set).
 - Right-click a session in the sidebar or its tab to rename or recolor it. New
   sessions are named after the project folder.
+- Running sessions have a toolbar: **Prompts** (presets from
+  `%USERPROFILE%\.tau_shell\prompts.yaml`, see the
+  [schema](docs/v2/18-yaml-schema.md#prompt-presets)), **Commands**, **Model**,
+  **Compact** and **Interrupt**. Ctrl+Shift+P opens a command palette;
+  Ctrl+1..9 selects a tab; Ctrl+Tab cycles. Text is submitted only when the
+  harness looks idle, otherwise it is just inserted. The UI reports "sent", not
+  "applied". Verified on Copilot CLI; Claude Code widgets are not yet verified.
+- Home has **Resume All**, which restores, one after another, every stopped
+  session that has a saved harness session (sessions with a resume warning are
+  skipped; use Start fresh on those). Failures are reported per session.
 - Closing a tab keeps a live session running in the background with its
   terminal buffer; sessions are not auto-launched after a restart.
 - The terminal has no scrollback of its own; scrolling is left to the harness.

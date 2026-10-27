@@ -474,11 +474,50 @@ Known gaps and risks:
 
 ## Model selection
 
-The Create dialog has no Model field. A model can still be set by adding
-`--model <value>` to the editable launch arguments. A current-model display and
-picker in the session top bar is planned; it must be capability-gated on the
-harness's `--model` option and must read the live model from the harness rather
-than from `launch_args`. No model list is shipped.
+The Create dialog has no Model field. A model can be set by adding
+`--model <value>` to the editable launch arguments.
+
+Running sessions have a **Model** menu in the terminal toolbar (and in the
+command palette). It is shown only for harnesses that declare widgets and whose
+`--model` capability probe succeeded. It types `/model <id>` into the harness,
+or `/model` alone to open the harness's own picker, using the
+[widget delivery policy](../v1/08-UI-Design.md#10-harness-widgets). TauShell
+does not read the live model back, so the UI says "sent", never "applied". The
+suggested IDs live in `internal/tools/tools.go` (`Widgets.Models`) and are only
+suggestions: a custom ID can be entered, and availability depends on the
+account.
+
+Verified on Copilot CLI 1.0.104 through the real session manager and ConPTY
+(rendered with pyte): `/model auto` and `/model claude-haiku-5.5` both changed
+the model and the footer, and bare `/model` opened the picker. Claude Code's
+`/model` was not exercised because its provider returns 401 on this PC.
+
+## Harness widgets (implemented)
+
+Terminal toolbar for running sessions: **Prompts**, **Commands**, **Model**,
+**Compact**, **Interrupt**; plus a command palette (Ctrl+Shift+P) and shortcuts
+Ctrl+1..9 (Nth session tab), Ctrl+Tab / Ctrl+Shift+Tab (cycle Home and tabs).
+Prompt presets come from `~/.tau_shell/prompts.yaml` plus an optional
+`presets:` list in the session YAML
+([`18-yaml-schema.md`](18-yaml-schema.md)).
+
+Evidence (Copilot CLI 1.0.104, real ConPTY, probe removed afterwards):
+text followed by a separate Enter after 150 ms was accepted and answered
+(`PRESETOK`); `/model` opened the picker and Esc closed it; **a single Esc did
+not interrupt a working Copilot, two Escs 250 ms apart did** ("Operation
+cancelled by user"), so Copilot's `InterruptKeys` are two Esc presses; `/compact`
+sent while working is queued by the harness, which is why delivery is
+insert-only unless the harness is idle. Not verified live: Claude Code's slash
+commands, `/model`, and Esc interrupt (provider 401); its command list comes
+from Claude Code's documented built-ins. The idle/input detection reuses the
+attention cues, which are heuristic: when no cue is available the text is only
+inserted.
+
+Known limits: text is appended to whatever is already typed in the prompt;
+there is no success confirmation from the harness; the frontend has no
+automated tests, so the toolbar, palette, and shortcuts were verified by
+build/type-check and the delivery path by the real-harness probe, not by
+driving the packaged window.
 
 ## Recommended next actions
 

@@ -53,4 +53,16 @@ The locally installed Claude Code 2.1.263 and Copilot CLI 1.0.96-2 help output d
 
 To add another harness, follow [`23-adding-a-harness.md`](23-adding-a-harness.md).
 
+### Widget metadata
+
+An adapter's `Spec.Widgets` (`internal/tools/tools.go`) declares the
+quality-of-life actions TauShell may offer for a running session: slash
+`Commands`, suggested `Models` for `/model <id>`, the `InterruptKeys` pressed in
+order (Copilot CLI needs Esc twice; Claude Code one Esc), and the `CompactText`
+command. The UI shows a widget only for adapters that declare it, and the
+Model menu additionally requires the `--model` capability probe. These are
+keystrokes typed into the harness: they are not confirmed by it, and the lists
+are tied to the tested version range. Adding a harness means declaring them or
+leaving `Widgets` nil, in which case the terminal simply has no widgets.
+
 Future adapters may add supported actions and state hints, but tool-specific behavior must remain out of the core session manager.

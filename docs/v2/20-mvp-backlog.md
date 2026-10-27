@@ -70,6 +70,12 @@
   first and default); session tiles use project-initial icons tinted with the
   session color; Home, sidebar and tabs share one session order; Home is a
   house icon in the tab strip and in the expanded and collapsed sidebar.
+- **Harness widgets (implemented):** terminal toolbar (Prompts, Commands,
+  Model, Compact, Interrupt), command palette (Ctrl+Shift+P), tab shortcuts
+  (Ctrl+1..9, Ctrl+Tab), prompts in `~/.tau_shell/prompts.yaml`. Delivery
+  rules and verification limits: [`08-UI-Design.md`](../v1/08-UI-Design.md#10-harness-widgets)
+  and the handoff. Claude Code slash commands, `/model` and Esc interrupt are
+  unverified (provider 401). No model field in the New Session dialog.
 - **UI improvements (planned, not implemented):**
   - Drag-and-drop reordering of sessions with the mouse, from either the left
     menu or the tab strip. Order must stay identical across Home tiles, left
@@ -94,6 +100,13 @@
   user-authorized, live credentials); hosted-terminal restore for a session
   with at least one real conversation turn (as opposed to zero-turn sessions)
   remains unverified for both harnesses.
+  Update: Copilot CLI 1.0.104 restore with real turns is verified through the
+  session manager on both inbox and bundled ConPTY (the model recalled a word
+  given before Stop; stop 1.4-2.2 s, not forced). Repeated runs
+  (`-count=3`) of the conpty, sessionhost and cmd/taushell tests pass. The
+  packaged window itself could not be scripted: WebView2 ignores the
+  `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` env var and an HKCU policy here (Wails passes explicit
+  browser arguments), so a DevTools port is unavailable without an app change.
 
 The detailed step dependencies and acceptance criteria remain in
 [`docs/v1/09-UI-Implementation-Plan.md`](../v1/09-UI-Implementation-Plan.md).

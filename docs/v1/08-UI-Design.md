@@ -304,38 +304,48 @@ documented, not addressed by guessing at process ancestry and terminating
 possibly unrelated processes. On cancellation, the window and all managed
 sessions remain available.
 
-## 10. Future widgets and extensibility
+## 10. Harness widgets
 
-The initial GUI milestone is limited to the launcher, tabs, terminal hosting,
-session lifecycle/status, and safe shutdown. Model selection, configured prompt
-presets, harness commands, and other session widgets are follow-on work, not
-requirements for the first GUI release.
+Running sessions have optional quality-of-life widgets in the terminal toolbar:
+Prompts (saved prompt presets), Commands (adapter slash commands), Model,
+Compact, and Interrupt, plus a command palette (Ctrl+Shift+P) and shortcuts
+(Ctrl+1..9, Ctrl+Tab / Ctrl+Shift+Tab). They are built on adapter-declared
+capabilities and the rules below.
 
-Plan those extensions around explicit adapter capabilities:
-
-- Only show a model selector or command widget when that harness adapter
-  advertises a supported operation and can report success/failure.
-- Do not implement a generic widget by typing text or slash commands into a
-  terminal that may not have focus. If the harness only offers an interactive
-  command, the user can invoke it in the terminal.
-- Keep prompt presets reusable at the application level, with optional
-  per-session overrides, as a separately designed configuration feature.
-- Keep user-authored prompt content and commands separate from secrets and
-  mutable harness runtime data. Never imply that a prompt preset is an
-  application-validated harness command.
-- A session terminal remains usable if no optional widgets are supported.
-
-No preset schema, model protocol, or adapter command API is defined by this
-document. Design and validate those contracts when the follow-on feature is
-scheduled.
+- Show a widget only when the harness adapter declares it
+  (`Spec.Widgets`); the Model menu also requires the `--model` capability
+  probe. The terminal remains fully usable without any widget.
+- Widgets type into the terminal through the same input path as the keyboard,
+  so they work whether or not the terminal has focus. Delivery follows what the
+  harness itself shows (the attention cues):
+  - A permission or selection prompt is open: refuse and tell the user, because
+    typed text could answer the prompt.
+  - The harness is idle: type the text, then press Enter as a separate write.
+  - Working or no cue: insert the text only; the user presses Enter. (Copilot
+    CLI queues a command sent while it is working, so submitting blindly is
+    unsafe.)
+  - Multi-line text is pasted rather than typed so newlines do not submit early.
+  - Interrupt is an explicit user action and is always sent (Copilot CLI needs
+    Esc twice).
+- Report "sent" or "inserted", never "applied": the harness gives no
+  confirmation. A model switch reports the request, not the current model.
+- Text is appended to anything already typed at the harness prompt.
+- Prompt presets are user-authored, live in `~/.tau_shell/prompts.yaml` with
+  per-session overrides in the session YAML, and are kept separate from secrets
+  and runtime data. They are never presented as validated harness commands. See
+  [`docs/v2/18-yaml-schema.md`](../v2/18-yaml-schema.md#prompt-presets).
+- Out of scope for now: context/cost/quota gauges, permission or autonomy
+  selectors, permission-prompt buttons, drafts and sent-prompt history,
+  transcript export and search, and a model picker in the Create dialog.
 
 ## 11. Phase 1 non-goals
 
 - Replacing harness TUIs with a TauShell chat UI or parsing conversation text.
-- Model selection, prompt presets, harness command widgets, chat history,
-  message search/export, or GSD-specific progress views in the first GUI
-  milestone. Editable per-session CLI arguments and generated defaults are
-  included; interactive configuration widgets beyond session creation are not.
+- Chat history, message search/export, context/cost/quota gauges, permission
+  or autonomy selectors, or GSD-specific progress views. (Prompt presets,
+  harness command and model widgets, the command palette, and tab shortcuts are
+  implemented; see section 10.) Editable per-session CLI arguments and
+  generated defaults are included.
 - Remote access, mobile apps, web dashboards/server mode, notifications, or
   cloud synchronization.
 - Multiple TauShell windows, detached tabs, split terminal panes, or tray-first
