@@ -54,9 +54,11 @@ interaction decisions and feasibility gate are in
   `--yolo`; shown as an orange square, glowing until seen, cleared when the
   prompt is answered). Other Copilot pickers share that footer and are also
   treated as waiting for input. Claude Code = terminal title (braille
-  spinner = working, U+2733 = idle; from memory, UNVERIFIED, needs a logged-in
-  run); it has no "needs input" cue yet because its permission prompt has not
-  been captured. With no cue (unknown tool) it falls back to output timing
+  spinner = working, U+2733 = idle; verified live on 2.1.311: idle
+    `✳ Claude Code`, working animates U+25D0-25D3 as well as braille); its
+    "needs input" cue is the "Enter to confirm ... Esc to cancel" footer seen on
+    the trust-folder prompt; the tool-permission prompt itself is not yet
+    captured (provider returns 401). With no cue (unknown tool) it falls back to output timing
   (output within 400 ms of a keystroke is ignored as echo). "Quiet" is not
   proof the harness awaits input. Copilot
   sends only topic titles, no BEL/OSC 9/777/133.
@@ -136,7 +138,12 @@ smoke host and its logs were removed; the check is not yet a checked-in
 repeatable integration test. The host allows only the configured top-level
 `http://wails.localhost` origin. Frame navigation and negative bridge-dispatch
 tests remain open; Wails' origin validator is still an independent guard on
-bound methods.
+bound methods. Code review of frame/new-window exposure: the UI has no
+iframes, `innerHTML`, or `window.open`, and the vendored Wails host handles
+only top-level `NavigationStarting` (no `NewWindowRequested` handler). The one
+`target="_blank"` link (tool-install notice) was therefore replaced by a button
+that calls the metadata-restricted `OpenToolSetupPage` binding; a live frame
+injection test is still not automated.
 
 A browser-canvas interaction smoke with a mocked Wails bridge confirmed that
 closing a live tab to the background retains the same xterm instance, buffers
@@ -566,10 +573,16 @@ to include the custom app icon.
   harness and `pwsh` to quit. If that is absent, fails, or times out, it falls
   back to a single Ctrl+C (3 s) and then force-termination, which is shown as
   "Graceful interrupt failed or timed out". Claude Code still uses the
-  Ctrl+C-only path until a real probe shows `/exit` is safe for it. Unit tests
+  Ctrl+C-only path until a real probe shows `/exit` is safe for it (a real
+  probe since showed Ctrl+C, `/exit`, Enter exits Claude in about 0.4 s).
+  Unit tests
   use fake processes; the real Copilot `/exit` path was smoke-tested in the
   production window (clean exit in about 1.5 s, exit code 0, not forced). That
-  a later Restore resumes the conversation after it is still unverified.
+  a later Restore resumes the conversation is now verified: a real `Manager`
+  run on Copilot CLI 1.0.104 (stop 2.2 s, not forced) restored the session,
+  replayed the prior turn, and the model recalled a word given before the
+  stop. Claude's model-dependent checks stay blocked: this PC's provider
+  returns 401 on every request.
   Stop/shutdown
   timeouts were raised to 25 s to fit the longer sequence.
 

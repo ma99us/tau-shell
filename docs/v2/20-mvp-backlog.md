@@ -65,6 +65,22 @@
   navigation and horizontal overflow controls are implemented in the frontend.
   The session form suggests up to five recently used folders, persisted in
   WebView local storage.
+- **UI polish (implemented):** Refresh button on Home; New Session dialog with
+  side-by-side harness toggle buttons (official Simple Icons marks, Copilot
+  first and default); session tiles use project-initial icons tinted with the
+  session color; Home, sidebar and tabs share one session order; Home is a
+  house icon in the tab strip and in the expanded and collapsed sidebar.
+- **UI improvements (planned, not implemented):**
+  - Drag-and-drop reordering of sessions with the mouse, from either the left
+    menu or the tab strip. Order must stay identical across Home tiles, left
+    menu items, and tabs, so the order needs to be persisted and shared rather
+    than derived from file names.
+  - Rename the "Open terminal" action on Home session tiles to "Open session".
+  - Duplicate a session from the right-click menu on a left-menu item or tab,
+    and from a button on the Home session tile. The copy reuses the source
+    session's working directory and harness and is opened as a new session
+    immediately, with no prompts. It must not copy runtime state (resume IDs,
+    restore outcome), and the YAML id and name must stay unique.
 - **Shutdown/recovery:** a repeated native test verifies process, job, and
   input/output pipe handles are invalidated after ConPTY close; the opaque
   pseudoconsole is checked through successful close and cleared state. Wails-

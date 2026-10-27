@@ -1,86 +1,99 @@
 # TauShell
 
 TauShell is a PowerShell-first orchestrator for persistent sessions with
-terminal-native AI coding tools. Its target interactive experience is a Windows
-desktop GUI with a session launcher and tabs containing embedded
-PowerShell/ConPTY harness terminals. It aims to resume the harness conversation
-when the harness supports explicit session restore.
+terminal-native AI coding tools. It is a Windows desktop app (Go + Wails
+WebView2 host, React/xterm.js UI) where each session is a PowerShell 7 process
+hosted through ConPTY, running a harness such as Claude Code or GitHub Copilot
+CLI. When the harness supports explicit session restore, TauShell resumes the
+conversation.
 
-## Project status
+```text
+TauShell -> ConPTY -> PowerShell 7 -> AI harness
+```
 
-Phase 1 implementation is underway. The Bubble Tea TUI has been removed; no
-TUI fallback is planned. No-argument launch now opens the Windows desktop
-application, while `list`, `start`, and `restore` remain standalone commands.
+TauShell keeps ordinary PowerShell behavior, never rewrites harness output, and
+keeps core session management independent of any one AI provider.
 
-The initial desktop implementation uses a Go/Wails WebView2 host with bundled
-React and xterm.js assets. It includes a local session launcher, persisted
-presentation tabs, session creation, tool discovery, explicit Start/Restore/
-Start Fresh actions, ConPTY input/output/resize wiring, and a shutdown
-confirmation path. The session manager is UI-independent, and harness IDs and
-runtime metadata remain outside session YAML.
+## Status
 
-Keeping a live session in the background retains its xterm instance and buffer
-until the app closes; sessions are never auto-launched after restart. The
-terminal has no scrollbar or scrollback of its own: scrolling is left to the
-harness. Ctrl+C copies when text is selected (otherwise it is sent to the
-harness), Ctrl+V and Shift+Insert paste, and Ctrl+Shift+C always copies.
-Right-click a session in the sidebar or its tab to rename it or change its
-color. New sessions are named after the project folder.
+Phase 1 is under way and the desktop app is an early implementation, not a
+verified release. Remote access, phone/mobile integration, web dashboards and
+notifications are not part of Phase 1. The old Bubble Tea TUI has been removed
+and no TUI fallback is planned.
 
-**The desktop feasibility gate has passed on the development Windows 10
-machine.** A deterministic fixture verified Unicode/emoji, ANSI, cursor
-movement, terminal queries, typed input and live resize through the production
-WebView2, xterm.js, PowerShell 7 and ConPTY path, and user-authorized
-hosted-terminal walkthroughs rendered both Claude Code and Copilot CLI end to
-end. Inbox Windows 10 ConPTY consumes mouse-mode requests and device-status
-replies, so TauShell prefers the bundled ConPTY (see below). Treat the UI as an
-early implementation, not a verified release: top-level navigation outside the
-bundled `http://wails.localhost` origin is blocked and smoke-tested, but frame
-navigation and cross-origin bridge denial are not separately tested.
+**Implemented**
 
-Implemented: PowerShell 7 hosted through ConPTY; human-edited YAML with separate SQLite runtime state; built-in Claude Code and Copilot CLI command adapters; UTF-8/code-page setup; and desktop close confirmation with graceful interruption followed by bounded force termination.
+- PowerShell 7 hosted through ConPTY (bundled ConPTY preferred, inbox fallback),
+  with UTF-8/code-page setup.
+- Human-edited YAML session definitions; runtime state (resume IDs, restore
+  outcomes) in a separate SQLite store.
+- Built-in Claude Code and Copilot CLI adapters, tool/version detection with
+  tested ranges, and confirmed winget installs with vendor-page fallback.
+- Home page with session tiles, tabs, sidebar, session create/rename/recolor/
+  delete, explicit Start / Restore / Start Fresh, per-session state indicators.
+- Close confirmation, then graceful interruption, then bounded force
+  termination, with any forced stop reported.
 
-Automated Windows ConPTY tests verify PowerShell output/exit codes, resizing,
-and that forced termination stops direct job-child fixtures. Session-manager
-tests run real ConPTY processes to check that a graceful stop is reported as a
-clean stop and an ignored interrupt is reported as force-terminated. Runtime
-recovery treats a recorded PID that now belongs to a newer process as stale.
-Shell/broker launches detached outside TauShell's Job Object remain unmanaged.
+**Verified on the Windows 10 development machine**
 
-Remaining work: restoring a session that has at least one real conversation
-turn (Copilot CLI, and Claude Code after a completed login), a live winget
-install run, and frame-navigation/bridge-denial tests. A disposable Copilot CLI
-provider-backed restore smoke test passed. TauShell must
-not rewrite harness output; glyph rendering depends on the selected terminal
-renderer and installed fonts.
+- Unicode/emoji, ANSI, cursor movement, terminal queries, typed input and live
+  resize through WebView2, xterm.js, PowerShell 7 and ConPTY.
+- Both harnesses render end to end in the hosted terminal.
+- Copilot CLI restore of a session with real turns: the model recalled earlier
+  context after Stop and Restore.
+- Claude Code 2.1.311: graceful `/exit`, trust-folder prompt, title cues and the
+  resume gate. Checks that need a model reply are blocked until a working
+  credential is available.
+- Top-level navigation outside `http://wails.localhost` is blocked.
 
-Remote access, phone/mobile integration, web dashboards, and notifications are not part of Phase 1.
+**Still open:** Claude Code model-dependent checks, frame-navigation and
+bridge-denial tests, an automated Wails-host close test, and a live winget
+install run. See [`docs/v2/21-engineering-handoff.md`](docs/v2/21-engineering-handoff.md)
+and [`docs/v2/24-claude-code-verification-plan.md`](docs/v2/24-claude-code-verification-plan.md).
+Planned UI work (drag-and-drop reorder, "Open session", duplicate session) is
+listed in [`docs/v2/20-mvp-backlog.md`](docs/v2/20-mvp-backlog.md).
 
-The current CLI commands are:
+## Using TauShell
 
 ```powershell
-taushell
+taushell                      # open the desktop app (never auto-starts sessions)
 taushell list
 taushell start <session-id>
 taushell restore <session-id>
 ```
 
-Running `taushell` without arguments opens the desktop launcher. It does not
-start sessions automatically; use **Start** or **Restore**. Tabs may continue
-running in the background. Closing the app asks before interrupting live
-sessions.
+- Sessions are shown in the same order on Home, in the sidebar and in the tabs.
+  Home is the house icon. Session icons come from the project folder name
+  (initials, tinted with the session color when one is set).
+- Right-click a session in the sidebar or its tab to rename or recolor it. New
+  sessions are named after the project folder.
+- Closing a tab keeps a live session running in the background with its
+  terminal buffer; sessions are not auto-launched after a restart.
+- The terminal has no scrollback of its own; scrolling is left to the harness.
+  Ctrl+C copies when text is selected (otherwise it goes to the harness),
+  Ctrl+V and Shift+Insert paste, Ctrl+Shift+C always copies.
+- Closing the app asks before interrupting live sessions.
 
-## Diagnostics
+Create one YAML file per session at
+`%USERPROFILE%\.tau_shell\sessions\<session-id>.yaml` (or use **Create
+session**); see the [schema](docs/v2/18-yaml-schema.md):
 
-Each TauShell process truncates and writes a structured JSON diagnostic log to
-`%TEMP%\TauShell\taushell.log` (the actual path is shown on Home). It records
-startup, session lifecycle, prerequisite detection, bridge errors, frontend
-runtime/rejection failures, and React render failures. Prompt text, terminal
-input/output, environment values, and credentials are excluded; credential-like
-strings in error text are redacted. The file is local to the current Windows
-user's temp directory and is replaced on the next launch.
+```yaml
+id: backend-agent
+name: Backend Agent
+tool: claude-code
+working_dir: C:/Projects/App
+powershell:
+  utf8: true
+```
 
-Build on Windows with Go 1.26 or newer and Node.js:
+Install PowerShell 7 and the harness CLI (`claude` or `copilot`) on `PATH`.
+`start` creates a harness session ID and `restore` reuses it. TauShell closes
+the managed PowerShell process when its harness exits.
+
+## Build
+
+Requires Windows, Go 1.26+, Node.js and Python 3 (icon generation).
 
 ```powershell
 Push-Location frontend
@@ -93,62 +106,44 @@ go build -tags production -ldflags "-H=windowsgui" -o taushell.exe ./cmd/taushel
 .\scripts\fetch-conpty.ps1
 ```
 
-`scripts\fetch-conpty.ps1` downloads the pinned, MIT-licensed
-`Microsoft.Windows.Console.ConPTY` package, verifies its SHA-256 hash and
-Microsoft Authenticode signatures, and copies the x64 `conpty.dll` and
-`OpenConsole.exe` next to `taushell.exe` (use `-Destination` for another
-folder). TauShell prefers this bundled ConPTY because Windows 10's inbox ConPTY
-consumes harness mouse-mode requests and terminal status replies. Without the
-two files, TauShell falls back to inbox ConPTY with those limitations, and the
-diagnostic log records which backend each session used.
+- `-H=windowsgui` is required for direct `go build`; without it a console
+  window can cover the app.
+- If `npm ci` fails with `EALLOWSCRIPTS` because of a user-level `allow-scripts`
+  npm setting, set `$env:npm_config_allow_scripts=''` for that shell.
+- `gen_icon.py` writes the gitignored app icon and `.syso` resource.
+- `fetch-conpty.ps1` downloads the pinned MIT-licensed
+  `Microsoft.Windows.Console.ConPTY` package, verifies its SHA-256 and
+  Authenticode signatures, and copies `conpty.dll` and `OpenConsole.exe` next to
+  `taushell.exe` (`-Destination` for another folder). Windows 10's inbox ConPTY
+  consumes mouse-mode requests and status replies, so without these two files
+  TauShell falls back to inbox ConPTY with those limitations. The diagnostic log
+  records which backend each session used.
+- The built frontend is embedded from `cmd/taushell/frontend/dist`.
 
-Create one YAML file at `%USERPROFILE%\.tau_shell\sessions\<session-id>.yaml` for each session; see the [Phase 1 schema](docs/v2/18-yaml-schema.md). For example:
+## Diagnostics
 
-```yaml
-id: backend-agent
-name: Backend Agent
-tool: claude-code
-working_dir: C:/Projects/App
-powershell:
-  utf8: true
-```
-
-Install PowerShell 7 and the selected harness CLI (`claude` or `copilot`) on `PATH`. `start` creates a harness session ID and `restore` reuses that ID. A fake executable verified both commands receive the same explicit UUID. A disposable test with Copilot CLI 1.0.100-1 then confirmed that `restore` reopened the conversation and recovered an exact response marker without using tools or accessing files; Claude Code's provider-backed restore remains unverified. TauShell closes the managed PowerShell process when its harness exits.
-
-The ignored [`spikes/conpty/`](spikes/conpty/) and [`spikes/session-config/`](spikes/session-config/) directories contain earlier prototypes and test references, not the application architecture.
+Each process writes a structured JSON log to `%TEMP%\TauShell\taushell.log`
+(path shown on Home), replaced on the next launch. It records startup, session
+lifecycle, prerequisite detection, bridge errors and frontend failures. Prompt
+text, terminal I/O, environment values and credentials are excluded, and
+credential-like strings in errors are redacted.
 
 ## Documentation
 
-[`docs/v2/`](docs/v2/) is the active product and engineering documentation set. Start with:
+[`docs/v2/`](docs/v2/) is the active documentation set; apply the Phase 1 scope
+above where it still describes later remote/mobile work. Start with:
 
-- [Product vision](docs/v2/00-product-vision.md)
-- [System architecture](docs/v2/01-system-architecture.md)
-- [ConPTY integration and spike findings](docs/v2/02-conpty-integration.md)
-- [Session lifecycle](docs/v2/03-session-lifecycle.md)
-- [Session restoration](docs/v2/04-session-restoration.md)
-- [Harness adapters](docs/v2/05-plugin-system.md)
-- [YAML schema](docs/v2/18-yaml-schema.md)
-- [Storage layout](docs/v2/12-storage-layout.md)
-- [Workspaces](docs/v2/19-workspaces.md)
-- [MVP backlog](docs/v2/20-mvp-backlog.md)
-- [Engineering handoff](docs/v2/21-engineering-handoff.md)
-- [PowerShell bootstrap](docs/v2/09-powershell-bootstrap.md)
-- [Terminal rendering and compatibility](docs/v2/15-terminal-rendering.md)
-- [Desktop UI design](docs/v1/08-UI-Design.md)
-- [Desktop UI implementation plan](docs/v1/09-UI-Implementation-Plan.md)
+- [Product vision](docs/v2/00-product-vision.md) and [MVP backlog](docs/v2/20-mvp-backlog.md)
+- [System architecture](docs/v2/01-system-architecture.md), [ConPTY integration](docs/v2/02-conpty-integration.md), [PowerShell bootstrap](docs/v2/09-powershell-bootstrap.md)
+- [Session lifecycle](docs/v2/03-session-lifecycle.md), [restoration](docs/v2/04-session-restoration.md), [storage layout](docs/v2/12-storage-layout.md)
+- [Harness adapters](docs/v2/05-plugin-system.md) and [adding a harness](docs/v2/23-adding-a-harness.md)
+- [YAML schema](docs/v2/18-yaml-schema.md), [workspaces](docs/v2/19-workspaces.md)
+- [Terminal rendering](docs/v2/15-terminal-rendering.md)
+- [Claude Code verification plan](docs/v2/24-claude-code-verification-plan.md)
+- [Contributor guide](docs/v2/17-contributor-guide.md) and [engineering handoff](docs/v2/21-engineering-handoff.md)
+- Desktop UI: [design](docs/v1/08-UI-Design.md), [implementation plan](docs/v1/09-UI-Implementation-Plan.md) (other V1 documents are historical)
 
-The V2 documents are the active product and engineering specifications; apply
-the current Phase 1 scope where they still describe later remote/mobile
-features. The desktop UI direction and implementation plan are recorded in
-[`docs/v1/08-UI-Design.md`](docs/v1/08-UI-Design.md) and
-[`docs/v1/09-UI-Implementation-Plan.md`](docs/v1/09-UI-Implementation-Plan.md).
-Other V1 documents are historical unless explicitly referenced by current
-specifications.
-
-## Core runtime
-
-```text
-TauShell -> ConPTY -> PowerShell 7 -> AI harness
-```
-
-TauShell should preserve ordinary PowerShell behavior and avoid coupling its core session management to any one AI provider.
+The ignored [`spikes/`](spikes/) directory holds earlier prototypes (ConPTY,
+session config); they are references, not the application architecture.
+Third-party icons and components are credited in
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

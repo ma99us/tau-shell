@@ -32,3 +32,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Simple Icons
+
+The Claude and GitHub Copilot marks in rontend/src/harnessIcons.tsx come from Simple Icons (<https://simpleicons.org>, CC0 1.0). The logos remain trademarks of their owners (Anthropic; GitHub/Microsoft) and are used only to identify the tools.
+

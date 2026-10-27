@@ -49,7 +49,11 @@ type cliAdapter struct {
 func For(id session.Harness) (Adapter, error) {
 	switch id {
 	case session.ClaudeCode:
-		return cliAdapter{id: id, executable: "claude", defaultArgs: []string{"--dangerously-skip-permissions"}}, nil
+		return cliAdapter{id: id, executable: "claude", defaultArgs: []string{"--dangerously-skip-permissions"}, resumeCheck: checkClaudeResume, gracefulExit: []ExitStep{
+			{Input: "\x03", Pause: 400 * time.Millisecond},
+			{Input: "/exit", Pause: 400 * time.Millisecond},
+			{Input: "\r"},
+		}}, nil
 	case session.CopilotCLI:
 		return cliAdapter{id: id, executable: "copilot", defaultArgs: []string{"--yolo"}, resumeCheck: checkCopilotResume, gracefulExit: []ExitStep{
 			{Input: "\x03", Pause: 400 * time.Millisecond},
@@ -82,6 +86,33 @@ func checkCopilotResumeIn(root, harnessSessionID string) error {
 		return errors.New("GitHub Copilot CLI has no recorded conversation for this session yet; use Start fresh")
 	}
 	return nil
+}
+
+// checkClaudeResume relies on Claude Code's transcript store: a session that
+// never got a first prompt has no <id>.jsonl under any project folder, and
+// `claude --resume` then exits with "No conversation found". This is an
+// undocumented internal layout, so it fails open when the store is absent.
+func checkClaudeResume(harnessSessionID string) error {
+	root := os.Getenv("CLAUDE_CONFIG_DIR")
+	if root == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil
+		}
+		root = filepath.Join(home, ".claude")
+	}
+	return checkClaudeResumeIn(filepath.Join(root, "projects"), harnessSessionID)
+}
+
+func checkClaudeResumeIn(projectsRoot, harnessSessionID string) error {
+	if _, err := os.Stat(projectsRoot); err != nil {
+		return nil
+	}
+	matches, err := filepath.Glob(filepath.Join(projectsRoot, "*", harnessSessionID+".jsonl"))
+	if err != nil || len(matches) > 0 {
+		return nil
+	}
+	return errors.New("Claude Code has no recorded conversation for this session yet; use Start fresh")
 }
 
 func (adapter cliAdapter) CheckResume(harnessSessionID string) error {

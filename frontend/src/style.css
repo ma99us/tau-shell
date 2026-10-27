@@ -62,24 +62,32 @@ textarea:focus-visible,
   background: #0c0e12;
 }
 
-.topbar {
+.sidebar-brand {
   display: flex;
-  height: 56px;
-  flex: 0 0 56px;
-  align-items: center;
-  gap: 16px;
-  padding: 0 18px;
-  border-bottom: 1px solid #262a32;
-  background: #12151b;
-}
-
-.brand {
-  display: flex;
+  height: 42px;
+  flex: 0 0 42px;
   align-items: center;
   gap: 9px;
-  font-size: 15px;
-  font-weight: 700;
+  margin: 0 -12px 12px;
+  padding: 0 14px;
+  border-bottom: 1px solid #262a32;
+}
+
+.brand-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.brand-text strong {
+  font-size: 14px;
   letter-spacing: 0.01em;
+}
+
+.brand-text small {
+  color: #8e96a4;
+  font-size: 11px;
 }
 
 .brand-mark,
@@ -93,12 +101,6 @@ textarea:focus-visible,
   background: #183326;
   color: #9ce7be;
   font-weight: 700;
-}
-
-.window-caption {
-  flex: 1;
-  color: #8e96a4;
-  font-size: 12px;
 }
 
 .icon-button,
@@ -140,7 +142,7 @@ textarea:focus-visible,
   flex: 0 0 244px;
   flex-direction: column;
   gap: 5px;
-  padding: 17px 12px 12px;
+  padding: 0 12px 12px;
   border-right: 1px solid #262a32;
   background: #11141a;
 }
@@ -323,12 +325,19 @@ textarea:focus-visible,
   min-width: 58px;
   flex-basis: 58px;
   align-items: center;
-  padding: 12px 6px;
+  padding: 0 6px 12px;
 }
 
+.sidebar.collapsed .sidebar-brand {
+  width: 100%;
+  justify-content: center;
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.sidebar.collapsed .brand-text,
 .sidebar.collapsed .sidebar-title,
 .sidebar.collapsed .session-row-text,
-.sidebar.collapsed .sidebar-foot-text,
 .sidebar.collapsed .delete-button {
   display: none;
 }
@@ -340,14 +349,8 @@ textarea:focus-visible,
 
 .sidebar.collapsed .nav-row {
   width: 40px;
-  overflow: hidden;
-  font-size: 0;
-  text-align: center;
-}
-
-.sidebar.collapsed .nav-row::before {
-  content: "H";
-  font-size: 13px;
+  justify-content: center;
+  padding: 9px;
 }
 
 .sidebar.collapsed .session-item {
@@ -493,6 +496,11 @@ textarea:focus-visible,
   padding: 15px 0 31px;
 }
 
+.hero-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .eyebrow {
   margin: 0 0 10px;
   color: #83d5a7;
@@ -534,14 +542,6 @@ h3 {
   margin-bottom: 0;
   color: #929ba8;
   line-height: 1.55;
-}
-
-.diagnostic-path {
-  overflow-wrap: anywhere;
-}
-
-.diagnostic-path code {
-  font-size: 0.9em;
 }
 
 .primary-button,
@@ -645,6 +645,13 @@ h3 {
 .tool-icon {
   width: 30px;
   height: 30px;
+}
+
+.project-icon {
+  overflow: hidden;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
 }
 
 .state-pill {
@@ -793,10 +800,16 @@ h3 {
   flex: 1;
 }
 
-.tool-notice a {
+.tool-notice a,
+.tool-notice .link-button {
   color: inherit;
   text-decoration: underline;
   white-space: nowrap;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
 }
 
 .tool-notice.notice-success {
@@ -973,6 +986,58 @@ h3 {
   font-weight: 550;
 }
 
+.harness-field {
+  display: grid;
+  gap: 7px;
+}
+
+.harness-label {
+  color: #c9ced7;
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.harness-picker {
+  display: flex;
+  gap: 10px;
+}
+
+.harness-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 132px;
+  height: 132px;
+  padding: 10px;
+  border: 1px solid #363d48;
+  border-radius: 10px;
+  background: #171b22;
+  color: #c9ced7;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.harness-option:hover {
+  border-color: #4a5260;
+}
+
+.harness-option.selected {
+  border-color: #78d49f;
+  background: #183326;
+  color: #f4f6fa;
+  box-shadow: 0 0 0 1px #78d49f;
+}
+
+.harness-svg {
+  width: 48px;
+  height: 48px;
+}
+
 .modal input,
 .modal select,
 .modal textarea {
@@ -1096,7 +1161,18 @@ h3 {
     min-width: 58px;
     flex-basis: 58px;
     align-items: center;
-    padding: 12px 6px;
+    padding: 0 6px 12px;
+  }
+
+  .sidebar-brand {
+    width: 100%;
+    justify-content: center;
+    margin: 0 0 12px;
+    padding: 0;
+  }
+
+  .brand-text {
+    display: none;
   }
 
   .sidebar-heading {

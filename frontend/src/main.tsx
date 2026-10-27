@@ -6,6 +6,7 @@ import "@xterm/xterm/css/xterm.css";
 import { app, DialogRequest, InstallResult, LaunchPreview, Session, SessionEvent, SystemStatus, ToolStatus } from "./bridge";
 import "./style.css";
 import { readHarnessSignal } from "./attention";
+import { HarnessIcon, HomeIcon } from "./harnessIcons";
 
 type Tab = { id: string; name: string };
 const savedTabsKey = "taushell.tabs.v1";
@@ -301,7 +302,7 @@ function App() {
   };
 
   const removeTab = (id: string, retainRunningTerminal = false) => {
-    const remainingTabs = tabs.filter((tab) => tab.id !== id);
+    const remainingTabs = orderedTabs.filter((tab) => tab.id !== id);
     setTabs((current) => current.filter((tab) => tab.id !== id));
     setBackgroundTerminalIds((current) => {
       if (!retainRunningTerminal) return current.filter((terminalId) => terminalId !== id);
@@ -360,6 +361,8 @@ function App() {
     }
   };
   const colorOf = (id: string) => sessions.find((current) => current.id === id)?.color;
+  // Tabs follow the same order as the sidebar and Home tiles, not the order they were opened.
+  const orderedTabs = [...tabs].sort((a, b) => sessions.findIndex((s) => s.id === a.id) - sessions.findIndex((s) => s.id === b.id));
   const installTool = async (tool: ToolStatus) => {
     setInstalling(tool.id);
     setToolNotice(null);
@@ -382,15 +385,11 @@ function App() {
 
   return (
     <div className="app">
-      <header className="topbar">
-        <div className="brand"><span className="brand-mark">T</span><span>TauShell</span></div>
-        <div className="window-caption">Local AI sessions</div>
-        <button className="icon-button" title="Refresh sessions and re-detect tools" onClick={() => void refresh(true)}>R</button>
-      </header>
       <div className="workspace">
         <aside className={`sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
+          <div className="sidebar-brand"><span className="brand-mark">T</span><span className="brand-text"><strong>TauShell</strong><small>Your AI sessions</small></span></div>
           <div className="sidebar-heading"><span className="sidebar-title">SESSIONS</span> <button className="add-button" title="Create session" onClick={() => setDialogOpen(true)}>+</button></div>
-          <button className={`nav-row ${selected ? "" : "active"}`} title="Home" onClick={() => setSelected("")}>Home</button>
+          <button className={`nav-row ${selected ? "" : "active"}`} title="Home" aria-label="Home" onClick={() => setSelected("")}><HomeIcon /></button>
           {sessions.map((session) => (
             <div className={`session-item ${selected === session.id ? "active" : ""}`} key={session.id} style={sessionColorStyle(session.color)} data-colored={session.color ? "" : undefined} onContextMenu={(event) => openMenu(event, session)}>
               <button className={`session-row ${selected === session.id ? "active" : ""}`} title={session.name} onClick={() => openTab(session)}>
@@ -400,7 +399,7 @@ function App() {
               <button className="delete-button" aria-label={`Delete ${session.name}`} title="Delete session" onClick={() => setDeleteRequest(session)}>x</button>
             </div>
           ))}
-          <div className="sidebar-foot"><span className="sidebar-foot-text">Local machine only</span><button className="sidebar-toggle" aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setSidebarCollapsed((value) => !value)}>{sidebarCollapsed ? ">>" : "<<"}</button></div>
+          <div className="sidebar-foot"><button className="sidebar-toggle" aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setSidebarCollapsed((value) => !value)}>{sidebarCollapsed ? ">>" : "<<"}</button></div>
         </aside>
         <main className="main">
           <div className="tab-strip">
@@ -415,9 +414,11 @@ function App() {
                 data-tab-id=""
                 tabIndex={selected === "" ? 0 : -1}
                 onKeyDown={handleTabKeyDown}
+                aria-label="Home"
+                title="Home"
                 onClick={() => setSelected("")}
-              >Home</button>
-              {tabs.map((tab) => (
+              ><HomeIcon /></button>
+              {orderedTabs.map((tab) => (
                 <div className={`tab-item ${selected === tab.id ? "active" : ""}`} key={tab.id} role="presentation" style={sessionColorStyle(colorOf(tab.id))} data-colored={colorOf(tab.id) ? "" : undefined} onContextMenu={(event) => { const session = sessions.find((current) => current.id === tab.id); if (session) openMenu(event, session); }}>
                   <button
                     id={`tab-${tab.id}`}
@@ -440,7 +441,7 @@ function App() {
           <section className="main-content">
             <div id="panel-home" className={`home-container ${selected ? "hidden" : ""}`} role="tabpanel" aria-labelledby="tab-home" tabIndex={0}>
               {showSetup && powershell ? <Setup powershell={powershell} actions={toolActions} onRecheck={() => void refresh(true)} onContinue={() => setSetupDismissed(true)} /> :
-                <Home sessions={sessions} status={status} busy={busy} tools={toolActions} onNew={() => setDialogOpen(true)} onLaunch={launch} onDelete={setDeleteRequest} />}
+                <Home sessions={sessions} status={status} busy={busy} tools={toolActions} onNew={() => setDialogOpen(true)} onRefresh={() => void refresh(true)} onLaunch={launch} onDelete={setDeleteRequest} />}
             </div>
             {terminalIds.map((id) => {
               const tab = tabs.find((current) => current.id === id);
@@ -521,6 +522,30 @@ const sessionColors = [
   { name: "Pink", value: "#d65a9b" },
 ];
 
+function projectInitials(workingDir: string, fallback: string): string {
+  const folder = workingDir.split(/[\\/]+/).filter(Boolean).pop() ?? "";
+  const letters = folder.split(/[-_. ]+/).map((word) => word.match(/[\p{L}\p{N}]/u)?.[0] ?? "").join("").toUpperCase();
+  return letters || (fallback.match(/[\p{L}\p{N}]/u)?.[0] ?? "?").toUpperCase();
+}
+
+function readableTextColor(background: string): string {
+  const hex = background.replace("#", "");
+  if (!/^[0-9a-f]{6}$/i.test(hex)) return "#f4f6fa";
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((c) => c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return luminance > 0.3 ? "#101318" : "#ffffff";
+}
+
+function ProjectIcon({ session }: { session: Session }) {
+  const text = projectInitials(session.workingDir, session.name);
+  const count = Array.from(text).length;
+  const style: CSSProperties = {
+    fontSize: `${Math.max(5, Math.min(16, 26 / count * 1.15))}px`,
+    ...(session.color ? { background: session.color, borderColor: session.color, color: readableTextColor(session.color) } : {}),
+  };
+  return <div className="tool-icon project-icon" style={style} aria-hidden="true">{text}</div>;
+}
+
 function sessionColorStyle(color?: string): CSSProperties | undefined {
   return color ? { "--session-color": color } as CSSProperties : undefined;
 }
@@ -574,12 +599,13 @@ function RenameDialog({ session, onClose, onRename }: { session: Session; onClos
   </div></div>;
 }
 
-function Home({ sessions, status, busy, tools, onNew, onLaunch, onDelete }: {
+function Home({ sessions, status, busy, tools, onNew, onRefresh, onLaunch, onDelete }: {
   sessions: Session[];
   status: SystemStatus | null;
   busy: boolean;
   tools: ToolActions;
   onNew: () => void;
+  onRefresh: () => void;
   onLaunch: (session: Session, mode: "start" | "restore" | "fresh") => void;
   onDelete: (session: Session) => void;
 }) {
@@ -589,12 +615,15 @@ function Home({ sessions, status, busy, tools, onNew, onLaunch, onDelete }: {
     <div className="home">
       <div className="hero">
         <div><p className="eyebrow">LOCAL SESSION WORKSPACE</p><h1>Pick up where you left off.</h1><p className="muted">Keep your PowerShell AI harness sessions organized, resumable, and close at hand.</p></div>
-        <button className="primary-button" onClick={onNew}>Create session</button>
+        <div className="hero-actions">
+          <button className="secondary-button" title="Reload sessions and re-detect tools" onClick={onRefresh}>Refresh</button>
+          <button className="primary-button" onClick={onNew}>Create session</button>
+        </div>
       </div>
-      <div className="section-title"><div><h2>Your sessions</h2><p className="muted">Existing sessions are never started automatically.</p></div></div>
+      <div className="section-title"><div><h2>Your sessions</h2></div></div>
       {sessions.length === 0 ? <div className="empty-card"><div className="empty-icon">+</div><h3>No sessions yet</h3><p>Create a session to connect a project folder to Claude Code or GitHub Copilot CLI.</p><button className="primary-button" onClick={onNew}>Create your first session</button></div> :
         <div className="session-grid">{sessions.map((session) => <article className="session-card" key={session.id}>
-          <div className="card-top"><div className="tool-icon">{session.tool === "claude-code" ? "C" : "G"}</div><span className={`state-pill ${session.runningHere ? "running" : ""}`}>{session.runningHere ? "Running" : session.status}</span><button className="delete-button" aria-label={`Delete ${session.name}`} title="Delete session" onClick={() => onDelete(session)}>x</button></div>
+          <div className="card-top"><ProjectIcon session={session} /><span className={`state-pill ${session.runningHere ? "running" : ""}`}>{session.runningHere ? "Running" : session.status}</span><button className="delete-button" aria-label={`Delete ${session.name}`} title="Delete session" onClick={() => onDelete(session)}>x</button></div>
           <h3>{session.name}</h3><p className="path">{session.workingDir}</p><p className="session-meta">{session.id} | {session.tool}</p>
           {session.lastError && <p className="card-error">{session.lastError}</p>}
           <div className="card-actions">
@@ -607,7 +636,6 @@ function Home({ sessions, status, busy, tools, onNew, onLaunch, onDelete }: {
         {status?.tools.map((tool) => <ToolRow key={tool.id} tool={tool} actions={tools} />) ?? <p className="muted">Checking...</p>}
       </div></div>
       {toolNoticeBanner(tools)}
-      {status?.diagnosticsLogPath && <p className="muted diagnostic-path">Diagnostic log: <code>{status.diagnosticsLogPath}</code></p>}
     </div>
     {freshSession && <div className="modal-backdrop"><div className="modal confirm-modal">
       <div className="modal-heading"><div><p className="eyebrow">START FRESH</p><h2>Begin a new harness conversation?</h2></div></div>
@@ -635,9 +663,11 @@ function toolUsable(tool: ToolStatus): boolean {
 function toolNoticeBanner(tools: ToolActions) {
   if (!tools.notice) return null;
   const tone = tools.notice.outcome === "installed" ? "notice-success" : tools.notice.outcome === "failed" ? "notice-error" : "notice-info";
+  // Open through the Go binding; a target=_blank link would spawn an unguarded WebView2 popup.
+  const vendorTool = tools.notice.vendorUrl ? tools.status?.tools.find((tool) => tool.install.vendorUrl === tools.notice?.vendorUrl) : undefined;
   return <div className={`tool-notice ${tone}`}>
     <span>{tools.notice.message}</span>
-    {tools.notice.vendorUrl && <a href={tools.notice.vendorUrl} target="_blank" rel="noreferrer">Open vendor setup page</a>}
+    {vendorTool && <button className="link-button" onClick={() => tools.onOpenSetup(vendorTool)}>Open vendor setup page</button>}
     <button className="icon-button" onClick={tools.onDismissNotice}>x</button>
   </div>;
 }
@@ -891,7 +921,7 @@ function CreateSession({ recentFolders, onClose, onCreated, onError }: {
   onCreated: (session: Session) => void;
   onError: (error: unknown) => void;
 }) {
-  const [tool, setTool] = useState<Session["tool"]>("claude-code");
+  const [tool, setTool] = useState<Session["tool"]>("copilot-cli");
   const [workingDir, setWorkingDir] = useState("");
   const [launchArgs, setLaunchArgs] = useState("");
   const [templateText, setTemplateText] = useState<string | null>(null);
@@ -970,7 +1000,14 @@ function CreateSession({ recentFolders, onClose, onCreated, onError }: {
     <div className="modal-heading"><div><p className="eyebrow">NEW WORKSPACE</p><h2>Create a session</h2></div><button className="icon-button" onClick={onClose}>x</button></div>
     <form onSubmit={(event) => void submit(event)}>
       <label>Project folder<div className="folder-row"><input autoFocus required list="recent-project-folders" value={workingDir} onChange={(event) => setWorkingDir(event.target.value)} placeholder="Choose a local project folder" /><datalist id="recent-project-folders">{recentFolders.map((folder) => <option key={folder} value={folder} />)}</datalist><button type="button" className="secondary-button" onClick={() => void chooseDirectory()}>Browse</button></div></label>
-      <label>AI harness<select value={tool} onChange={(event) => setTool(event.target.value as Session["tool"])}><option value="claude-code">Claude Code</option><option value="copilot-cli">GitHub Copilot CLI</option></select></label>
+      <div className="harness-field"><span className="harness-label" id="harness-label">AI harness</span>
+        <div className="harness-picker" role="radiogroup" aria-labelledby="harness-label">
+          {([["copilot-cli", "GitHub Copilot CLI"], ["claude-code", "Claude Code"]] as const).map(([id, name]) =>
+            <button key={id} type="button" role="radio" aria-checked={tool === id} className={`harness-option ${tool === id ? "selected" : ""}`} onClick={() => setTool(id)}>
+              <HarnessIcon tool={id} /><span className="harness-name">{name}</span>
+            </button>)}
+        </div>
+      </div>
       <label>Launch arguments <span className="optional">(editable template, one per line)</span><textarea rows={3} value={launchArgs} onChange={(event) => setLaunchArgs(event.target.value)} placeholder="--yolo" /></label>
       <div className="launch-preview">
         {previewError ? <p className="tool-warning">{previewError}</p> : preview && <>
@@ -987,7 +1024,6 @@ function CreateSession({ recentFolders, onClose, onCreated, onError }: {
           <p className="form-note">{yamlDirty ? "Edited by hand: the form fields above no longer change this text. " : "Follows the form until you edit it. "}The definition is validated and saved in normal form.{yamlDirty && <> <button type="button" className="text-button" onClick={() => setYamlDirty(false)}>Reset from form</button></>}</p>
         </>}
       </div>
-      <p className="form-note">A YAML session definition is saved locally and the session starts immediately. The session is named after the project; right-click it to rename or recolor.</p>
       <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button" disabled={saving}>{saving ? "Creating..." : "Create session"}</button></div>
     </form>
   </div></div>;

@@ -1,8 +1,13 @@
 # Claude Code Verification Plan
 
-Status: **open, deferred by the owner (2026-10-24)** until a PC with a
-completed Claude Code login is available. Everything here is unverified for
-Claude Code; the same areas are verified for GitHub Copilot CLI (see
+Status: **partly run (2026-10-27, Claude Code 2.1.311 on the dev PC).**
+Everything that does not need a model reply was run headlessly through the real
+session manager; see the results table in section 5. The login on this PC is a
+Foundry key whose provider rejected every request ("User ... has been
+deactivated"), so tests that need real model turns (recall after restore,
+permission prompts, busy-state exit, spinner during a normal turn) are still
+open. Earlier status: deferred by the owner (2026-10-24) until a PC with a
+completed Claude Code login is available. Same areas are verified for GitHub Copilot CLI (see
 [`21-engineering-handoff.md`](21-engineering-handoff.md)). Do not claim Claude
 Code support beyond what this plan's results show. Record outcomes in the
 results table at the end and in the handoff, stating plainly what failed.
@@ -220,15 +225,15 @@ unexpected. Copy this table into the handoff when complete:
 
 | Test | Gap(s) | Result | Claude version | Notes / follow-up |
 |---|---|---|---|---|
-| T1 Login and first conversation | G1, G7, G12 | | | |
-| T2 Restore real conversation | G2, G11 | | | |
-| T3 Restore with no conversation | G6, G11 | | | |
-| T4 State icons and titles | G3 | | | |
-| T5 Needs-input cue | G4, G12 | | | |
-| T6 Graceful exit | G5 | | | |
-| T7 Defaults, model, args | G7, G8 | | | |
-| T8 Versions | G9 | | | |
-| T9 Terminal behavior | G10 | | | |
+| T1 Login and first conversation | G1, G7, G12 | **Partial.** Trust-folder prompt captured. Its default selection is "No, exit", so Enter alone exits the harness with code 1 (Down then Enter accepts). No bypass-acceptance prompt appeared (the user's `skipDangerousModePermissionPrompt` setting is on). The login on this PC is a corporate Foundry key in `~/.claude/settings.json`, not OAuth, and the provider rejected every request (`401 Authentication Error ... has been deactivated`), so no model reply was ever produced and OAuth-in-terminal was not exercised. | 2.1.311 | Needs a working credential for real model turns. |
+| T2 Restore real conversation | G2, G11 | **Partial.** `--resume <id>` reopens the transcript (earlier user prompts replayed, "Interrupted" notice), repeatedly, and Start fresh opened a clean session. Model recall ("pineapple") could not be checked because no reply was ever produced. `--session-id` of a used ID errors `Session ID ... is already in use.`; `--resume` of an unknown ID errors `No conversation found with session ID`. | 2.1.311 | Re-run recall check with a working credential. |
+| T3 Restore with no conversation | G6, G11 | **Defect found, fixed.** A session that never got a first prompt has no transcript; Restore exited with `No conversation found with session ID` (exit 1). Added `checkClaudeResume` (transcript `projects/*/<id>.jsonl`, honors `CLAUDE_CONFIG_DIR`, fails open if the store is absent); verified live: Restore is now refused with "use Start fresh". | 2.1.311 | Transcript appears only after the first prompt. |
+| T4 State icons and titles | G3 | **Assumption was wrong, fixed.** Idle title is `✳ Claude Code`; while working the prefix animates `◐`/`◑` (U+25D0-25D3), not braille; the trust prompt title is plain `claude`. `attention.ts` now treats U+25D0-25D3 as working. Only observed during provider retries, not a normal successful turn. | 2.1.311 | Re-check during a real turn. |
+| T5 Needs-input cue | G4, G12 | **Partial.** Only the trust-folder prompt was reachable (footer `Enter to confirm · Esc to cancel`, plain title). Added a Claude `"input"` cue on that footer in the last two rows. Shell-command, file-edit and question prompts need model tool calls and were not captured. | 2.1.311 | Capture the permission prompts with a working credential. |
+| T6 Graceful exit | G5 | **Fixed for idle sessions.** At an idle prompt `/exit` + Enter exits cleanly in about 0.4 s (Ctrl+C then `/exit` also works); Ctrl+C twice and Ctrl+D twice did not exit within 12 s. Claude `gracefulExit` is now Ctrl+C, `/exit`, Enter: idle Stop takes about 1.1 s with no force notice, previously about 3 s and always "force-terminated". While a request was retrying against the failing provider nothing exited it, so Stop still force-terminated after about 12 s (visible notice), and the next restore worked. | 2.1.311 | Busy-state exit unverified against a healthy provider. |
+| T7 Defaults, model, args | G7, G8 | **Done except model persistence.** Defaults give `bypass permissions on` with no prompts. `--model sonnet` and `--model opus` show Sonnet 5.5 / Opus 5.5 in the header; an invalid model starts with a visible warning (`Model "..." isn't recognized`), not a failure. Reserved `--session-id`/`--resume` (also `--session-id=x`) are rejected. Model persistence on restore not checked. | 2.1.311 | |
+| T8 Versions | G9 | **Partial.** Only one install now (npm 2.1.311, inside the tested range); capability probes and tool tests pass. No older or newer build tested. | 2.1.311 | |
+| T9 Terminal behavior | G10 | **Partial, headless.** Through the real session manager and ConPTY (inbox backend), rendered with a VT emulator (pyte, not xterm.js): bracketed multi-line paste, Unicode/CJK/emoji/combining marks, and resize (80x24, 140x40, 100x30) reflowed cleanly; Esc and Ctrl+C at the prompt cleared input without exiting. Shift+Enter via CSI-u (`ESC[13;2u`) did not insert a newline. Not covered: the xterm.js window itself, mouse, scrollback, tab switching mid-stream, focus. | 2.1.311 | Needs a manual pass in the app window. |
 
 ## 6. Code changes this plan may trigger
 

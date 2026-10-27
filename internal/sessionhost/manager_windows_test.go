@@ -444,6 +444,15 @@ func TestManagerRestoreFailurePreservesResumeID(t *testing.T) {
 	if err := manager.store.Finish(ctx, "restore", session.StatusStopped, ""); err != nil {
 		t.Fatal(err)
 	}
+	claudeHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", claudeHome)
+	transcripts := filepath.Join(claudeHome, "projects", "p")
+	if err := os.MkdirAll(transcripts, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(transcripts, original.HarnessSessionID+".jsonl"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	factory.setStartError(errors.New("fake ConPTY launch failure"))
 
 	_, err = manager.Start(ctx, "restore", true, 80, 24)

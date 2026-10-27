@@ -15,7 +15,10 @@
 - If TauShell is closed while sessions are running, warn and require confirmation. On confirmation, attempt graceful interruption, wait briefly, then force-terminate remaining processes. A graceful stop may improve harness resume reliability but does not guarantee it.
 - Phase 1 excludes remote access, phones/mobile integration, web dashboards, and notifications.
 - V2 is still authoritative overall, but its roadmap/backlog includes capabilities later than Phase 1. Apply the explicit scope above where those conflict.
-- Phase 1 implementation is underway in `cmd/` and `internal/`. Treat the V2 documents as specifications and keep implementation claims aligned with tested behavior.
+- Phase 1 implementation is underway in `cmd/` (host) and `internal/` (sessions, adapters, ConPTY, tools) with the React/xterm.js UI in `frontend/`. Treat the V2 documents as specifications and keep implementation claims aligned with tested behavior.
+- Build: `npm ci && npm run build` in `frontend/` (set `$env:npm_config_allow_scripts=''` if npm fails with `EALLOWSCRIPTS`), then `go test ./...` and `go build -tags production -ldflags "-H=windowsgui" -o taushell.exe ./cmd/taushell` (see the README). Stop a running `taushell.exe` by PID before rebuilding. Built outputs (`taushell.exe`, ConPTY files, app icon) are gitignored; the embedded `cmd/taushell/frontend/dist` is tracked.
+- UI conventions: sessions appear in the same order on Home, the sidebar and the tabs; Home is a house icon; session icons come from the project folder (initials on the session color), not the harness; harness marks are official Simple Icons credited in `THIRD_PARTY_NOTICES.md`. Do not open external links with `target="_blank"`; use a bound Go opener restricted to known URLs.
+- Real-harness probes (Claude Code, Copilot CLI) must use disposable directories and sessions, never print credentials, and clean up transcripts and temp files afterwards.
 - Earlier bounded prototypes live in ignored [`spikes/`](spikes/): ConPTY findings are summarized in [`docs/v2/02-conpty-integration.md`](docs/v2/02-conpty-integration.md), and YAML/runtime-state findings in [`docs/v2/12-storage-layout.md`](docs/v2/12-storage-layout.md). Use them as references, not as the application architecture.
 
 ## Architecture principles
@@ -39,7 +42,8 @@ Read only the references relevant to the task:
 - Windows terminal compatibility: [`docs/v2/15-terminal-rendering.md`](docs/v2/15-terminal-rendering.md).
 - Session lifecycle or recovery: [`docs/v2/03-session-lifecycle.md`](docs/v2/03-session-lifecycle.md), [`docs/v2/04-session-restoration.md`](docs/v2/04-session-restoration.md), [`docs/v2/12-storage-layout.md`](docs/v2/12-storage-layout.md).
 - YAML or environment: [`docs/v2/18-yaml-schema.md`](docs/v2/18-yaml-schema.md), [`docs/v2/10-environment-management.md`](docs/v2/10-environment-management.md).
-- Harness adapters/plugins: [`docs/v2/05-plugin-system.md`](docs/v2/05-plugin-system.md).
+- Harness adapters/plugins: [`docs/v2/05-plugin-system.md`](docs/v2/05-plugin-system.md), [`docs/v2/23-adding-a-harness.md`](docs/v2/23-adding-a-harness.md); Claude Code verification status: [`docs/v2/24-claude-code-verification-plan.md`](docs/v2/24-claude-code-verification-plan.md).
+- Attention/state cues: [`docs/v2/08-attention-detection.md`](docs/v2/08-attention-detection.md); notifications are later work ([`docs/v2/22-local-attention-notifications.md`](docs/v2/22-local-attention-notifications.md)).
 - Desktop UI: [`docs/v1/08-UI-Design.md`](docs/v1/08-UI-Design.md), [`docs/v1/09-UI-Implementation-Plan.md`](docs/v1/09-UI-Implementation-Plan.md).
 - Security-sensitive work: [`docs/v2/11-security-model.md`](docs/v2/11-security-model.md).
 - Mobile, remote access, notifications, terminal rendering, or protocol work: read the corresponding V2 document only when that work is in scope.
