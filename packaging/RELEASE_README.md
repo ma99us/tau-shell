@@ -15,9 +15,22 @@ too.
 PowerShell 7. If something is missing, TauShell offers to install it on first
 run (nothing is installed without your confirmation).
 
-**"Windows protected your PC"?** This build is not code-signed yet. Choose
-**More info**, then **Run anyway**. If Windows 11 Smart App Control blocks it,
-that cannot be bypassed from the prompt.
+### Unsigned app warning
+
+TauShell is not code-signed yet, so Windows may warn you the first time you run
+it. This is expected for unsigned apps and does not mean the file is damaged.
+
+- **"Windows protected your PC" (SmartScreen):** click **More info**, then
+  **Run anyway**.
+- **Skip the prompt:** before extracting, right-click the ZIP, choose
+  **Properties**, tick **Unblock**, and click OK. Or in PowerShell:
+  `Unblock-File .\TauShell-<version>-windows-x64.zip`
+- **Windows 11 Smart App Control:** if it is on, it blocks unsigned apps with no
+  "Run anyway" option. You would have to turn Smart App Control off in Windows
+  Security (this cannot be undone without resetting Windows), so only do that if
+  you trust the download.
+
+Only run builds downloaded from this repository's Releases page.
 
 To verify the download, compare its SHA-256 with `SHA256SUMS.txt` on the release
 page.

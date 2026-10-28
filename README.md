@@ -155,7 +155,9 @@ PowerShell 7 (TauShell offers confirmed installs on first run).
 **Unsigned builds.** Releases are not code-signed yet, so Windows SmartScreen
 shows "Windows protected your PC" on first launch: choose **More info**, then
 **Run anyway**. Windows 11 Smart App Control, when enabled, blocks unsigned apps
-and cannot be bypassed from that prompt. To check a download before running it:
+and cannot be bypassed from that prompt. To skip the SmartScreen prompt, unblock
+the ZIP before extracting (Properties > Unblock, or `Unblock-File` in
+PowerShell). To check a download before running it:
 
 ```powershell
 (Get-FileHash .\TauShell-<version>-windows-x64.zip -Algorithm SHA256).Hash
