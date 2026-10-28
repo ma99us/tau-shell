@@ -888,6 +888,14 @@ function Home({ sessions, loaded, autoResumeAll, onAutoResumeAll, onAutoResume, 
     return () => { cancelled = true; window.clearInterval(timer); };
   }, []);
   const [resumeProgress, setResumeProgress] = useState("");
+  const [appVersion, setAppVersion] = useState("");
+  const [appUpdate, setAppUpdate] = useState<{ tag: string; url: string } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void app().GetAppVersion().then((value) => { if (!cancelled) setAppVersion(value); }).catch(() => undefined);
+    void app().CheckAppUpdate().then((value) => { if (!cancelled) setAppUpdate(value); }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
   const resumable = sessions.filter((session) => !session.runningHere && session.hasResumeId && !session.resumeNote);
   const resumeAll = async () => {
     for (let index = 0; index < resumable.length; index++) {
@@ -929,6 +937,10 @@ function Home({ sessions, loaded, autoResumeAll, onAutoResumeAll, onAutoResume, 
       </div></div>
       <SkillsPanel skills={skills} unsupportedNote={skills.view?.unsupported} />
       {toolNoticeBanner(tools)}
+      <div className="home-footer">
+        {appUpdate && <button className="link-button home-update" title="Open the TauShell releases page" onClick={() => void app().OpenReleasePage()}>{appUpdate.tag} available</button>}
+        {appVersion && <span className="home-version" title="TauShell version">{appVersion === "dev" ? "dev build" : `v${appVersion.replace(/^v/, "")}`}</span>}
+      </div>
     </div>
     {freshSession && <div className="modal-backdrop"><div className="modal confirm-modal">
       <div className="modal-heading"><div><p className="eyebrow">START FRESH</p><h2>Begin a new harness conversation?</h2></div></div>

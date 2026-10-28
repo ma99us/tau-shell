@@ -1,11 +1,14 @@
 """Generate the TauShell icon (appicon.png, appicon.ico) and the Windows
 resource object cmd/taushell/rsrc_windows_amd64.syso that embeds it.
 
-Requires Pillow. Run from the repository root: python build\\windows\\gen_icon.py
-The icon group is resource ID 3, which is what the Wails window loads.
+Requires Pillow. Run from the repository root:
+    python build\\windows\\gen_icon.py [version]
+The icon group is resource ID 3, which is what the Wails window loads. The
+optional version (for example 1.0.0) fills the exe's file-version details.
 """
 import io
 import struct
+import sys
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
@@ -77,14 +80,53 @@ def build_ico(images):
     return header + entries + blobs
 
 
-def build_syso(images):
-    """COFF .rsrc object: RT_ICON per image plus one RT_GROUP_ICON (ID 3)."""
+def _pad4(data):
+    return data + b"\0" * (-len(data) % 4)
+
+
+def _block(key, value=b"", children=b"", text=False, value_len=None):
+    """One VS_VERSIONINFO node; offsets are relative to the (4-aligned) start."""
+    header = struct.pack("<HHH", 0, len(value) if value_len is None else value_len, 1 if text else 0)
+    body = _pad4(header + key.encode("utf-16-le") + b"\0\0") + _pad4(value) + children
+    body = _pad4(body)
+    return struct.pack("<H", len(body)) + body[2:]
+
+
+def build_version_info(version):
+    """RT_VERSION payload. version is "x.y.z" (or "dev" -> 0.0.0.0)."""
+    nums = [int(p) for p in version.split("-")[0].split(".") if p.isdigit()][:4]
+    nums += [0] * (4 - len(nums))
+    ms, ls = (nums[0] << 16) | nums[1], (nums[2] << 16) | nums[3]
+    fixed = struct.pack("<13I", 0xFEEF04BD, 0x00010000, ms, ls, ms, ls, 0x3F, 0, 0x40004, 1, 0, 0, 0)
+    shown = ".".join(str(n) for n in nums)
+    strings = {
+        "CompanyName": "TauShell",
+        "FileDescription": "TauShell - persistent AI harness sessions",
+        "FileVersion": shown,
+        "InternalName": "taushell",
+        "LegalCopyright": "MIT License",
+        "OriginalFilename": "taushell.exe",
+        "ProductName": "TauShell",
+        "ProductVersion": version,
+    }
+    entries = b""
+    for key, text in strings.items():
+        value = text.encode("utf-16-le") + b"\0\0"
+        entries += _block(key, value, text=True, value_len=len(value) // 2)
+    string_file = _block("StringFileInfo", children=_block("040904B0", children=entries, text=True), text=True)
+    var_file = _block("VarFileInfo", children=_block("Translation", struct.pack("<HH", 0x409, 0x4B0)))
+    return _block("VS_VERSION_INFO", fixed, string_file + var_file)
+
+
+def build_syso(images, version_info):
+    """COFF .rsrc object: RT_ICON per image, RT_GROUP_ICON (ID 3), RT_VERSION."""
     group = struct.pack("<HHH", 0, 1, len(images))
     for i, (size, data) in enumerate(images, 1):
         group += struct.pack("<BBBBHHIH", size % 256, size % 256, 0, 0, 1, 32, len(data), i)
 
     # (type, id, data) leaves, sorted by type then id.
-    leaves = [(3, i, data) for i, (_, data) in enumerate(images, 1)] + [(14, GROUP_ICON_ID, group)]
+    leaves = ([(3, i, data) for i, (_, data) in enumerate(images, 1)] +
+              [(14, GROUP_ICON_ID, group), (16, 1, version_info)])
     types = sorted({t for t, _, _ in leaves})
 
     def dir_size(n):
@@ -132,11 +174,12 @@ def build_syso(images):
 
 
 def main():
+    version = sys.argv[1].lstrip("v") if len(sys.argv) > 1 else "dev"
     master = render()
     images = [(s, png_bytes(master.resize((s, s), Image.LANCZOS))) for s in SIZES]
     master.resize((512, 512), Image.LANCZOS).save(OUT_DIR / "appicon.png")
     (OUT_DIR / "appicon.ico").write_bytes(build_ico(images))
-    SYSO.write_bytes(build_syso(images))
+    SYSO.write_bytes(build_syso(images, build_version_info(version)))
     print("wrote", OUT_DIR / "appicon.png", OUT_DIR / "appicon.ico", SYSO)
 
 

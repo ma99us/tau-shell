@@ -1,0 +1,119 @@
+name: Release
+
+# Pushing a v* tag publishes a pre-release. Running the workflow by hand builds
+# the same ZIP and creates a draft release (use it as a dry run).
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version for the draft build, e.g. 1.0.0-rc1 (no leading v)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      VERSION: ${{ github.event_name == 'push' && github.ref_name || format('v{0}', inputs.version) }}
+      # Secrets cannot be used in step conditions directly; expose presence only.
+      HAS_SIGNING: ${{ secrets.AZURE_CLIENT_SECRET != '' && secrets.AZURE_SIGNING_ENDPOINT != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: python -m pip install pillow
+
+      - name: Verify version format
+        shell: pwsh
+        run: |
+          if ($env:VERSION -notmatch '^v\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$') {
+            throw "Release version '$env:VERSION' is not vX.Y.Z"
+          }
+
+      - name: Test
+        run: go test -timeout 15m ./...
+
+      - name: Build and stage
+        shell: pwsh
+        run: ./scripts/build-release.ps1 -Version $env:VERSION -SkipPackage
+
+      - name: Copy taushell.exe aside for signing
+        if: env.HAS_SIGNING == 'true'
+        shell: pwsh
+        run: |
+          # Only taushell.exe is ours to sign; OpenConsole.exe keeps Microsoft's signature.
+          New-Item -ItemType Directory -Force sign | Out-Null
+          Copy-Item "dist/TauShell-$($env:VERSION.TrimStart('v'))-windows-x64/taushell.exe" sign/
+
+      - name: Sign taushell.exe (only when signing secrets are configured)
+        if: env.HAS_SIGNING == 'true'
+        uses: azure/trusted-signing-action@v0.5.0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.AZURE_SIGNING_ENDPOINT }}
+          trusted-signing-account-name: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.AZURE_SIGNING_PROFILE }}
+          files-folder: ${{ github.workspace }}\sign
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Put signed taushell.exe back
+        if: env.HAS_SIGNING == 'true'
+        shell: pwsh
+        run: Copy-Item -Force sign/taushell.exe "dist/TauShell-$($env:VERSION.TrimStart('v'))-windows-x64/taushell.exe"
+
+      - name: Package
+        shell: pwsh
+        run: ./scripts/build-release.ps1 -Version $env:VERSION -PackageOnly
+
+      - name: Check the packaged exe carries the version
+        shell: pwsh
+        run: |
+          $bare = $env:VERSION.TrimStart('v')
+          $exe = "dist/TauShell-$bare-windows-x64/taushell.exe"
+          $info = (Get-Item $exe).VersionInfo
+          if ($info.ProductVersion -ne $bare) { throw "ProductVersion '$($info.ProductVersion)' != '$bare'" }
+          Get-AuthenticodeSignature $exe | Format-List Status, StatusMessage
+
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/*.zip
+
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $bare = $env:VERSION.TrimStart('v')
+          $flags = if ('${{ github.event_name }}' -eq 'push') { @('--prerelease') } else { @('--draft', '--prerelease') }
+          if ('${{ github.event_name }}' -ne 'push') { $flags += @('--target', '${{ github.sha }}') }
+          gh release create $env:VERSION "dist/TauShell-$bare-windows-x64.zip" dist/SHA256SUMS.txt `
+            --title "TauShell $bare" --generate-notes @flags
+          if ($LASTEXITCODE -ne 0) { throw 'gh release create failed' }

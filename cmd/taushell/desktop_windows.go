@@ -95,7 +95,7 @@ type SystemStatus struct {
 }
 
 func runDesktop() error {
-	diagnostics.Info("desktop startup beginning")
+	diagnostics.Info("desktop startup beginning", "version", version)
 	version, err := installedWebView2Version()
 	if err != nil {
 		diagnostics.Error("check WebView2 runtime failed", err)

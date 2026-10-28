@@ -15,3 +15,6 @@ docs\.todo
 /cmd/taushell/__debug_bin*.exe
 /__debug_bin*.exe
 /cmd/taushell/rsrc_windows_amd64.syso
+
+/dist/
+/sign/

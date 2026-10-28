@@ -49,6 +49,27 @@ checkout. Local configurations may provide:
 Debug runs do not use `-H windowsgui`, so a console window may appear. The
 Go extension (Delve) is required.
 
+## CI and releases
+
+- `.github/workflows/ci.yml` runs on pushes to `main` and PRs: frontend build and
+  token check, a check that the committed `cmd/taushell/frontend/dist` matches a
+  fresh build (rebuild and commit it when the frontend changes), `go vet`,
+  `go test`, and a release-build smoke test.
+- Releases: push a SemVer tag (`git tag v1.0.0 && git push origin v1.0.0`).
+  `.github/workflows/release.yml` tests, builds
+  `TauShell-<version>-windows-x64.zip` with `scripts/build-release.ps1`, writes
+  `SHA256SUMS.txt`, attests build provenance and publishes a GitHub
+  **pre-release**. Running the workflow manually with a version builds a
+  **draft** instead (dry run; delete the draft afterwards).
+- Code signing is optional. When the repository secrets `AZURE_TENANT_ID`,
+  `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_SIGNING_ENDPOINT`,
+  `AZURE_SIGNING_ACCOUNT` and `AZURE_SIGNING_PROFILE` (Azure Trusted Signing)
+  exist, only `taushell.exe` is signed before packaging; the bundled
+  `OpenConsole.exe` keeps Microsoft's signature. Without them releases are
+  unsigned and the README documents the SmartScreen steps.
+- The app version comes from `-X main.version`; local builds report `dev` and
+  skip the update check.
+
 ## Rules of thumb
 
 - Keep the core tool-independent; harness behavior lives in `internal/harness`.

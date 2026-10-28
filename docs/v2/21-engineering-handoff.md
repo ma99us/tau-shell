@@ -128,6 +128,15 @@ interaction decisions and feasibility gate are in
   `go mod tidy`. The checked-in `cmd/taushell/frontend/dist/` directory is
   required by Go's `embed` directive; it is generated from `frontend/`.
 
+## Distribution
+
+Releases are portable, unsigned-by-default ZIPs built by
+`scripts/build-release.ps1` (see the contributor guide). Not verified: signing
+(no certificate configured), behavior under Windows 11 Smart App Control, and
+the in-app update notice against a real published release (unit-tested
+against a fake API only). The first published release is cut manually by
+pushing a tag.
+
 ## Verified on the current Windows 10 development machine
 
 The following checks passed after the latest implementation changes:

@@ -1051,6 +1051,23 @@ h3 {
   font-size: var(--fs-14);
 }
 
+.home-footer {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.home-version {
+  color: var(--status-ok);
+  font-size: var(--fs-11);
+}
+
+.home-update {
+  font-size: var(--fs-11);
+}
+
 .card-title {
   display: flex;
   align-items: baseline;

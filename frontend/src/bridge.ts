@@ -160,6 +160,9 @@ type WailsApp = {
   GetSessionModel(sessionId: string): Promise<string>;
   GetSessionUsage(sessionId: string): Promise<SessionUsage>;
   GetUsageSummary(): Promise<UsageSummary>;
+  GetAppVersion(): Promise<string>;
+  CheckAppUpdate(): Promise<{ tag: string; url: string } | null>;
+  OpenReleasePage(): Promise<void>;
   DuplicateSession(id: string): Promise<Session>;
   DialogHostReady(): Promise<DialogRequest[]>;
   AnswerDialog(id: string, choice: string): Promise<void>;

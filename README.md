@@ -140,8 +140,34 @@ Install PowerShell 7 and the harness CLI (`claude` or `copilot`) on `PATH`.
 `start` creates a harness session ID and `restore` reuses it. TauShell closes
 the managed PowerShell process when its harness exits.
 
-## Build
+## Download
 
+Portable builds are published on the
+[Releases page](https://github.com/ma99us/tau-shell/releases) as
+`TauShell-<version>-windows-x64.zip`. Extract the folder anywhere and run
+`taushell.exe`; there is no installer and no admin rights are needed. Session
+data lives in `%USERPROFILE%\.tau_shell`, so deleting the folder never removes
+your sessions. Releases are pre-releases while Phase 1 is in progress.
+
+Requires Windows 10 or later, the Microsoft Edge WebView2 Runtime and
+PowerShell 7 (TauShell offers confirmed installs on first run).
+
+**Unsigned builds.** Releases are not code-signed yet, so Windows SmartScreen
+shows "Windows protected your PC" on first launch: choose **More info**, then
+**Run anyway**. Windows 11 Smart App Control, when enabled, blocks unsigned apps
+and cannot be bypassed from that prompt. To check a download before running it:
+
+```powershell
+(Get-FileHash .\TauShell-<version>-windows-x64.zip -Algorithm SHA256).Hash
+# compare with SHA256SUMS.txt from the release, and verify the build provenance:
+gh attestation verify .\TauShell-<version>-windows-x64.zip --repo ma99us/tau-shell
+```
+
+TauShell shows its version on Home (bottom right) and, when a newer release
+exists on GitHub, a small "available" link. It only links to the Releases page
+and never downloads or installs anything itself.
+
+## Build
 Requires Windows, Go 1.26+, Node.js and Python 3 (icon generation).
 
 ```powershell
@@ -168,6 +194,14 @@ go build -tags production -ldflags "-H=windowsgui" -o taushell.exe ./cmd/taushel
   TauShell falls back to inbox ConPTY with those limitations. The diagnostic log
   records which backend each session used.
 - The built frontend is embedded from `cmd/taushell/frontend/dist`.
+- `.\scripts\build-release.ps1 -Version 1.0.0` runs the whole pipeline (frontend,
+  icon and file-version resources, version-stamped build, ConPTY bundle) and
+  writes `dist\TauShell-1.0.0-windows-x64.zip` plus `SHA256SUMS.txt`; CI uses
+  the same script. `python build\windows\gen_icon.py <version>` stamps the exe's
+  file-version details.
+
+## License
+; see [`LICENSE`](LICENSE).
 
 ## Diagnostics
 
