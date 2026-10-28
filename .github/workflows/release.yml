@@ -115,5 +115,5 @@ jobs:
           [string[]]$flags = if ('${{ github.event_name }}' -eq 'push') { @('--prerelease') } else { @('--draft', '--prerelease') }
           if ('${{ github.event_name }}' -ne 'push') { $flags += @('--target', '${{ github.sha }}') }
           gh release create $env:VERSION "dist/TauShell-$bare-windows-x64.zip" dist/SHA256SUMS.txt `
-            --title "TauShell $bare" --generate-notes @flags
+            --title "TauShell $bare" --notes-file packaging/RELEASE_README.md --generate-notes @flags
           if ($LASTEXITCODE -ne 0) { throw 'gh release create failed' }

@@ -60,9 +60,11 @@ try {
         Write-Host '== bundled ConPTY'
         & (Join-Path $PSScriptRoot 'fetch-conpty.ps1') -Destination $stage
 
-        foreach ($file in 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'README.md') {
+        foreach ($file in 'LICENSE', 'THIRD_PARTY_NOTICES.md') {
             Copy-Item -Force (Join-Path $root $file) $stage
         }
+        # The package ships a short user-facing README, not the developer README.
+        Copy-Item -Force (Join-Path $root 'packaging\RELEASE_README.md') (Join-Path $stage 'README.md')
     }
 
     if ($SkipPackage) {
