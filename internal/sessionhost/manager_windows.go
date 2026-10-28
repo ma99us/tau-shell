@@ -27,6 +27,7 @@ const (
 	startupRecoveryDelay = time.Minute
 	interruptWait        = 3 * time.Second
 	terminateWait        = 5 * time.Second
+	outputCloseGrace     = 3 * time.Second
 )
 
 // gracefulExitWait is how long a harness gets to quit after its exit input.
@@ -69,7 +70,9 @@ type managedSession struct {
 	status      session.RuntimeStatus
 	detail      string
 	forced      bool
+	quitAsked   bool
 	hasResumeID bool
+	resumeNote  string
 }
 
 type sessionProcess interface {
@@ -123,6 +126,11 @@ func (manager *Manager) SetSkills(provider SkillProvider) {
 // fatal. The caller holds manager.mu.
 func (manager *Manager) skillArgs(ctx context.Context, config session.Config, executable string) []string {
 	if manager.skills == nil || !config.SkillsEnabled() {
+		return nil
+	}
+	if config.Tool != session.ClaudeCode && config.Tool != session.CopilotCLI {
+		// TauShell skills are only attached through --plugin-dir; no verified
+		// per-launch route exists for the other harnesses yet.
 		return nil
 	}
 	if !harness.SupportsPluginDir(ctx, executable) {
@@ -386,19 +394,21 @@ func (manager *Manager) start(ctx context.Context, id string, restoring, fresh b
 		}
 	}
 	if fresh {
-		runtime, err = manager.store.BeginFresh(ctx, id, config.Tool)
+		if adapter.DiscoversSessionID() {
+			runtime, err = manager.store.BeginDiscovered(ctx, id, config.Tool, false, true)
+		} else {
+			runtime, err = manager.store.BeginFresh(ctx, id, config.Tool)
+		}
+	} else if adapter.DiscoversSessionID() {
+		runtime, err = manager.store.BeginDiscovered(ctx, id, config.Tool, restoring, false)
 	} else {
 		runtime, err = manager.store.Begin(ctx, id, config.Tool, restoring)
 	}
 	if err != nil {
 		return Snapshot{}, err
 	}
-	args := append([]string(nil), config.LaunchArgs...)
-	if restoring {
-		args = append(args, adapter.ResumeArgs(runtime.HarnessSessionID)...)
-	} else {
-		args = append(args, adapter.StartArgs(runtime.HarnessSessionID)...)
-	}
+	launchedAt := time.Now()
+	args := adapter.Argv(config.LaunchArgs, restoring, runtime.HarnessSessionID)
 	args = append(args, manager.skillArgs(ctx, config, harnessExecutable)...)
 	command := harness.PowerShellInvocation(harnessExecutable, args, config.Environment, config.UTF8Enabled())
 	if columns < 2 || rows < 2 {
@@ -424,6 +434,9 @@ func (manager *Manager) start(ctx context.Context, id string, restoring, fresh b
 		hasResumeID: runtime.HarnessSessionID != "",
 	}
 	manager.sessions[id] = current
+	if adapter.DiscoversSessionID() && runtime.HarnessSessionID == "" {
+		go manager.discoverSessionID(current, adapter, launchedAt)
+	}
 	manager.publish(Event{Kind: EventState, SessionID: id, Session: current.snapshot()})
 	diagnostics.Info("session process started",
 		"session_id", id,
@@ -627,6 +640,7 @@ func (current *managedSession) gracefulExit(ctx context.Context) bool {
 	if len(steps) == 0 {
 		return false
 	}
+	current.markQuitAsked()
 	for _, step := range steps {
 		if err := current.process.Write([]byte(step.Input)); err != nil {
 			diagnostics.Warn("graceful exit input failed", err, "session_id", current.config.ID)
@@ -705,6 +719,7 @@ func (manager *Manager) supervise(current *managedSession) {
 	var exitCode uint32
 	var waitErr error
 	outputRead := false
+	exitedLate := false
 	for {
 		exited, code, err := current.process.Wait(100 * time.Millisecond)
 		if err != nil {
@@ -719,16 +734,25 @@ func (manager *Manager) supervise(current *managedSession) {
 		case err := <-outputDone:
 			outputRead = true
 			if err == nil {
-				waitErr = errors.New("ConPTY output closed while PowerShell was still running")
+				// The console can close its output a moment before the
+				// process exit is reported (seen when a harness quits by
+				// itself), so allow a short window before failing.
+				if exited, code, lateErr := current.process.Wait(outputCloseGrace); lateErr == nil && exited {
+					exitCode, exitedLate = code, true
+				} else {
+					waitErr = errors.New("ConPTY output closed while PowerShell was still running")
+				}
 			} else if !errors.Is(err, os.ErrClosed) {
 				waitErr = fmt.Errorf("read session %q output: %w", current.config.ID, err)
 			}
-			if terminateErr := current.process.Terminate(); terminateErr != nil {
-				waitErr = errors.Join(waitErr, terminateErr)
+			if waitErr != nil {
+				if terminateErr := current.process.Terminate(); terminateErr != nil {
+					waitErr = errors.Join(waitErr, terminateErr)
+				}
 			}
 		default:
 		}
-		if waitErr != nil {
+		if waitErr != nil || exitedLate {
 			break
 		}
 	}
@@ -752,6 +776,13 @@ func (manager *Manager) supervise(current *managedSession) {
 		}
 	}
 	closeErr := current.process.Close()
+	if exitCode != 0 && waitErr == nil && !current.wasForced() && current.wasQuitAsked() {
+		// pwsh -Command reports the harness's own exit code; some harnesses
+		// (OpenCode) exit non-zero after a requested quit.
+		diagnostics.Warn("harness exited non-zero after requested quit", nil,
+			"session_id", current.config.ID, "exit_code", exitCode)
+		exitCode = 0
+	}
 	status, detail := outcome(exitCode, current.wasForced(), waitErr, closeErr)
 	if err := manager.store.Finish(context.Background(), current.config.ID, status, detail); err != nil {
 		status = session.StatusFailed
@@ -868,6 +899,7 @@ func (current *managedSession) snapshot() Snapshot {
 		LastError:   current.detail,
 		RunningHere: current.status == session.StatusRunning,
 		HasResumeID: current.hasResumeID,
+		ResumeNote:  current.resumeNote,
 	}
 }
 
@@ -881,6 +913,18 @@ func (current *managedSession) markForced() {
 	current.mu.Lock()
 	current.forced = true
 	current.mu.Unlock()
+}
+
+func (current *managedSession) markQuitAsked() {
+	current.mu.Lock()
+	current.quitAsked = true
+	current.mu.Unlock()
+}
+
+func (current *managedSession) wasQuitAsked() bool {
+	current.mu.RLock()
+	defer current.mu.RUnlock()
+	return current.quitAsked
 }
 
 func (current *managedSession) wasForced() bool {

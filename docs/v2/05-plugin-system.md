@@ -48,6 +48,11 @@ copy.
 | --- | --- | --- |
 | Claude Code | `claude --session-id <uuid>` | `claude --resume <uuid>` |
 | GitHub Copilot CLI | `copilot --session-id <uuid>` | `copilot --resume <uuid>` |
+| GSD (>= 1.12.0) | `gsd --session <path>` (TauShell-owned file under `~/.gsd/sessions/tau/`) | same `--session <path>` |
+| OpenAI Codex CLI | `codex` (ID discovered from the rollout log) | `codex resume <id>` |
+| OpenCode | `opencode` (ID discovered from `opencode.db`) | `opencode --session <id>` |
+
+Codex and OpenCode choose their own conversation IDs. TauShell records the ID after launch by matching the new conversation to the session's working directory, skipping IDs owned by other sessions; an ambiguous match records nothing and the session shows "Resume ID unknown". Tested: GSD 1.22.0, OpenCode 1.19.5 (CLI help and database schema), Codex 0.165.0 (CLI help only; no signed-in Codex session was available, so the rollout format, discovery and usage parsing are unverified against a live Codex).
 
 The locally installed Claude Code 2.1.263 and Copilot CLI 1.0.96-2 help output documents these options. This is CLI-contract discovery only; successful conversation restoration still requires a controlled integration test. Avoid `--continue` for managed restore because it selects the most recent session rather than TauShell's recorded session.
 

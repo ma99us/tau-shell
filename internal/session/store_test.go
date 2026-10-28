@@ -160,3 +160,26 @@ func TestSessionOrderRoundTripAndDelete(t *testing.T) {
 		t.Fatalf("order after replace = %v", order)
 	}
 }
+
+func TestDiscoveredIDLifecycle(t *testing.T) {
+	store, err := OpenStore(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	runtime, err := store.BeginDiscovered(ctx, "a", Codex, false, false)
+	if err != nil || runtime.HarnessSessionID != "" {
+		t.Fatalf("BeginDiscovered = %+v, %v", runtime, err)
+	}
+	if ok, err := store.SetHarnessSessionID(ctx, "a", "cx-1"); err != nil || !ok {
+		t.Fatalf("first set = %v, %v", ok, err)
+	}
+	if ok, _ := store.SetHarnessSessionID(ctx, "a", "cx-2"); ok {
+		t.Fatal("an already recorded ID must not be overwritten")
+	}
+	taken, err := store.HarnessSessionIDs(ctx, Codex)
+	if err != nil || !taken["cx-1"] {
+		t.Fatal("recorded ID missing from the taken set")
+	}
+}

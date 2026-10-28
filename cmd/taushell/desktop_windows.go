@@ -304,7 +304,7 @@ func (application *App) PreviewSessionLaunch(toolName string, launchArgs []strin
 			preview.Warnings = append(preview.Warnings, probeUnsupportedLaunchArgs(executablePath, spec, cleaned)...)
 		}
 	}
-	preview.Arguments = append(append([]string(nil), cleaned...), adapter.StartArgs(previewSessionIDPlaceholder)...)
+	preview.Arguments = adapter.Argv(cleaned, false, previewSessionIDPlaceholder)
 	return preview, nil
 }
 

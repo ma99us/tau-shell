@@ -96,7 +96,7 @@ func (row ledgerRow) totals(prices PriceTable) Totals {
 		CacheWrite: row.write5m + row.write1h,
 	}
 	totals.Tokens = totals.Input + totals.Output + totals.CacheRead + totals.CacheWrite
-	if row.tool == string(session.CopilotCLI) {
+	if RecordsOwnCost(session.Harness(row.tool)) {
 		totals.USD = row.usd
 		totals.Unpriced = row.unpriced > 0
 		return totals

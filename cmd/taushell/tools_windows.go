@@ -69,6 +69,19 @@ func (application *App) confirmInstall(spec tools.Spec) (bool, error) {
 }
 
 func installConfirmation(spec tools.Spec) runtime.MessageDialogOptions {
+	if spec.Install.WingetID == "" && spec.Install.NpmPackage != "" {
+		command := "npm " + strings.Join(tools.NpmArgs(spec), " ")
+		return runtime.MessageDialogOptions{
+			Type:  runtime.QuestionDialog,
+			Title: "Install " + spec.Name + "?",
+			Message: fmt.Sprintf("Install %s with npm?\n\nTauShell will run:\n%s\n\nPackage: %s\nSource: npm registry\n\n"+
+				"npm opens in a separate console window. TauShell re-detects %s afterwards.",
+				spec.Name, command, spec.Install.NpmPackage, spec.Name),
+			Buttons:       []string{"Yes", "No"},
+			DefaultButton: "No",
+			CancelButton:  "No",
+		}
+	}
 	command := "winget " + strings.Join(tools.WingetArgs(spec), " ")
 	return runtime.MessageDialogOptions{
 		Type:  runtime.QuestionDialog,

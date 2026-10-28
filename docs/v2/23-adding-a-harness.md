@@ -146,6 +146,42 @@ resolve everything through `harness.For`, `tools.Lookup`, and the adapter. They
 should need no change. If you find yourself editing them for a harness-specific
 reason, move that behavior into the adapter instead.
 
+## 5b. Ecosystem hooks (full integration)
+
+Steps 1-5 give a launchable, restorable harness. TauShell also layers
+optional features on top. Each hook is independent: skipping one must degrade
+to "feature absent", never to an error or a guess. Decide per hook and record
+the decision (done / not supported / unverified) in the handoff.
+
+| Hook | What it gives users | Where | Notes / how to degrade |
+|---|---|---|---|
+| Widgets | Interrupt, Compact, Clear, Model quick actions, slash commands | `tools.Spec.Widgets` (`Commands`, `Models`, `InterruptKeys`, `CompactText`, `ClearText`) | Leave `Widgets` nil: terminal has no widgets. Model menu also needs an optional `--model` capability. Clear always asks for confirmation. Text is typed in, never confirmed by the harness. |
+| Prompt injection | Prompt presets and widget text typed into the live session | frontend only (generic) | Needs no code. Harness must accept pasted text at its prompt; verify existing-text and `". "` separation still behaves. |
+| Attention and state | Working/idle spinner, unseen glow, toast and taskbar flash | `frontend/src/attention.ts` `readHarnessSignal` | Return `undefined` without a verified cue; generic output-silence timing applies. |
+| Current model | Model shown for a session | `internal/harness/model.go` `CurrentModel` (reads the harness's own session log) | Return `""` when the log layout is unknown. Never guess. |
+| Usage and cost | Tokens and price on Home tiles and monthly totals | `internal/usage/parse.go` (`LogFiles`, `LineParser`), `parse_harnesses.go` (GSD/Codex parsers, OpenCode DB ingestion, `RecordsOwnCost`), `usage/prices.go` (Claude and OpenAI tables) | `LineParser` returns nil: no usage shown. Parsers must dedupe records and never fabricate cost; use the price table only for models it knows. |
+| Skills | TauShell skill library loaded into sessions | `internal/harness/skills.go` (`--plugin-dir` probe), `cmd/taushell/skills_windows.go` `personalSkillDirs` and the tool loop in `initSkills`, `internal/skills` (`Materialize` writes the plugin layout) | Only if the CLI has a plugin/skills-directory option; probe it from `--help`. List the user's personal skill dirs so a personal copy wins. Unsupported tools are surfaced on the Skills panel. |
+| Config file | Gear on the tool tile opens the harness's user settings | `cmd/taushell/presets_windows.go` `toolConfigPath`; condition in `main.tsx` tool row | Return an error with next steps when the file is absent. |
+| Install and update | Confirmed install; update check | `tools.Spec.Install` (`WingetID`, or `NpmPackage` for npm-distributed CLIs; `installCommand` picks it); `tools_windows.go` | npm installs run `npm install --global <package>` in a visible console after confirmation. Update checks are winget-only. Never silent, never elevated. |
+| Auto-resume | Per-session and global resume at startup | `session.Config` field, Home UI | Generic; relies on `ResumeArgs` and `resumeCheck` being honest. |
+| Graceful shutdown | Clean quit before forced termination | `cliAdapter.gracefulExit` | Optional; otherwise interrupt, short wait, visible force-termination. |
+| Visual identity | Icon and brand color | `frontend/src/harnessIcons.tsx`, `theme/theme.ts` `harnessMark`, `theme/tokens.css` `--brand-*` | Tokenize the color; no hard-coded colors (`npm run check:tokens`). |
+| Labels | Names in sidebar, create dialog, Home usage line, skills note | `frontend/src/harnesses.ts` (single registry: id, name, short name) | Keep text ASCII. Add the ID to `HarnessId` and `harnesses`. Without a bundled vendor mark, `harnessIcons.tsx` draws a tokenized monogram. |
+
+New tools that are not harnesses (for example a CLI dependency) only need the
+`tools.Spec` step; they are detected, version-checked, and installable but have
+no adapter, widgets, usage or skills.
+
+### Keeping adapters honest
+
+- Anything read from a harness's own files (model, usage, resume check) is an
+  undocumented internal: fail open, fail quiet, and pin the tested version
+  range in the spec.
+- Anything typed into the harness (widgets, presets) is unconfirmed: state it
+  as such in the UI and docs.
+- Do not put secrets in specs, presets, logs or skills.
+- Update the tested-version claims only after running the real CLI.
+
 ## 6. Validate
 
 1. `go vet ./...` and `go test ./...`.
@@ -161,9 +197,13 @@ reason, move that behavior into the adapter instead.
    close and reopen TauShell, then Restore. Confirm a conversation with at
    least one turn actually resumes, and that a session with no turns shows
    Start fresh instead of a false Resume.
-5. State icons: working shows the spinner, quiet shows the dot, and the unseen
+5. Hooks you implemented: widgets type the right text; model, usage and cost
+   appear after a real turn; with skills, the diagnostics log shows
+   "TauShell skills attached" and the CLI lists the skills; the gear opens the
+   settings file.
+6. State icons: working shows the spinner, quiet shows the dot, and the unseen
    glow appears when the tab is not selected.
-6. Delete throwaway sessions through the UI delete action and remove the
+7. Delete throwaway sessions through the UI delete action and remove the
    test executable.
 
 ## 7. Documentation
@@ -183,8 +223,12 @@ reason, move that behavior into the adapter instead.
 | Harness ID, validation, reserved args | `internal/session/config.go` |
 | Tool spec: version range, capabilities, install | `internal/tools/tools.go` |
 | Adapter: executable, defaults, resume check, graceful exit | `internal/harness/adapter.go` |
-| Types and labels | `frontend/src/bridge.ts`, `frontend/src/main.tsx` |
+| Types and labels | `frontend/src/harnesses.ts`, `frontend/src/bridge.ts` |
 | Working/idle signals | `frontend/src/attention.ts` |
+| Widgets (optional) | `internal/tools/tools.go` `Spec.Widgets` |
+| Current model, usage and cost parsers (optional) | `internal/harness/model.go`, `internal/usage/parse.go`, `totals.go`, `ledger.go` |
+| Skills and config-file hooks (optional) | `internal/harness/skills.go`, `cmd/taushell/skills_windows.go`, `cmd/taushell/presets_windows.go` |
+| Icon and brand color (optional) | `frontend/src/harnessIcons.tsx`, `frontend/src/theme/*` |
 | Tests | `internal/session/config_test.go`, `internal/tools/tools_test.go`, `internal/harness/adapter_test.go` |
 | Docs | `05-plugin-system.md`, `18-yaml-schema.md`, `21-engineering-handoff.md` |
 

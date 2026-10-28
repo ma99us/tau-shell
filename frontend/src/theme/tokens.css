@@ -127,6 +127,9 @@
   /* Brand marks (vendor colors) */
   --brand-claude: #d97757;
   --brand-copilot: #f4f6fa;
+  --brand-codex: #10a37f;
+  --brand-opencode: #6ea8fe;
+  --brand-gsd: #f0b429;
 
   /* Session tag colors; the hex is saved in the session YAML, so changing it recolors only new picks */
   --tag-red: #e5534b;

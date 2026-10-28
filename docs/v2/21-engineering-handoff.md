@@ -13,7 +13,27 @@ interaction decisions and feasibility gate are in
 - Phase 1 is a local Windows desktop app using PowerShell 7 through ConPTY.
 - Session intent lives in human-editable YAML; runtime and harness resume state
   live separately in SQLite.
-- Claude Code and GitHub Copilot CLI have built-in launch/restore adapters.
+- Claude Code, GitHub Copilot CLI, GSD, OpenAI Codex CLI and OpenCode have
+  built-in launch/restore adapters. The last three were added after the others
+  (GSD 1.22.0, Codex 0.165.0, OpenCode 1.19.5 installed for probing). Codex and
+  OpenCode use discovered resume IDs (`Adapter.DiscoverSessionID`); GSD uses a
+  TauShell-owned session file path. Verified by unit tests only: argv shapes,
+  Codex rollout and OpenCode database discovery (temp fixtures, including the
+  Windows `file:` read-only SQLite path), GSD/Codex usage parsing, OpenCode
+  usage ingestion, OpenAI prices.
+  Live results (opt-in `TAUSHELL_LIVE=gsd|opencode|codex go test
+  ./internal/sessionhost -run TestLiveHarness`, drives the real manager and
+  ConPTY): OpenCode and GSD launch, accept injected prompts, record their
+  resume ID (OpenCode ~14 s via read-only `opencode.db`; GSD session file),
+  report the current model, stop gracefully (`/exit` or `/quit`, about 1 s)
+  and restore into the earlier conversation. OpenCode exits non-zero after
+  `/exit` and `pwsh -Command` propagates that, so a requested quit with a
+  non-zero exit is reported as stopped. Not proven live: model replies and
+  usage/cost ingestion (the Copilot gateway rejected GSD models and the free
+  OpenCode model returned Forbidden from this network), Codex entirely (not
+  signed in), interrupt keys, Codex rollout format, and per-launch skills
+  (not wired: no verified route). Attention cues (`readHarnessSignal`)
+  return no signal for them; generic silence timing applies.
   Restore is explicit and must not be reported as successful unless the
   harness actually resumes.
 - The desktop app is the only interactive TauShell interface. Bubble Tea has

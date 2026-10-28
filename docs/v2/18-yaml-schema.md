@@ -22,7 +22,7 @@ launch_args:
   - sonnet
 ```
 
-`id` is TauShell's stable session identifier. The desktop app names new sessions after the project (manifest name, otherwise folder name) and renames or recolors them from the session context menu; those edits rewrite only `name` and `color` in place, preserving other keys and comments, and never change `id` or the file name. The harness session UUID is generated and persisted separately before first launch so TauShell can resume the intended conversation by ID. Do not add a `--continue`/“most recent” restore command to YAML.
+`id` is TauShell's stable session identifier. The desktop app names new sessions after the project (manifest name, otherwise folder name) and renames or recolors them from the session context menu; those edits rewrite only `name` and `color` in place, preserving other keys and comments, and never change `id` or the file name. Supported 	ool values: claude-code, copilot-cli, gsd, codex, opencode. Default launch arguments: Claude --dangerously-skip-permissions, Copilot --yolo, Codex --dangerously-bypass-approvals-and-sandbox, OpenCode --auto, GSD none. The harness session UUID is generated and persisted separately before first launch so TauShell can resume the intended conversation by ID (GSD: a TauShell-named session file; Codex and OpenCode: the ID the harness chooses, discovered after launch). Do not add a `--continue`/“most recent” restore command to YAML.
 
 The current implementation rejects unknown fields and validates the required
 values, supported tool identifiers, working-directory existence, environment

@@ -1,10 +1,11 @@
 import type { SessionUsage, UsageSummary } from "./usage";
+import type { HarnessId } from "./harnesses";
 
 export type Session = {
   id: string;
   name: string;
   color?: string;
-  tool: "claude-code" | "copilot-cli";
+  tool: HarnessId;
   workingDir: string;
   status: string;
   lastError?: string;
@@ -32,7 +33,7 @@ export type SessionEvent = {
 };
 
 export type ToolStatus = {
-  id: "powershell" | "claude-code" | "copilot-cli";
+  id: "powershell" | HarnessId;
   name: string;
   required: boolean;
   installed: boolean;
@@ -79,7 +80,7 @@ export type SystemStatus = {
 };
 
 export type SessionTemplate = {
-  tool: "claude-code" | "copilot-cli";
+  tool: HarnessId;
   launchArgs: string[];
 };
 

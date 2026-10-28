@@ -12,6 +12,7 @@ import { moveId } from "./order";
 import { SessionUsage, UsageSummary, UsageTotals, formatTokens, formatUSD, hasUsage, usageTooltip } from "./usage";
 import { CommandPalette, HarnessToolbar, PaletteItem, planSend, sendNotice } from "./harnessActions";
 import { GearIcon, HarnessIcon, HomeIcon } from "./harnessIcons";
+import { harnesses, harnessIds, harnessName, harnessShort, isHarness } from "./harnesses";
 import appIcon from "./assets/appicon.png";
 
 type Tab = { id: string; name: string };
@@ -632,7 +633,7 @@ function App() {
               <button className={`session-row ${selected === session.id ? "active" : ""}`} title={session.name} onClick={() => openTab(session)}>
                 <StateIcon session={session} activity={activity[session.id]} />
                 <span className="collapsed-only"><ProjectIcon session={session} /></span>
-                <span className="session-row-text"><strong>{session.name}</strong><small>{session.tool === "claude-code" ? "Claude Code" : "GitHub Copilot CLI"}</small></span>
+                <span className="session-row-text"><strong>{session.name}</strong><small>{harnessName(session.tool)}</small></span>
               </button>
               <button className="delete-button" aria-label={`Delete ${session.name}`} title="Delete session" onClick={() => setDeleteRequest(session)}>x</button>
             </div>
@@ -909,8 +910,8 @@ function Home({ sessions, loaded, autoResumeAll, onAutoResumeAll, onAutoResume, 
         </div>
       </div>
       <div className="section-title"><div><h2>Your sessions</h2></div>{!loaded && <span className="spinner" role="status" aria-label="Loading sessions" />}</div>
-      {summary && hasUsage(summary.month) && <p className="home-usage" title={monthTooltip(summary)}>This month: {usageText(summary.month)}{(["claude-code", "copilot-cli"] as const).map((tool) => hasUsage(summary.monthByTool?.[tool]) ? <span key={tool}> | {tool === "claude-code" ? "Claude" : "Copilot"} {usageText(summary.monthByTool![tool])}</span> : null)}</p>}
-      {sessions.length === 0 ? (!loaded ? <div className="loading-card" role="status"><span className="spinner" aria-hidden="true" /><span className="muted">Loading sessions...</span></div> : <div className="empty-card"><div className="empty-icon">+</div><h3>No sessions yet</h3><p>Create a session to connect a project folder to Claude Code or GitHub Copilot CLI.</p>      <button className="primary-button" onClick={onNew}>New session</button></div>) :
+      {summary && hasUsage(summary.month) && <p className="home-usage" title={monthTooltip(summary)}>This month: {usageText(summary.month)}{harnessIds.map((tool) => hasUsage(summary.monthByTool?.[tool]) ? <span key={tool}> | {harnessShort(tool)} {usageText(summary.monthByTool![tool])}</span> : null)}</p>}
+      {sessions.length === 0 ? (!loaded ? <div className="loading-card" role="status"><span className="spinner" aria-hidden="true" /><span className="muted">Loading sessions...</span></div> : <div className="empty-card"><div className="empty-icon">+</div><h3>No sessions yet</h3><p>Create a session to connect a project folder to an AI harness such as Claude Code or GitHub Copilot CLI.</p>      <button className="primary-button" onClick={onNew}>New session</button></div>) :
         <div className="session-grid">{sessions.map((session) => <article className={`session-card ${dragId === session.id ? "dragging" : ""} ${dropClass(session.id)}`} key={session.id} {...dragProps(session.id)}>
           <div className="card-top"><ProjectIcon session={session} /><span className={`state-pill ${session.runningHere ? "running" : ""} ${!session.runningHere && session.status === "failed" ? "status-warn-text" : ""}`}>{session.runningHere ? "Running" : statusLabel(session.status)}</span><button className="delete-button" aria-label={`Delete ${session.name}`} title="Delete session" onClick={() => onDelete(session)}>x</button></div>
           <div className="card-title"><h3>{session.name}</h3>{hasUsage(summary?.sessions?.[session.id]) && <span className="card-usage" title="Estimate from harness logs; never reset">{usageText(summary!.sessions![session.id])}</span>}</div><p className="path">{session.workingDir}</p><p className="session-meta">{session.tool}</p>
@@ -946,7 +947,7 @@ type SkillsActions = {
   onToggle: (name: string, enabled: boolean) => void;
 };
 
-const toolLabel = (tool: string) => tool === "claude-code" ? "Claude" : tool === "copilot-cli" ? "Copilot" : tool;
+const toolLabel = harnessShort;
 
 function SkillsPanel({ skills, unsupportedNote }: { skills: SkillsActions; unsupportedNote?: string[] }) {
   const view = skills.view;
@@ -1034,7 +1035,7 @@ function ToolRow({ tool, actions }: { tool: ToolStatus; actions: ToolActions }) 
     <span>{label}{supportNote && <span className="tool-support-note"> ({supportNote})</span>}</span>
     {tool.executablePath && <code className="tool-path">{tool.executablePath}</code>}
     {unavailableCapabilities.length > 0 && <span className="tool-warning">missing: {unavailableCapabilities.map((capability) => capability.option).join(", ")}</span>}
-    {(tool.id === "claude-code" || tool.id === "copilot-cli") && <button className="sidebar-toggle tool-gear" aria-label={`Open ${tool.name} config file`} title={`Open ${tool.name} config file in your default editor`} onClick={() => void app().OpenToolConfig(tool.id).catch((err) => actions.onError(err))}><GearIcon /></button>}
+    {    isHarness(tool.id) && <button className="sidebar-toggle tool-gear" aria-label={`Open ${tool.name} config file`} title={`Open ${tool.name} config file in your default editor`} onClick={() => void app().OpenToolConfig(tool.id).catch((err) => actions.onError(err))}><GearIcon /></button>}
     {tool.installed && actions.updates[tool.id] && <button className="secondary-button tool-action tool-update" disabled={installing || actions.installing !== ""} title={`Update ${tool.name} to ${actions.updates[tool.id]} with winget (asks first)`} onClick={() => actions.onUpdate(tool)}>{installing ? "Updating..." : `Update to ${actions.updates[tool.id]}`}</button>}
     {!tool.installed && <button className="secondary-button tool-action" disabled={installing} onClick={() => actions.onInstall(tool)}>
       {installing ? "Installing..." : tool.install.wingetId && actions.status?.wingetAvailable ? "Install" : "Setup instructions"}
@@ -1410,7 +1411,7 @@ function CreateSession({ recentFolders, onClose, onCreated, onError }: {
       <label>Project folder<div className="folder-row"><input autoFocus required list="recent-project-folders" value={workingDir} onChange={(event) => setWorkingDir(event.target.value)} placeholder="Choose a local project folder" /><datalist id="recent-project-folders">{recentFolders.map((folder) => <option key={folder} value={folder} />)}</datalist><button type="button" className="secondary-button" onClick={() => void chooseDirectory()}>Browse</button></div></label>
       <div className="harness-field"><span className="harness-label" id="harness-label">AI harness</span>
         <div className="harness-picker" role="radiogroup" aria-labelledby="harness-label">
-          {([["copilot-cli", "GitHub Copilot CLI"], ["claude-code", "Claude Code"]] as const).map(([id, name]) =>
+          {harnesses.map(({ id, name }) =>
             <button key={id} type="button" role="radio" aria-checked={tool === id} className={`harness-option ${tool === id ? "selected" : ""}`} onClick={() => setTool(id)}>
               <HarnessIcon tool={id} /><span className="harness-name">{name}</span>
             </button>)}

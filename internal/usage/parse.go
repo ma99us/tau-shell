@@ -192,7 +192,7 @@ func LogFiles(tool session.Harness, harnessSessionID string) []string {
 		}
 		return []string{path}
 	default:
-		return nil
+		return harnessLogFiles(tool, harnessSessionID)
 	}
 }
 
@@ -203,6 +203,8 @@ func LineParser(tool session.Harness) func([]byte) (Record, bool) {
 		return ParseClaudeLine
 	case session.CopilotCLI:
 		return ParseCopilotLine
+	case session.GSD:
+		return ParseGSDLine
 	default:
 		return nil
 	}

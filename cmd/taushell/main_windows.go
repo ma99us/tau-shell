@@ -230,17 +230,31 @@ func runSession(id string, restoring bool) (returnErr error) {
 	if runtime.Status == session.StatusRunning || runtime.Status == session.StatusStarting {
 		return fmt.Errorf("session %q is already active in another TauShell process", id)
 	}
-	runtime, err = store.Begin(context.Background(), id, config.Tool, restoring)
+	if adapter.DiscoversSessionID() {
+		runtime, err = store.BeginDiscovered(context.Background(), id, config.Tool, restoring, false)
+	} else {
+		runtime, err = store.Begin(context.Background(), id, config.Tool, restoring)
+	}
 	if err != nil {
 		return err
 	}
-	args := append([]string(nil), config.LaunchArgs...)
-	if restoring {
-		args = append(args, adapter.ResumeArgs(runtime.HarnessSessionID)...)
-	} else {
-		args = append(args, adapter.StartArgs(runtime.HarnessSessionID)...)
-	}
+	launchedAt := time.Now()
+	args := adapter.Argv(config.LaunchArgs, restoring, runtime.HarnessSessionID)
 	started, finished := false, false
+	stopDiscovery := make(chan struct{})
+	discoveryDone := make(chan struct{})
+	if adapter.DiscoversSessionID() && runtime.HarnessSessionID == "" {
+		go func() {
+			defer close(discoveryDone)
+			discoverCLISessionID(store, adapter, config, launchedAt, stopDiscovery)
+		}()
+	} else {
+		close(discoveryDone)
+	}
+	defer func() {
+		close(stopDiscovery)
+		<-discoveryDone
+	}()
 	runErr := terminal.Run(terminal.Options{
 		Executable: powershell,
 		Directory:  config.WorkingDir,
@@ -310,4 +324,36 @@ func recoverRuntime(ctx context.Context, store *session.Store, id string) (sessi
 		}
 	}
 	return session.Runtime{}, fmt.Errorf("session %q runtime state changed repeatedly during recovery; retry the command", id)
+}
+
+// discoverCLISessionID is the foreground-CLI counterpart of the desktop
+// manager's discovery: it polls until the ID is recorded or stop closes, with
+// one last attempt after stop.
+func discoverCLISessionID(store *session.Store, adapter harness.Adapter, config session.Config, launchedAt time.Time, stop <-chan struct{}) {
+	attempt := func() bool {
+		ctx := context.Background()
+		taken, err := store.HarnessSessionIDs(ctx, config.Tool)
+		if err != nil {
+			return false
+		}
+		found, err := adapter.DiscoverSessionID(config.WorkingDir, launchedAt, taken)
+		if err != nil || found == "" {
+			return false
+		}
+		recorded, err := store.SetHarnessSessionID(ctx, config.ID, found)
+		return err == nil && recorded
+	}
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-stop:
+			attempt()
+			return
+		case <-ticker.C:
+			if attempt() {
+				return
+			}
+		}
+	}
 }

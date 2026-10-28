@@ -143,6 +143,20 @@ func toolConfigPath(tool string) (path string, create bool, err error) {
 			}
 		}
 		return "", false, errors.New("no Copilot CLI settings file found in ~/.copilot yet; run copilot once to create it")
+	case tools.GSD:
+		gsdHome := os.Getenv("GSD_HOME")
+		if gsdHome == "" {
+			gsdHome = filepath.Join(home, ".gsd")
+		}
+		return filepath.Join(gsdHome, "agent", "settings.json"), true, nil
+	case tools.Codex:
+		codexHome := os.Getenv("CODEX_HOME")
+		if codexHome == "" {
+			codexHome = filepath.Join(home, ".codex")
+		}
+		return filepath.Join(codexHome, "config.toml"), true, nil
+	case tools.OpenCode:
+		return filepath.Join(home, ".config", "opencode", "opencode.json"), true, nil
 	}
 	return "", false, fmt.Errorf("no config file known for tool %q", tool)
 }

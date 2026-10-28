@@ -86,6 +86,12 @@ func (manager *Manager) ingestSession(ctx context.Context, id string, force bool
 	if err != nil || runtime.HarnessSessionID == "" {
 		return
 	}
+	if config.Tool == session.OpenCode {
+		if err := manager.ledger.IngestOpenCode(id, runtime.HarnessSessionID); err != nil {
+			diagnostics.Warn("usage ingest failed", err, "session_id", id)
+		}
+		return
+	}
 	for _, path := range usage.LogFiles(config.Tool, runtime.HarnessSessionID) {
 		if err := manager.ledger.IngestFile(id, config.Tool, runtime.HarnessSessionID, path); err != nil {
 			diagnostics.Warn("usage ingest failed", err, "session_id", id)

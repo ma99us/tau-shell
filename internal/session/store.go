@@ -196,14 +196,56 @@ func readRuntime(ctx context.Context, queryer runtimeQueryer, sessionID string) 
 }
 
 func (store *Store) Begin(ctx context.Context, sessionID string, harness Harness, restoring bool) (Runtime, error) {
-	return store.begin(ctx, sessionID, harness, restoring, false)
+	return store.begin(ctx, sessionID, harness, restoring, false, true)
 }
 
 func (store *Store) BeginFresh(ctx context.Context, sessionID string, harness Harness) (Runtime, error) {
-	return store.begin(ctx, sessionID, harness, false, true)
+	return store.begin(ctx, sessionID, harness, false, true, true)
 }
 
-func (store *Store) begin(ctx context.Context, sessionID string, harness Harness, restoring, fresh bool) (Runtime, error) {
+// BeginDiscovered is Begin for harnesses that pick their own conversation ID:
+// a new start records no ID until SetHarnessSessionID stores the discovered one.
+func (store *Store) BeginDiscovered(ctx context.Context, sessionID string, harness Harness, restoring, fresh bool) (Runtime, error) {
+	return store.begin(ctx, sessionID, harness, restoring && !fresh, fresh, false)
+}
+
+// SetHarnessSessionID records a conversation ID the harness chose. It never
+// overwrites an existing ID.
+func (store *Store) SetHarnessSessionID(ctx context.Context, sessionID, harnessSessionID string) (bool, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	result, err := store.db.ExecContext(ctx, `
+		UPDATE session_runtime SET harness_session_id = ?, updated_at = ?
+		WHERE session_id = ? AND harness_session_id = ''
+	`, harnessSessionID, time.Now().UTC().Format(time.RFC3339Nano), sessionID)
+	if err != nil {
+		return false, fmt.Errorf("record harness session ID for %q: %w", sessionID, err)
+	}
+	count, err := result.RowsAffected()
+	return count == 1, err
+}
+
+// HarnessSessionIDs returns every recorded harness conversation ID for tool.
+func (store *Store) HarnessSessionIDs(ctx context.Context, harness Harness) (map[string]bool, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	rows, err := store.db.QueryContext(ctx, `SELECT harness_session_id FROM session_runtime WHERE harness = ? AND harness_session_id <> ''`, harness)
+	if err != nil {
+		return nil, fmt.Errorf("read harness session IDs: %w", err)
+	}
+	defer rows.Close()
+	ids := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("read harness session IDs: %w", err)
+		}
+		ids[id] = true
+	}
+	return ids, rows.Err()
+}
+
+func (store *Store) begin(ctx context.Context, sessionID string, harness Harness, restoring, fresh, generateID bool) (Runtime, error) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 
@@ -241,7 +283,7 @@ func (store *Store) begin(ctx context.Context, sessionID string, harness Harness
 	if !restoring && runtime.HarnessSessionID != "" {
 		return Runtime{}, fmt.Errorf("session %q already has a harness session ID; use restore to resume it", sessionID)
 	}
-	if runtime.HarnessSessionID == "" {
+	if runtime.HarnessSessionID == "" && generateID {
 		runtime.HarnessSessionID, err = newUUID()
 		if err != nil {
 			return Runtime{}, fmt.Errorf("generate harness session ID: %w", err)

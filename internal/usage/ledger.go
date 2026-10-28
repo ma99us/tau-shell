@@ -100,7 +100,7 @@ func (item carried) record() Record {
 // IngestFile counts the usage appended to one log file since it was last read.
 func (ledger *Ledger) IngestFile(sessionID string, tool session.Harness, harnessSessionID, path string) error {
 	parse := LineParser(tool)
-	if parse == nil {
+	if parse == nil && tool != session.Codex {
 		return nil
 	}
 	ledger.mu.Lock()
@@ -127,6 +127,9 @@ func (ledger *Ledger) IngestFile(sessionID string, tool session.Harness, harness
 		return nil
 	}
 
+	if tool == session.Codex {
+		parse = newCodexParser(codexModelBefore(path, offset)).parse
+	}
 	var previous *carried
 	if carryJSON != "" {
 		var item carried
@@ -161,7 +164,7 @@ func (ledger *Ledger) IngestFile(sessionID string, tool session.Harness, harness
 		current.write5m += sign * record.CacheWrite5m
 		current.write1h += sign * record.CacheWrite1h
 		current.records += sign
-		if tool == session.CopilotCLI {
+		if RecordsOwnCost(tool) {
 			current.usd += float64(sign) * record.USD
 			if !record.Priced {
 				current.unpriced += sign

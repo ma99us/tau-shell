@@ -26,8 +26,13 @@ and no TUI fallback is planned.
   with UTF-8/code-page setup.
 - Human-edited YAML session definitions; runtime state (resume IDs, restore
   outcomes) in a separate SQLite store.
-- Built-in Claude Code and Copilot CLI adapters, tool/version detection with
-  tested ranges, and confirmed winget installs with vendor-page fallback.
+- Built-in Claude Code, Copilot CLI, GSD, OpenAI Codex CLI and OpenCode adapters,
+  tool/version detection with tested ranges, and confirmed winget or npm installs
+  with vendor-page fallback. GSD, Codex and OpenCode are newer: launch args,
+  ID discovery and usage are unit-tested; GSD and OpenCode were also run live
+  (launch, resume ID, graceful stop, restore) but model replies and usage were
+  not proven, and Codex was never run signed in. TauShell skills and attention
+  cues are not wired for them yet.
 - Home page with session tiles, tabs, sidebar, session create/rename/recolor/
   delete, explicit Start / Restore / Start Fresh, per-session state indicators.
 - Close confirmation, then graceful interruption, then bounded force

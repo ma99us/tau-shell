@@ -53,7 +53,9 @@ func NormalizeModel(model string) (string, bool) {
 func (table PriceTable) Lookup(model string) (Price, bool) {
 	key, ok := NormalizeModel(model)
 	if !ok {
-		return Price{}, false
+		// Non-Claude models (OpenAI) are keyed by their lowercase model ID.
+		price, found := table[strings.ToLower(model)]
+		return price, found
 	}
 	if price, found := table[key]; found {
 		return price, true
@@ -75,7 +77,11 @@ func standardPrice(input, output float64) Price {
 	return Price{Input: input, CacheWrite5m: input * 1.25, CacheWrite1h: input * 2, CacheRead: input * 0.1, Output: output}
 }
 
-// BuiltinPrices is the offline default Claude price table.
+func openAIPrice(input, cacheRead, output float64) Price {
+	return Price{Input: input, CacheRead: cacheRead, Output: output}
+}
+
+// BuiltinPrices is the offline default price table (Claude and OpenAI).
 func BuiltinPrices() PriceTable {
 	opus := standardPrice(5, 25)
 	sonnet := standardPrice(3, 15)
@@ -84,6 +90,20 @@ func BuiltinPrices() PriceTable {
 	fable5 := fable
 	fable5.CacheRead = 1
 	return PriceTable{
+		// OpenAI models used by Codex (USD per million tokens; no cache-write charge).
+		// Checked against the LiteLLM price list on 2026-10-27.
+		"gpt-5":             openAIPrice(1.25, 0.125, 10),
+		"gpt-5-codex":       openAIPrice(1.25, 0.125, 10),
+		"gpt-5.1":           openAIPrice(1.25, 0.125, 10),
+		"gpt-5.1-codex":     openAIPrice(1.25, 0.125, 10),
+		"gpt-5.1-codex-max": openAIPrice(1.25, 0.125, 10),
+		"gpt-5.1-codex-mini": openAIPrice(0.25, 0.025, 2),
+		"gpt-5-mini":        openAIPrice(0.25, 0.025, 2),
+		"gpt-5.2":           openAIPrice(1.75, 0.175, 14),
+		"gpt-5.2-codex":     openAIPrice(1.75, 0.175, 14),
+		"gpt-5.3-codex":     openAIPrice(1.75, 0.175, 14),
+		"gpt-5.4":           openAIPrice(2.5, 0.25, 15),
+		"gpt-5.5":           openAIPrice(5, 0.5, 30),
 		"opus-5.5":       {Input: 4, CacheWrite5m: 5, CacheWrite1h: 8, CacheRead: 0.2, Output: 20},
 		"opus-5":         opus,
 		"opus-4.8":       opus,

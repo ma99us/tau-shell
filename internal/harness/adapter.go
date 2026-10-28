@@ -19,6 +19,10 @@ type Adapter interface {
 	FindExecutable() (string, error)
 	StartArgs(harnessSessionID string) []string
 	ResumeArgs(harnessSessionID string) []string
+	// Argv returns the full argument list for one launch: the user's
+	// launch_args plus TauShell's identity arguments, in the order the
+	// harness's own parser needs.
+	Argv(launchArgs []string, resuming bool, harnessSessionID string) []string
 	// CheckResume reports why the harness cannot resume harnessSessionID, or
 	// nil when it can or when that cannot be determined.
 	CheckResume(harnessSessionID string) error
@@ -30,7 +34,18 @@ type Adapter interface {
 	// on its own so it can flush its conversation state, or nil when only a
 	// plain interrupt is known.
 	GracefulExit() []ExitStep
+	// DiscoversSessionID reports whether the harness picks its own conversation
+	// ID, which TauShell can only learn after launch via DiscoverSessionID.
+	DiscoversSessionID() bool
+	// DiscoverSessionID looks for the conversation a launch in workingDir at or
+	// after since created, ignoring IDs in taken. It returns "" while none
+	// exists yet and ErrAmbiguousSession when several candidates remain.
+	DiscoverSessionID(workingDir string, since time.Time, taken map[string]bool) (string, error)
 }
+
+// ErrAmbiguousSession means several unclaimed harness conversations match a
+// launch, so none can be safely attributed to it.
+var ErrAmbiguousSession = errors.New("several harness conversations match this launch")
 
 // ExitStep is one terminal input write followed by a pause.
 type ExitStep struct {
@@ -44,6 +59,12 @@ type cliAdapter struct {
 	defaultArgs  []string
 	resumeCheck  func(harnessSessionID string) error
 	gracefulExit []ExitStep
+	startArgs    func(harnessSessionID string) []string
+	resumeArgs   func(harnessSessionID string) []string
+	// resumeFirst places the resume arguments before launch_args, for
+	// harnesses whose resume is a subcommand.
+	resumeFirst bool
+	discover    func(workingDir string, since time.Time, taken map[string]bool) (string, error)
 }
 
 func For(id session.Harness) (Adapter, error) {
@@ -60,6 +81,33 @@ func For(id session.Harness) (Adapter, error) {
 			{Input: "/exit", Pause: 200 * time.Millisecond},
 			{Input: "\r"},
 		}}, nil
+	case session.GSD:
+		return cliAdapter{id: id, executable: "gsd", resumeCheck: checkGSDResume,
+			startArgs: gsdSessionArgs, resumeArgs: gsdSessionArgs,
+			gracefulExit: []ExitStep{
+				{Input: "\x1b", Pause: 400 * time.Millisecond},
+				{Input: "/quit", Pause: 300 * time.Millisecond},
+				{Input: "\r"},
+			}}, nil
+	case session.Codex:
+		return cliAdapter{id: id, executable: "codex", defaultArgs: []string{"--dangerously-bypass-approvals-and-sandbox"}, resumeCheck: checkCodexResume,
+			resumeArgs: func(id string) []string { return []string{"resume", id} }, resumeFirst: true,
+			discover: discoverCodexSession,
+			gracefulExit: []ExitStep{
+				{Input: "\x1b", Pause: 400 * time.Millisecond},
+				{Input: "/exit", Pause: 300 * time.Millisecond},
+				{Input: "\r"},
+			}}, nil
+	case session.OpenCode:
+		return cliAdapter{id: id, executable: "opencode", defaultArgs: []string{"--auto"}, resumeCheck: checkOpenCodeResume,
+			resumeArgs: func(id string) []string { return []string{"--session", id} },
+			discover:   discoverOpenCodeSession,
+			gracefulExit: []ExitStep{
+				{Input: "\x1b", Pause: 300 * time.Millisecond},
+				{Input: "\x1b", Pause: 400 * time.Millisecond},
+				{Input: "/exit", Pause: 300 * time.Millisecond},
+				{Input: "\r"},
+			}}, nil
 	default:
 		return nil, fmt.Errorf("unsupported harness %q", id)
 	}
@@ -135,11 +183,43 @@ func (adapter cliAdapter) FindExecutable() (string, error) {
 }
 
 func (adapter cliAdapter) StartArgs(harnessSessionID string) []string {
+	if adapter.startArgs != nil {
+		return adapter.startArgs(harnessSessionID)
+	}
+	if adapter.discover != nil {
+		return nil
+	}
 	return []string{"--session-id", harnessSessionID}
 }
 
 func (adapter cliAdapter) ResumeArgs(harnessSessionID string) []string {
+	if adapter.resumeArgs != nil {
+		return adapter.resumeArgs(harnessSessionID)
+	}
 	return []string{"--resume", harnessSessionID}
+}
+
+func (adapter cliAdapter) Argv(launchArgs []string, resuming bool, harnessSessionID string) []string {
+	args := make([]string, 0, len(launchArgs)+3)
+	if resuming {
+		managed := adapter.ResumeArgs(harnessSessionID)
+		if adapter.resumeFirst {
+			return append(append(args, managed...), launchArgs...)
+		}
+		return append(append(args, launchArgs...), managed...)
+	}
+	return append(append(args, launchArgs...), adapter.StartArgs(harnessSessionID)...)
+}
+
+func (adapter cliAdapter) DiscoversSessionID() bool {
+	return adapter.discover != nil
+}
+
+func (adapter cliAdapter) DiscoverSessionID(workingDir string, since time.Time, taken map[string]bool) (string, error) {
+	if adapter.discover == nil {
+		return "", nil
+	}
+	return adapter.discover(workingDir, since, taken)
 }
 
 func (adapter cliAdapter) GracefulExit() []ExitStep {

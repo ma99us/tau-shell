@@ -42,6 +42,16 @@ func CurrentModel(tool session.Harness, harnessSessionID string) string {
 			return ""
 		}
 		return copilotModelIn(filepath.Join(home, ".copilot", "session-state"), harnessSessionID)
+	case session.GSD:
+		return lastModel(GSDSessionPath(harnessSessionID), gsdLineModel)
+	case session.Codex:
+		path := CodexRolloutFile(harnessSessionID)
+		if path == "" {
+			return ""
+		}
+		return lastModel(path, codexLineModel)
+	case session.OpenCode:
+		return openCodeModel(harnessSessionID)
 	default:
 		return ""
 	}

@@ -19,7 +19,13 @@ export const theme = {
     fontSize: Number.parseInt(token("terminal-font-size"), 10),
   }),
   // Brand marks keep the vendor colors; used as CSS values (SVG fill style).
-  harnessMark: { "claude-code": "var(--brand-claude)", "copilot-cli": "var(--brand-copilot)" } as const,
+  harnessMark: {
+    "claude-code": "var(--brand-claude)",
+    "copilot-cli": "var(--brand-copilot)",
+    codex: "var(--brand-codex)",
+    opencode: "var(--brand-opencode)",
+    gsd: "var(--brand-gsd)",
+  } as const,
   fallbackSessionColor: () => token("tag-fallback"),
   sessionTextOn: (light: boolean) => token(light ? "tag-text-on-light" : "tag-text-on-dark"),
   // Session tag colors offered in the context menu. The hex is what gets saved in the session YAML.

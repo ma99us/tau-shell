@@ -43,23 +43,41 @@ func WingetArgs(spec Spec) []string {
 	return []string{"install", "--id", spec.Install.WingetID, "--exact", "--source", spec.Install.Source}
 }
 
+// NpmArgs returns the discrete npm arguments for a global package install.
+func NpmArgs(spec Spec) []string {
+	return []string{"install", "--global", spec.Install.NpmPackage}
+}
+
+// installCommand picks the package manager for spec: winget when a package is
+// declared, otherwise npm for npm-distributed harnesses.
+func installCommand(spec Spec) (executable, label string, args []string) {
+	if spec.Install.WingetID != "" {
+		return "winget.exe", "winget", WingetArgs(spec)
+	}
+	if spec.Install.NpmPackage != "" {
+		return "npm.cmd", "npm", NpmArgs(spec)
+	}
+	return "", "", nil
+}
+
 func (installer Installer) Install(ctx context.Context, id ID) (InstallResult, error) {
 	spec, ok := Lookup(id)
 	if !ok {
 		return InstallResult{}, fmt.Errorf("unknown tool %q", id)
 	}
-	if spec.Install.WingetID == "" {
+	executable, label, args := installCommand(spec)
+	if executable == "" {
 		return InstallResult{
 			Outcome:   InstallWingetUnavailable,
 			Message:   fmt.Sprintf("%s has no maintained winget package. Follow the official setup instructions.", spec.Name),
 			VendorURL: spec.Install.VendorURL,
 		}, nil
 	}
-	winget, err := installer.LookPath("winget.exe")
+	winget, err := installer.LookPath(executable)
 	if err != nil {
 		return InstallResult{
 			Outcome:   InstallWingetUnavailable,
-			Message:   fmt.Sprintf("winget is not available. Install %s using the official setup instructions.", spec.Name),
+			Message:   fmt.Sprintf("%s is not available. Install %s using the official setup instructions.", label, spec.Name),
 			VendorURL: spec.Install.VendorURL,
 		}, nil
 	}
@@ -71,7 +89,7 @@ func (installer Installer) Install(ctx context.Context, id ID) (InstallResult, e
 		return InstallResult{Outcome: InstallCancelled, Message: fmt.Sprintf("Installation of %s was cancelled.", spec.Name)}, nil
 	}
 
-	runErr := installer.RunWinget(ctx, winget, WingetArgs(spec))
+	runErr := installer.RunWinget(ctx, winget, args)
 	var refreshErr error
 	if installer.RefreshPath != nil {
 		refreshErr = installer.RefreshPath()
@@ -80,7 +98,7 @@ func (installer Installer) Install(ctx context.Context, id ID) (InstallResult, e
 	if status.Usable() {
 		message := fmt.Sprintf("%s %s was detected at %s.", spec.Name, status.Version, status.ExecutablePath)
 		if runErr != nil {
-			message += fmt.Sprintf(" winget reported: %v.", runErr)
+			message += fmt.Sprintf(" %s reported: %v.", label, runErr)
 		}
 		if refreshErr != nil {
 			message += fmt.Sprintf(" PATH refresh reported: %v.", refreshErr)
@@ -93,7 +111,7 @@ func (installer Installer) Install(ctx context.Context, id ID) (InstallResult, e
 
 	var problems []string
 	if runErr != nil {
-		problems = append(problems, fmt.Sprintf("winget failed: %v", runErr))
+		problems = append(problems, fmt.Sprintf("%s failed: %v", label, runErr))
 	}
 	if refreshErr != nil {
 		problems = append(problems, fmt.Sprintf("PATH refresh failed: %v", refreshErr))

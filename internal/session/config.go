@@ -21,7 +21,22 @@ type Harness string
 const (
 	ClaudeCode Harness = "claude-code"
 	CopilotCLI Harness = "copilot-cli"
+	GSD        Harness = "gsd"
+	Codex      Harness = "codex"
+	OpenCode   Harness = "opencode"
 )
+
+// SupportedHarnesses lists every harness ID in display order.
+var SupportedHarnesses = []Harness{ClaudeCode, CopilotCLI, GSD, Codex, OpenCode}
+
+func (harness Harness) Supported() bool {
+	for _, candidate := range SupportedHarnesses {
+		if candidate == harness {
+			return true
+		}
+	}
+	return false
+}
 
 var (
 	idPattern          = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
@@ -122,8 +137,12 @@ func (config Config) Validate() error {
 	if !config.UTF8Enabled() {
 		return fmt.Errorf("powershell.utf8 cannot be disabled in the Windows 10 Phase 1 runtime")
 	}
-	if config.Tool != ClaudeCode && config.Tool != CopilotCLI {
-		return fmt.Errorf("unsupported tool %q (supported: %s, %s)", config.Tool, ClaudeCode, CopilotCLI)
+	if !config.Tool.Supported() {
+		names := make([]string, len(SupportedHarnesses))
+		for index, supported := range SupportedHarnesses {
+			names[index] = string(supported)
+		}
+		return fmt.Errorf("unsupported tool %q (supported: %s)", config.Tool, strings.Join(names, ", "))
 	}
 	if config.WorkingDir == "" || !filepath.IsAbs(config.WorkingDir) {
 		return fmt.Errorf("working_dir must be an absolute path")
@@ -162,6 +181,24 @@ func ValidateLaunchArgs(tool Harness, launchArgs []string) error {
 		CopilotCLI: {
 			"--session-id": {},
 			"--resume":     {},
+		},
+		GSD: {
+			"--session":     {},
+			"--session-dir": {},
+			"--continue":    {},
+			"-c":            {},
+			"--no-session":  {},
+		},
+		Codex: {
+			"resume": {},
+			"fork":   {},
+		},
+		OpenCode: {
+			"--session":  {},
+			"-s":         {},
+			"--continue": {},
+			"-c":         {},
+			"--fork":     {},
 		},
 	}
 	for _, arg := range launchArgs {

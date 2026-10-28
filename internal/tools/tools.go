@@ -21,6 +21,9 @@ const (
 	PowerShell ID = "powershell"
 	ClaudeCode ID = "claude-code"
 	CopilotCLI ID = "copilot-cli"
+	GSD        ID = "gsd"
+	Codex      ID = "codex"
+	OpenCode   ID = "opencode"
 )
 
 // Capability is a command-line option an adapter relies on. It is probed by
@@ -60,9 +63,12 @@ type Widgets struct {
 // InstallSource identifies a maintained winget package and the vendor's
 // official setup instructions used when winget is unavailable.
 type InstallSource struct {
-	WingetID  string `json:"wingetId,omitempty"`
-	Source    string `json:"source,omitempty"`
-	VendorURL string `json:"vendorUrl"`
+	WingetID string `json:"wingetId,omitempty"`
+	// NpmPackage is used when no winget package exists: TauShell runs a
+	// confirmed `npm install --global <package>`.
+	NpmPackage string `json:"npmPackage,omitempty"`
+	Source     string `json:"source,omitempty"`
+	VendorURL  string `json:"vendorUrl"`
 }
 
 // Spec is the metadata contract for one detectable tool. Minimum is optional;
@@ -167,6 +173,96 @@ var specs = []Spec{
 			WingetID:  "GitHub.Copilot",
 			Source:    "winget",
 			VendorURL: "https://docs.github.com/copilot/how-tos/set-up/install-copilot-cli",
+		},
+	},
+	{
+		ID:           GSD,
+		Name:         "GSD",
+		Executable:   "gsd",
+		VersionArgs:  []string{"--version"},
+		HelpArgs:     []string{"--help"},
+		Minimum:      "1.12.0",
+		TestedFrom:   "1.22.0",
+		TestedBefore: "1.23.0",
+		Capabilities: []Capability{
+			{Name: "Start and resume a TauShell session file", Option: "--session"},
+			{Name: "Select a model", Option: "--model", Optional: true},
+		},
+		Widgets: &Widgets{
+			Commands: []Command{
+				{Label: "Compact conversation", Text: "/compact"},
+				{Label: "New conversation", Text: "/new"},
+				{Label: "Choose model", Text: "/model"},
+			},
+			Models:        []string{},
+			InterruptKeys: []string{"\x1b"},
+			CompactText:   "/compact",
+			ClearText:     "/new",
+		},
+		Install: InstallSource{
+			NpmPackage: "@opengsd/gsd-pi",
+			Source:     "npm",
+			VendorURL:  "https://github.com/open-gsd/gsd-pi#install",
+		},
+	},
+	{
+		ID:           Codex,
+		Name:         "OpenAI Codex CLI",
+		Executable:   "codex",
+		VersionArgs:  []string{"--version"},
+		HelpArgs:     []string{"--help"},
+		TestedFrom:   "0.165.0",
+		TestedBefore: "0.166.0",
+		Capabilities: []Capability{
+			{Name: "Resume a conversation", Option: "resume"},
+			{Name: "Select a model", Option: "--model", Optional: true},
+		},
+		Widgets: &Widgets{
+			Commands: []Command{
+				{Label: "Compact conversation", Text: "/compact"},
+				{Label: "New conversation", Text: "/new"},
+				{Label: "Show status", Text: "/status"},
+				{Label: "Help", Text: "/help"},
+			},
+			Models:        []string{},
+			InterruptKeys: []string{"\x1b"},
+			CompactText:   "/compact",
+			ClearText:     "/new",
+		},
+		Install: InstallSource{
+			NpmPackage: "@openai/codex",
+			Source:     "npm",
+			VendorURL:  "https://github.com/openai/codex#installing-and-running-codex-cli",
+		},
+	},
+	{
+		ID:           OpenCode,
+		Name:         "OpenCode",
+		Executable:   "opencode",
+		VersionArgs:  []string{"--version"},
+		HelpArgs:     []string{"--help"},
+		TestedFrom:   "1.19.5",
+		TestedBefore: "1.20.0",
+		Capabilities: []Capability{
+			{Name: "Resume a conversation", Option: "--session"},
+			{Name: "Select a model", Option: "--model", Optional: true},
+		},
+		Widgets: &Widgets{
+			Commands: []Command{
+				{Label: "Compact conversation", Text: "/compact"},
+				{Label: "New conversation", Text: "/new"},
+				{Label: "Choose model", Text: "/models"},
+				{Label: "Help", Text: "/help"},
+			},
+			Models:        []string{},
+			InterruptKeys: []string{"\x1b", "\x1b"},
+			CompactText:   "/compact",
+			ClearText:     "/new",
+		},
+		Install: InstallSource{
+			NpmPackage: "opencode-ai",
+			Source:     "npm",
+			VendorURL:  "https://opencode.ai/docs/",
 		},
 	},
 }
