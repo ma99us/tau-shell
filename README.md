@@ -55,6 +55,11 @@ are covered by Go tests and a type-checked build, but the packaged window
 could not be driven, so the flash/toast and drag UI are not live-verified.
 Alerts are configured in `%USERPROFILE%\.tau_shell\config.yaml` (palette:
 "Edit settings...").
+The session top bar shows `tool | path | branch | model | tokens | ~$cost`, and
+Home shows monthly totals per harness. Tokens come from the harness logs;
+Copilot cost is exact, Claude cost is a list-price estimate (prices refreshed
+daily from Anthropic's pricing page; opt out with `usage.price_updates: false`).
+Verified against a real Copilot log; the packaged window could not be driven.
 
 ## Using TauShell
 
@@ -75,13 +80,27 @@ taushell restore <session-id>
   [schema](docs/v2/18-yaml-schema.md#prompt-presets)), **Commands**, **Model**,
   **Compact** and **Interrupt**. Ctrl+Shift+P opens a command palette;
   Ctrl+1..9 selects a tab; Ctrl+Tab cycles. Text is submitted only when the
-  harness looks idle, otherwise it is just inserted. The UI reports "sent", not
+  harness looks idle, otherwise it is just inserted. If text is already typed in
+  the input, TauShell adds ". " before the injected prompt when needed, and
+  inserted (not submitted) prompts end with ". " so you can keep typing; these
+  are added automatically and do not belong in prompt templates. Slash and `!`
+  commands are left as written. The UI reports "sent", not
   "applied". Verified on Copilot CLI; Claude Code widgets are not yet verified.
 - Home has **Resume All**, which restores, one after another, every stopped
   session that has a saved harness session (sessions with a resume warning are
   skipped; use Start fresh on those). Failures are reported per session.
+- **Auto resume:** each Home tile has an "Auto resume" checkbox (stored as
+  `auto_resume: true` in the session YAML), and a global "Auto-resume all on
+  startup" checkbox sits next to Resume All (stored in `state.db`, table
+  `app_settings`). Once per app launch, after the first refresh, flagged
+  sessions that are stopped and have a saved harness session are resumed one
+  after another, using the same path and error reporting as Resume All.
+  Sessions with no saved harness session or with a resume warning are not
+  started. With the global flag on, the per-session boxes show checked and
+  disabled.
 - Closing a tab keeps a live session running in the background with its
-  terminal buffer; sessions are not auto-launched after a restart.
+  terminal buffer; sessions are not auto-launched after a restart unless
+  Auto resume is enabled.
 - The terminal has no scrollback of its own; scrolling is left to the harness.
   Ctrl+C copies when text is selected (otherwise it goes to the harness),
   Ctrl+V and Shift+Insert paste, Ctrl+Shift+C always copies.
@@ -150,7 +169,8 @@ above where it still describes later remote/mobile work. Start with:
 - [System architecture](docs/v2/01-system-architecture.md), [ConPTY integration](docs/v2/02-conpty-integration.md), [PowerShell bootstrap](docs/v2/09-powershell-bootstrap.md)
 - [Session lifecycle](docs/v2/03-session-lifecycle.md), [restoration](docs/v2/04-session-restoration.md), [storage layout](docs/v2/12-storage-layout.md)
 - [Harness adapters](docs/v2/05-plugin-system.md) and [adding a harness](docs/v2/23-adding-a-harness.md)
-- [YAML schema](docs/v2/18-yaml-schema.md), [workspaces](docs/v2/19-workspaces.md)
+- [YAML schema](docs/v2/18-yaml-schema.md), [workspaces](docs/v2/19-workspaces.md),
+  [UI design system and theme](docs/v2/25-ui-design-system.md)
 - [Terminal rendering](docs/v2/15-terminal-rendering.md)
 - [Claude Code verification plan](docs/v2/24-claude-code-verification-plan.md)
 - [Contributor guide](docs/v2/17-contributor-guide.md) and [engineering handoff](docs/v2/21-engineering-handoff.md)

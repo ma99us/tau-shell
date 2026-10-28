@@ -52,6 +52,9 @@ type Widgets struct {
 	InterruptKeys []string `json:"interruptKeys"`
 	// CompactText is the command behind the Compact quick action.
 	CompactText string `json:"compactText"`
+	// ClearText is the command behind the Clear quick action; it discards the
+	// current conversation context, so the UI asks for confirmation first.
+	ClearText string `json:"clearText"`
 }
 
 // InstallSource identifies a maintained winget package and the vendor's
@@ -126,6 +129,7 @@ var specs = []Spec{
 			Models:        []string{"default", "sonnet", "opus", "haiku"},
 			InterruptKeys: []string{"\x1b"},
 			CompactText:   "/compact",
+			ClearText:     "/clear",
 		},
 		Install: InstallSource{
 			WingetID:  "Anthropic.ClaudeCode",
@@ -157,6 +161,7 @@ var specs = []Spec{
 			Models:        []string{"auto", "claude-sonnet-5.5", "claude-opus-5.5", "claude-haiku-5.5"},
 			InterruptKeys: []string{"\x1b", "\x1b"},
 			CompactText:   "/compact",
+			ClearText:     "/clear",
 		},
 		Install: InstallSource{
 			WingetID:  "GitHub.Copilot",

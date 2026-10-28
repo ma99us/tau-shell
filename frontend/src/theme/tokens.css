@@ -1,0 +1,143 @@
+/* TauShell design tokens. See docs/v2/22-ui-design-system.md. Values only; no selectors. */
+:root {
+  --font-ui: "Segoe UI", "Inter", sans-serif;
+  --font-mono: Consolas, "Cascadia Code", monospace;
+  --tracking-label: 0.12em;
+  --tracking-eyebrow: 0.13em;
+
+  /* Type scale (px) */
+  --fs-10: 10px;
+  --fs-11: 11px;
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-14: 14px;
+  --fs-15: 15px;
+  --fs-16: 16px;
+  --fs-17: 17px;
+  --fs-19: 19px;
+  --fs-22: 22px;
+
+  /* Radius scale (px) */
+  --radius-2: 2px;
+  --radius-5: 5px;
+  --radius-6: 6px;
+  --radius-7: 7px;
+  --radius-8: 8px;
+  --radius-9: 9px;
+  --radius-10: 10px;
+  --radius-11: 11px;
+  --radius-20: 20px;
+
+  /* Surfaces */
+  --bg-app: #0c0e12;
+  --bg-inset: #0e1116;
+  --bg-panel: #11141a;
+  --bg-card: #14181f;
+  --bg-raised: #171b22;
+  --bg-hover: #1a1e26;
+  --bg-control: #1b2028;
+  --bg-control-hover: #20242c;
+  --bg-elevated: #2b313b;
+  --scrim: #050608bb;
+  --shadow-soft: #000a;
+  --shadow-deep: #0009;
+
+  /* Borders */
+  --border-subtle: #262a32;
+  --border: #292e37;
+  --border-strong: #343a45;
+  --border-hover: #373d47;
+  --border-muted: #4a5260;
+  --border-control-hover: #505966;
+
+  /* Text ramp, brightest to dimmest */
+  --white: #fff;
+  --text-1: #f4f6fa;
+  --text-title: #f0f2f6;
+  --text-2: #e6e9ef;
+  --text-3: #d4d9e1;
+  --text-4: #c0c6d0;
+  --text-5: #a5adba;
+  --text-6: #9ba4b2;
+  --text-7: #929ba8;
+  --text-8: #8b95a2;
+  --text-9: #858e9c;
+  --text-10: #7e8896;
+  --text-11: #717986;
+
+  /* Accent (green) and primary action */
+  --accent: #78d49f;
+  --accent-hover: #91e3b3;
+  --accent-focus: #82d8ae;
+  --accent-eyebrow: #83d5a7;
+  --on-accent: #102117;
+  --action: #3ddc84;
+  --action-hover: #5ff09d;
+  --on-action: #07210f;
+  --accent-text-1: #dff8e9;
+  --accent-text-2: #c9efd9;
+  --accent-text-3: #b9e6cc;
+  --accent-text-4: #9ce7be;
+  --accent-bg-1: #17241e;
+  --accent-bg-2: #1a2821;
+  --accent-bg-3: #1d2f26;
+  --accent-bg-4: #183326;
+  --accent-border-1: #2e443a;
+  --accent-border-2: #2f4a3d;
+  --accent-border-3: #315b49;
+  --accent-border-muted: #3d4a44;
+
+  /* Status colors */
+  --status-ok: #63d69a;
+  --status-ok-glow: #63d69955;
+  --status-warn: #e0b24d;
+  --status-warn-glow: #e0b24d55;
+  --status-unseen: #f0c75e;
+  --status-unseen-glow-lo: #f0c75e88;
+  --status-unseen-glow-hi: #f0c75ecc;
+  --status-input: #ff9f43;
+  --status-input-glow-lo: #ff9f4388;
+  --status-input-glow-hi: #ff9f43cc;
+  --status-failed: #e06c75;
+  --drop-indicator: #7aa2f7;
+
+  /* Danger */
+  --danger-text-1: #ffd2cb;
+  --danger-text-2: #ffc1b8;
+  --danger-text-3: #ffb4b4;
+  --danger-text-4: #f19a91;
+  --danger-bg-1: #2a1b1b;
+  --danger-bg-2: #331818;
+  --danger-bg-3: #382220;
+  --danger-bg-4: #3a1d1d;
+  --danger-border-1: #5b3131;
+  --danger-border-2: #69413d;
+  --danger-border-3: #6b3a3a;
+  --danger-border-4: #8a3d3d;
+  --danger-solid: #b94a4a;
+  --danger-solid-hover: #d05858;
+
+  /* Terminal */
+  --terminal-bg: var(--bg-app);
+  --terminal-fg: #d8dce5;
+  --terminal-cursor: #a4e1c0;
+  --terminal-font-size: var(--fs-14);
+  --font-terminal: "Cascadia Code", Consolas, monospace;
+
+  /* Brand marks (vendor colors) */
+  --brand-claude: #d97757;
+  --brand-copilot: #f4f6fa;
+
+  /* Session tag colors; the hex is saved in the session YAML, so changing it recolors only new picks */
+  --tag-red: #e5534b;
+  --tag-orange: #d9822b;
+  --tag-yellow: #c9a227;
+  --tag-green: #4c9f58;
+  --tag-teal: #2fa4a4;
+  --tag-blue: #4f8cff;
+  --tag-purple: #9b73e6;
+  --tag-pink: #d65a9b;
+  --tag-fallback: #f4f6fa;
+  --tag-text-on-light: #101318;
+  --tag-text-on-dark: #fff;
+}

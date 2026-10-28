@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
+	"time"
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
@@ -16,6 +17,16 @@ import (
 
 func hideWindow(command *exec.Cmd) {
 	command.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: windows.CREATE_NO_WINDOW}
+}
+
+// RunWingetHidden runs winget with no console window and returns its output.
+func RunWingetHidden(ctx context.Context, winget string, args []string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	command := exec.CommandContext(ctx, winget, args...)
+	hideWindow(command)
+	output, err := command.CombinedOutput()
+	return string(output), err
 }
 
 // RunWingetInConsole runs winget in a new visible console window so the user

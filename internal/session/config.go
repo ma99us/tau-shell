@@ -35,6 +35,9 @@ type Config struct {
 	ID          string            `yaml:"id"`
 	Name        string            `yaml:"name"`
 	Color       string            `yaml:"color,omitempty"`
+	// AutoResume resumes this session when TauShell starts, if it has a saved
+	// harness conversation. The Home tile checkbox edits it.
+	AutoResume  bool              `yaml:"auto_resume,omitempty"`
 	Tool        Harness           `yaml:"tool"`
 	WorkingDir  string            `yaml:"working_dir"`
 	LaunchArgs  []string          `yaml:"launch_args,omitempty"`
@@ -200,9 +203,10 @@ func SaveConfig(directory string, config Config) (string, error) {
 	return path, nil
 }
 
-// UpdateConfigField rewrites one top-level field ("name" or "color") of an
+// UpdateConfigField rewrites one top-level field ("name", "color" or
+// "auto_resume") of an
 // existing session YAML in place, preserving the user's other keys and
-// comments. An empty color removes the key. The ID and filename never change.
+// comments. An empty color or auto_resume removes the key. The ID and filename never change.
 func UpdateConfigField(directory, id, key, value string) (Config, error) {
 	if !idPattern.MatchString(id) {
 		return Config{}, fmt.Errorf("invalid session id %q", id)
@@ -220,6 +224,10 @@ func UpdateConfigField(directory, id, key, value string) (Config, error) {
 			return Config{}, errors.New("name must not contain control characters")
 		}
 	case "color":
+	case "auto_resume":
+		if value != "" && value != "true" {
+			return Config{}, fmt.Errorf("auto_resume must be true or empty")
+		}
 	default:
 		return Config{}, fmt.Errorf("unsupported session field %q", key)
 	}
@@ -274,6 +282,9 @@ func stringNode(key, value string) *yaml.Node {
 	node := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value}
 	if key == "color" {
 		node.Style = yaml.DoubleQuotedStyle
+	}
+	if key == "auto_resume" {
+		node.Tag = "!!bool"
 	}
 	return node
 }

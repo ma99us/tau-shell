@@ -1,3 +1,5 @@
+import type { SessionUsage, UsageSummary } from "./usage";
+
 export type Session = {
   id: string;
   name: string;
@@ -8,6 +10,7 @@ export type Session = {
   lastError?: string;
   runningHere: boolean;
   hasResumeId: boolean;
+  autoResume: boolean;
   resumeNote?: string;
 };
 
@@ -51,6 +54,7 @@ export type HarnessWidgets = {
   models: string[];
   interruptKeys: string[];
   compactText: string;
+  clearText: string;
 };
 
 export type ResolvedPreset = {
@@ -111,11 +115,20 @@ type WailsApp = {
   DeleteSession(id: string): Promise<void>;
   RenameSession(id: string, name: string): Promise<void>;
   SetSessionColor(id: string, color: string): Promise<void>;
+  SetSessionAutoResume(id: string, enabled: boolean): Promise<void>;
+  GetAutoResumeAll(): Promise<boolean>;
+  SetAutoResumeAll(enabled: boolean): Promise<void>;
   SetSessionOrder(ids: string[]): Promise<void>;
   NotifyAttention(id: string, kind: "input" | "done"): Promise<void>;
   OpenSettingsFile(): Promise<void>;
+  OpenToolConfig(toolId: string): Promise<void>;
+  GetToolUpdates(): Promise<Record<string, string>>;
+  CheckToolUpdates(): Promise<Record<string, string>>;
+  UpdateTool(id: string): Promise<InstallResult>;
   GetGitBranch(sessionId: string): Promise<string>;
   GetSessionModel(sessionId: string): Promise<string>;
+  GetSessionUsage(sessionId: string): Promise<SessionUsage>;
+  GetUsageSummary(): Promise<UsageSummary>;
   DuplicateSession(id: string): Promise<Session>;
   DialogHostReady(): Promise<DialogRequest[]>;
   AnswerDialog(id: string, choice: string): Promise<void>;

@@ -13,6 +13,7 @@ import (
 
 	"github.com/ma99us/tau-shell/internal/session"
 	"github.com/ma99us/tau-shell/internal/sessionhost"
+	"github.com/ma99us/tau-shell/internal/usage"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -34,6 +35,16 @@ func (manager *closeTestManager) List(ctx context.Context) ([]sessionhost.Snapsh
 func (manager *closeTestManager) HarnessModel(context.Context, string) (string, error) {
 	return "", nil
 }
+
+func (manager *closeTestManager) SessionUsage(context.Context, string) (usage.SessionUsage, error) {
+	return usage.SessionUsage{}, nil
+}
+
+func (manager *closeTestManager) UsageSummary(context.Context) (usage.Summary, error) {
+	return usage.Summary{}, nil
+}
+
+func (manager *closeTestManager) StartPriceUpdates(context.Context) {}
 
 func (manager *closeTestManager) Start(context.Context, string, bool, int, int) (sessionhost.Snapshot, error) {
 	return sessionhost.Snapshot{}, errors.New("unexpected Start call")
@@ -61,6 +72,14 @@ func (manager *closeTestManager) Delete(context.Context, string) error {
 
 func (manager *closeTestManager) UpdateDisplay(string, string, string) error {
 	return errors.New("unexpected UpdateDisplay call")
+}
+
+func (manager *closeTestManager) AutoResumeAll(context.Context) (bool, error) {
+	return false, errors.New("unexpected AutoResumeAll call")
+}
+
+func (manager *closeTestManager) SetAutoResumeAll(context.Context, bool) error {
+	return errors.New("unexpected SetAutoResumeAll call")
 }
 
 func (manager *closeTestManager) SetOrder(context.Context, []string) error {

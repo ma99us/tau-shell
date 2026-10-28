@@ -23,6 +23,47 @@ type Notifications struct {
 type Config struct {
 	Version       int           `yaml:"version"`
 	Notifications Notifications `yaml:"notifications"`
+	Usage         Usage         `yaml:"usage"`
+}
+
+// PriceOverride is a hand-set Claude price in USD per million tokens. Omitted
+// cache prices default to the standard multiples of the input price.
+type PriceOverride struct {
+	Input        float64 `yaml:"input"`
+	CacheWrite5m float64 `yaml:"cache_write_5m,omitempty"`
+	CacheWrite1h float64 `yaml:"cache_write_1h,omitempty"`
+	CacheRead    float64 `yaml:"cache_read,omitempty"`
+	Output       float64 `yaml:"output"`
+}
+
+// Usage controls token and cost tracking.
+type Usage struct {
+	MonthStartDay int                      `yaml:"month_start_day,omitempty"`
+	PriceUpdates  *bool                    `yaml:"price_updates,omitempty"`
+	ClaudePrices  map[string]PriceOverride `yaml:"claude_prices,omitempty"`
+}
+
+// StartDay is the day of the month the monthly totals reset; default the 1st.
+func (u Usage) StartDay() int {
+	if u.MonthStartDay == 0 {
+		return 1
+	}
+	return u.MonthStartDay
+}
+
+// PriceUpdatesEnabled reports whether Claude prices are refreshed from the web.
+func (u Usage) PriceUpdatesEnabled() bool { return u.PriceUpdates == nil || *u.PriceUpdates }
+
+func (u Usage) validate() error {
+	if u.MonthStartDay != 0 && (u.MonthStartDay < 1 || u.MonthStartDay > 28) {
+		return fmt.Errorf("usage.month_start_day must be between 1 and 28, got %d", u.MonthStartDay)
+	}
+	for model, price := range u.ClaudePrices {
+		if price.Input <= 0 || price.Output <= 0 || price.CacheWrite5m < 0 || price.CacheWrite1h < 0 || price.CacheRead < 0 {
+			return fmt.Errorf("usage.claude_prices.%s needs positive input and output prices", model)
+		}
+	}
+	return nil
 }
 
 func (n Notifications) ToastEnabled() bool        { return n.Toast == nil || *n.Toast }
@@ -47,6 +88,9 @@ func Load(path string) (Config, error) {
 	if parsed.Version != 0 && parsed.Version != 1 {
 		return Config{}, fmt.Errorf("%s: unsupported version %d", filepath.Base(path), parsed.Version)
 	}
+	if err := parsed.Usage.validate(); err != nil {
+		return Config{}, fmt.Errorf("%s: %w", filepath.Base(path), err)
+	}
 	return parsed, nil
 }
 
@@ -58,6 +102,15 @@ notifications:
   toast: true
   # Flash the TauShell taskbar button for the same events.
   taskbar_flash: true
+
+usage:
+  # Day of the month (1-28) the monthly token and cost totals reset.
+  # month_start_day: 1
+  # Refresh Claude prices from Anthropic's pricing page every 24 hours.
+  # price_updates: true
+  # Override Claude prices (USD per million tokens). Cache prices are optional.
+  # claude_prices:
+  #   opus-5.5: { input: 4, output: 20, cache_write_5m: 5, cache_write_1h: 8, cache_read: 0.2 }
 `
 
 // EnsureExample creates the commented example file only when none exists.

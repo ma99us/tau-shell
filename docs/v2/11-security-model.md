@@ -73,6 +73,25 @@ and opens the desktop. Windows Focus Assist or per-app settings can suppress
 toasts; TauShell does not claim a toast was seen. If toast setup fails it is
 logged and only the taskbar flash remains.
 
+## Tool update checks
+
+At startup and then daily, TauShell runs `winget list --id <package> --exact
+--upgrade-available` (no console window, read-only) for installed tools with a
+declared winget package. A tile shows "Update to <version>" only when winget
+reports one; tools not installed through winget get no button. Updating runs
+`winget upgrade` in a visible console only after a native confirmation; it is
+never automatic. Failed checks are logged and show nothing.
+
+## Price updates
+
+Claude prices are the only data TauShell fetches on its own: an HTTPS GET to
+`https://platform.claude.com/docs/en/about-claude/pricing.md`, falling back to
+LiteLLM's public price JSON on GitHub. Requests are fixed-URL, GET-only, have a
+15 s timeout and a size cap, and send no session, path or usage data. Parsed
+values are sanity-checked, and failures keep the last good cache and log one
+diagnostics line. Set `usage.price_updates: false` to disable. There is no
+Copilot price fetch; its cost comes from the harness log.
+
 ## Diagnostic logging
 
 The per-run log is stored under the current user's system temp directory and

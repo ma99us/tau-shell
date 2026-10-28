@@ -59,7 +59,7 @@ func TestDeclaredSpecsAreValid(t *testing.T) {
 		}
 		if spec.ID != PowerShell {
 			widgets := spec.Widgets
-			if widgets == nil || len(widgets.Commands) == 0 || 			len(widgets.Models) == 0 || len(widgets.InterruptKeys) == 0 || widgets.CompactText == "" {
+			if widgets == nil || len(widgets.Commands) == 0 || 			len(widgets.Models) == 0 || len(widgets.InterruptKeys) == 0 || widgets.CompactText == "" || widgets.ClearText == "" {
 							t.Errorf("%s: harness must declare widget commands, models, interrupt keys and compact text", spec.ID)
 			}
 		}

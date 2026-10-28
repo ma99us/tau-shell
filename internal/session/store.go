@@ -62,6 +62,10 @@ func OpenStore(path string) (*Store, error) {
 		CREATE TABLE IF NOT EXISTS session_order (
 			session_id TEXT PRIMARY KEY,
 			position INTEGER NOT NULL
+		);
+		CREATE TABLE IF NOT EXISTS app_settings (
+			key TEXT PRIMARY KEY,
+			value TEXT NOT NULL
 		)
 	`); err != nil {
 		_ = db.Close()
@@ -85,6 +89,31 @@ func (store *Store) Delete(ctx context.Context, sessionID string) error {
 	}
 	if _, err := store.db.ExecContext(ctx, `DELETE FROM session_order WHERE session_id = ?`, sessionID); err != nil {
 		return fmt.Errorf("delete display order for %q: %w", sessionID, err)
+	}
+	return nil
+}
+
+// Setting returns an app-level UI preference, or "" when it was never saved.
+func (store *Store) Setting(ctx context.Context, key string) (string, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	var value string
+	err := store.db.QueryRowContext(ctx, `SELECT value FROM app_settings WHERE key = ?`, key).Scan(&value)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("read setting %q: %w", key, err)
+	}
+	return value, nil
+}
+
+// SetSetting saves an app-level UI preference.
+func (store *Store) SetSetting(ctx context.Context, key, value string) error {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if _, err := store.db.ExecContext(ctx, `INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value); err != nil {
+		return fmt.Errorf("save setting %q: %w", key, err)
 	}
 	return nil
 }

@@ -6,6 +6,7 @@ Phase 1 uses one human-edited YAML file per TauShell session, stored under `~/.t
 id: backend-agent
 name: Backend Agent
 color: "#4f8cff"   # optional #rrggbb tab/sidebar tint
+auto_resume: true   # optional; resume this session when TauShell starts (Home tile checkbox)
 tool: claude-code
 working_dir: D:/Projects/App
 
@@ -90,4 +91,12 @@ version: 1
 notifications:
   toast: true          # Windows toast while TauShell is in the background
   taskbar_flash: true  # flash the taskbar button; both default to true
+usage:
+  month_start_day: 1   # 1-28; day the monthly totals reset (default 1)
+  price_updates: true  # refresh Claude prices daily from Anthropic's pricing page
+  claude_prices:       # optional USD per million tokens; cache prices default to
+    opus-5.5: { input: 4, output: 20 }  # 1.25x / 2x / 0.1x input when omitted
 ```
+
+`usage.claude_prices` entries win over fetched prices, which win over the
+built-in table. Invalid values reject the file like any other unknown field.

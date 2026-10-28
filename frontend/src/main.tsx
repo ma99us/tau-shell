@@ -4,9 +4,12 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { app, DialogRequest, HarnessWidgets, InstallResult, LaunchPreview, Session, SessionEvent, SystemStatus, ToolStatus } from "./bridge";
+import "./theme/tokens.css";
 import "./style.css";
-import { AttentionKind, attentionEdge, readHarnessSignal } from "./attention";
+import { theme } from "./theme/theme";
+import { AttentionKind, attentionEdge, composeInjection, readDraft, readHarnessSignal } from "./attention";
 import { moveId } from "./order";
+import { SessionUsage, UsageSummary, UsageTotals, formatTokens, formatUSD, hasUsage, usageTooltip } from "./usage";
 import { CommandPalette, HarnessToolbar, PaletteItem, planSend, sendNotice } from "./harnessActions";
 import { GearIcon, HarnessIcon, HomeIcon } from "./harnessIcons";
 import appIcon from "./assets/appicon.png";
@@ -168,8 +171,31 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [installing, setInstalling] = useState("");
   const [toolNotice, setToolNotice] = useState<InstallResult | null>(null);
+  const [toolUpdates, setToolUpdates] = useState<Record<string, string>>({});
+  const [refreshing, setRefreshing] = useState(false);
   const [setupDismissed, setSetupDismissed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [autoResumeAll, setAutoResumeAll] = useState(false);
+  const autoResumeRan = useRef(false);
   const showError = (source: string, failure: unknown) => setError(reportFrontendFailure(source, failure));
+
+  // Once per app launch, resume the sessions flagged for it (or all, when the global flag is on).
+  useEffect(() => {
+    if (!loaded || autoResumeRan.current) return;
+    autoResumeRan.current = true;
+    void (async () => {
+      let all = false;
+      try {
+        all = await app().GetAutoResumeAll();
+        setAutoResumeAll(all);
+      } catch (err) {
+        showError("ui.auto-resume", err);
+      }
+      const targets = sessions.filter((session) => (all || session.autoResume) && !session.runningHere && session.hasResumeId && !session.resumeNote);
+      for (const session of targets) await launch(session, "restore");
+      if (targets.length > 0) setSelected("");
+    })();
+  }, [loaded]);
 
   const refresh = async (redetectTools = false) => {
     try {
@@ -188,11 +214,13 @@ function App() {
       setError("");
     } catch (err) {
       showError("ui.refresh", err);
+    } finally {
+      setLoaded(true);
     }
   };
 
   useEffect(() => {
-    void refresh();
+    void refreshAll();
     const runtime = window.runtime;
     if (!runtime) return;
     runtime.EventsOnMultiple("session-event", (event: SessionEvent) => {
@@ -446,7 +474,7 @@ function App() {
     const items: PaletteItem[] = [
       { id: "app:new", group: "App", label: "New session", run: () => setDialogOpen(true) },
       { id: "app:home", group: "App", label: "Go to Home", run: () => setSelected("") },
-      { id: "app:refresh", group: "App", label: "Refresh sessions and tools", run: () => void refresh(true) },
+      { id: "app:refresh", group: "App", label: "Refresh sessions and tools", run: () => void refreshAll() },
       { id: "app:settings", group: "App", label: "Edit settings...", hint: "notifications", run: () => void app().OpenSettingsFile().catch((err) => showError("ui.open-settings", err)) },
     ];
     sessions.forEach((session) => {
@@ -520,12 +548,49 @@ function App() {
       setInstalling("");
     }
   };
+  const updateTool = async (tool: ToolStatus) => {
+    setInstalling(tool.id);
+    setToolNotice(null);
+    try {
+      const result = await app().UpdateTool(tool.id);
+      setToolNotice(result);
+      if (result.outcome === "installed" || result.outcome === "failed") {
+        await refresh(true);
+        setToolUpdates(await app().GetToolUpdates());
+      }
+    } catch (err) {
+      showError("ui.update-tool", err);
+    } finally {
+      setInstalling("");
+    }
+  };
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => { void app().GetToolUpdates().then((value) => { if (!cancelled) setToolUpdates(value ?? {}); }).catch(() => undefined); };
+    load();
+    const timer = window.setInterval(load, 10 * 60 * 1000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, []);
+  const refreshAll = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        refresh(true),
+        app().CheckToolUpdates().then((value) => setToolUpdates(value ?? {})).catch((err) => showError("ui.check-tool-updates", err)),
+      ]);
+    } catch (err) {
+      showError("ui.refresh", err);
+    } finally {
+      setRefreshing(false);
+    }
+  };
   const openSetupPage = (tool: ToolStatus) => {
     app().OpenToolSetupPage(tool.id).catch((err) => showError("ui.open-setup-page", err));
   };
   const powershell = status?.tools.find((tool) => tool.id === "powershell");
   const showSetup = Boolean(powershell && !toolUsable(powershell) && !setupDismissed);
-  const toolActions = { status, installing, notice: toolNotice, onInstall: (tool: ToolStatus) => void installTool(tool), onOpenSetup: openSetupPage, onDismissNotice: () => setToolNotice(null) };
+  const toolActions = { status, installing, notice: toolNotice, updates: toolUpdates, refreshing, onUpdate: (tool: ToolStatus) => void updateTool(tool), onInstall: (tool: ToolStatus) => void installTool(tool), onOpenSetup: openSetupPage, onDismissNotice: () => setToolNotice(null), onError: (err: unknown) => showError("ui.open-tool-config", err) };
 
   return (
     <div className="app">
@@ -587,7 +652,7 @@ function App() {
           <section className="main-content">
             <div id="panel-home" className={`home-container ${selected ? "hidden" : ""}`} role="tabpanel" aria-labelledby="tab-home" tabIndex={0}>
               {showSetup && powershell ? <Setup powershell={powershell} actions={toolActions} onRecheck={() => void refresh(true)} onContinue={() => setSetupDismissed(true)} /> :
-                <Home sessions={sessions} status={status} busy={busy} tools={toolActions} onNew={() => setDialogOpen(true)} onRefresh={() => void refresh(true)} onHome={() => setSelected("")} onLaunch={launch} onDelete={setDeleteRequest} onDuplicate={duplicateSession} dragProps={dragProps} dropClass={dropClass} dragId={dragId} />}
+                <Home sessions={sessions} loaded={loaded} autoResumeAll={autoResumeAll} onAutoResumeAll={(enabled) => { setAutoResumeAll(enabled); void app().SetAutoResumeAll(enabled).catch((err) => { setAutoResumeAll(!enabled); showError("ui.auto-resume-all", err); }); }} onAutoResume={(session, enabled) => void updateSession("ui.auto-resume", () => app().SetSessionAutoResume(session.id, enabled))} status={status} busy={busy} tools={toolActions} onNew={() => setDialogOpen(true)} onRefresh={() => void refreshAll()} onHome={() => setSelected("")} onLaunch={launch} onDelete={setDeleteRequest} onDuplicate={duplicateSession} dragProps={dragProps} dropClass={dropClass} dragId={dragId} />}
             </div>
             {terminalIds.map((id) => {
               const tab = tabs.find((current) => current.id === id);
@@ -618,7 +683,16 @@ function App() {
         <div className="modal-heading"><div><p className="eyebrow">DELETE SESSION</p><h2>Delete {deleteRequest.name}?</h2></div></div>
         {deleteRequest.runningHere ?
           <p className="muted">This session is running. Close its tab and stop it before deleting.</p> :
-          <p className="muted">This permanently removes the session definition and its saved resume ID from TauShell. {deleteRequest.hasResumeId && "Its harness conversation can no longer be restored by TauShell. "}Your project folder and the harness's own data are not touched. This cannot be undone.</p>}
+          <div className="muted">
+            <p><strong>Warning: this cannot be undone.</strong></p>
+            <p>Will be removed from TauShell:</p>
+            <ul>
+              <li>the session definition file (YAML), including its name, color, arguments and presets</li>
+              <li>the saved runtime state{deleteRequest.hasResumeId && ", so its harness conversation can no longer be resumed from TauShell"}</li>
+              <li>this session's own token and cost total (past usage still counts in the monthly totals)</li>
+            </ul>
+            <p>Not touched: your project folder, and the harness's own conversation history files.</p>
+          </div>}
         <div className="modal-actions">
           <button className="secondary-button" onClick={() => setDeleteRequest(null)}>Cancel</button>
           <button className="danger-button" disabled={busy || deleteRequest.runningHere} onClick={() => void deleteSession(deleteRequest)}>{busy ? "Deleting..." : "Delete session"}</button>
@@ -659,16 +733,7 @@ function AppDialog({ request, onAnswer }: { request: DialogRequest; onAnswer: (c
   </div></div>;
 }
 
-const sessionColors = [
-  { name: "Red", value: "#e5534b" },
-  { name: "Orange", value: "#d9822b" },
-  { name: "Yellow", value: "#c9a227" },
-  { name: "Green", value: "#4c9f58" },
-  { name: "Teal", value: "#2fa4a4" },
-  { name: "Blue", value: "#4f8cff" },
-  { name: "Purple", value: "#9b73e6" },
-  { name: "Pink", value: "#d65a9b" },
-];
+const sessionColors = () => theme.sessionSwatches();
 
 function projectInitials(workingDir: string, fallback: string): string {
   const folder = workingDir.split(/[\\/]+/).filter(Boolean).pop() ?? "";
@@ -678,10 +743,10 @@ function projectInitials(workingDir: string, fallback: string): string {
 
 function readableTextColor(background: string): string {
   const hex = background.replace("#", "");
-  if (!/^[0-9a-f]{6}$/i.test(hex)) return "#f4f6fa";
+  if (!/^[0-9a-f]{6}$/i.test(hex))   return theme.fallbackSessionColor();
   const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((c) => c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
   const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  return luminance > 0.3 ? "#101318" : "#ffffff";
+  return theme.sessionTextOn(luminance > 0.3);
 }
 
 function ProjectIcon({ session }: { session: Session }) {
@@ -731,7 +796,7 @@ function SessionMenu({ x, y, session, onClose, onRename, onDuplicate, onColor }:
     <button role="menuitem" className="context-menu-item" onClick={onDuplicate}>Clone</button>
     <div className="context-menu-label">Color</div>
     <div className="color-swatches">
-      {sessionColors.map((color) => <button key={color.value} role="menuitemradio" aria-checked={session.color === color.value} className={`color-swatch ${session.color === color.value ? "selected" : ""}`} style={{ background: color.value }} title={color.name} aria-label={color.name} onClick={() => onColor(color.value)} />)}
+      {sessionColors().map((color) => <button key={color.value} role="menuitemradio" aria-checked={session.color === color.value} className={`color-swatch ${session.color === color.value ? "selected" : ""}`} style={{ background: color.value }} title={color.name} aria-label={color.name} onClick={() => onColor(color.value)} />)}
     </div>
     <button role="menuitem" className="context-menu-item" disabled={!session.color} onClick={() => onColor("")}>Default color</button>
   </div>;
@@ -749,12 +814,31 @@ function RenameDialog({ session, onClose, onRename }: { session: Session; onClos
   </div></div>;
 }
 
-function Home({ sessions, status, busy, tools, onNew, onRefresh, onHome, onLaunch, onDelete, onDuplicate, dragProps, dropClass, dragId }: {
+function Sep() {
+  return <span className="toolbar-sep" aria-hidden="true">|</span>;
+}
+
+function usageText(totals: UsageTotals): string {
+  return `${formatTokens(totals.tokens)}, ${formatUSD(totals)}`;
+}
+
+function monthTooltip(summary: UsageSummary): string {
+  const lines = [`Since ${summary.monthStart}; includes deleted sessions`];
+  if (hasUsage(summary.prevMonth)) lines.push(`Last month (from ${summary.prevMonthStart}): ${usageText(summary.prevMonth)}`);
+  lines.push(`Claude prices: ${summary.prices.source}${summary.prices.stale ? " - stale" : ""}`);
+  return lines.join("\n");
+}
+
+function Home({ sessions, loaded, autoResumeAll, onAutoResumeAll, onAutoResume, status, busy, tools, onNew, onRefresh, onHome, onLaunch, onDelete, onDuplicate, dragProps, dropClass, dragId }: {
+  autoResumeAll: boolean;
+  onAutoResumeAll: (enabled: boolean) => void;
+  onAutoResume: (session: Session, enabled: boolean) => void;
   onDuplicate: (session: Session) => void;
   dragProps: (id: string) => object;
   dropClass: (id: string) => string;
   dragId: string;
   sessions: Session[];
+  loaded: boolean;
   status: SystemStatus | null;
   busy: boolean;
   tools: ToolActions;
@@ -765,6 +849,14 @@ function Home({ sessions, status, busy, tools, onNew, onRefresh, onHome, onLaunc
   onDelete: (session: Session) => void;
 }) {
   const [freshSession, setFreshSession] = useState<Session | null>(null);
+  const [summary, setSummary] = useState<UsageSummary | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => { void app().GetUsageSummary().then((value) => { if (!cancelled) setSummary(value); }).catch(() => { if (!cancelled) setSummary(null); }); };
+    load();
+    const timer = window.setInterval(load, 15000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, []);
   const [resumeProgress, setResumeProgress] = useState("");
   const resumable = sessions.filter((session) => !session.runningHere && session.hasResumeId && !session.resumeNote);
   const resumeAll = async () => {
@@ -779,28 +871,31 @@ function Home({ sessions, status, busy, tools, onNew, onRefresh, onHome, onLaunc
     <>
     <div className="home">
       <div className="hero">
-        <div><p className="eyebrow">LOCAL SESSION WORKSPACE</p><h1>Pick up where you left off.</h1><p className="muted">Keep your PowerShell AI harness sessions organized, resumable, and close at hand.</p></div>
+        <div><h1>Pick up where you left off.</h1><p className="muted">Keep your PowerShell AI harness sessions organized, resumable, and close at hand.</p></div>
         <div className="hero-actions">
           {resumeProgress && <span className="muted">{resumeProgress}</span>}
+          <label className="check-option" title="Resume every stopped session that has a saved harness session when TauShell starts"><input type="checkbox" checked={autoResumeAll} onChange={(event) => onAutoResumeAll(event.target.checked)} />Auto-resume all on startup</label>
           <button className="secondary-button" disabled={busy || resumable.length === 0} title={resumable.length ? `Resume ${resumable.length} stopped session(s) that have a saved harness session` : "No stopped sessions with a saved harness session"} onClick={() => void resumeAll()}>Resume All</button>
           <button className="primary-button"           onClick={onNew}>New session</button>
         </div>
       </div>
-      <div className="section-title"><div><h2>Your sessions</h2></div></div>
-      {sessions.length === 0 ? <div className="empty-card"><div className="empty-icon">+</div><h3>No sessions yet</h3><p>Create a session to connect a project folder to Claude Code or GitHub Copilot CLI.</p><button className="primary-button" onClick={onNew}>New session</button></div> :
+      <div className="section-title"><div><h2>Your sessions</h2></div>{!loaded && <span className="spinner" role="status" aria-label="Loading sessions" />}</div>
+      {summary && hasUsage(summary.month) && <p className="home-usage" title={monthTooltip(summary)}>This month: {usageText(summary.month)}{(["claude-code", "copilot-cli"] as const).map((tool) => hasUsage(summary.monthByTool?.[tool]) ? <span key={tool}> | {tool === "claude-code" ? "Claude" : "Copilot"} {usageText(summary.monthByTool![tool])}</span> : null)}</p>}
+      {sessions.length === 0 ? (!loaded ? <div className="loading-card" role="status"><span className="spinner" aria-hidden="true" /><span className="muted">Loading sessions...</span></div> : <div className="empty-card"><div className="empty-icon">+</div><h3>No sessions yet</h3><p>Create a session to connect a project folder to Claude Code or GitHub Copilot CLI.</p>      <button className="primary-button" onClick={onNew}>New session</button></div>) :
         <div className="session-grid">{sessions.map((session) => <article className={`session-card ${dragId === session.id ? "dragging" : ""} ${dropClass(session.id)}`} key={session.id} {...dragProps(session.id)}>
-          <div className="card-top"><ProjectIcon session={session} /><span className={`state-pill ${session.runningHere ? "running" : ""}`}>{session.runningHere ? "Running" : statusLabel(session.status)}</span><button className="delete-button" aria-label={`Delete ${session.name}`} title="Delete session" onClick={() => onDelete(session)}>x</button></div>
-          <h3>{session.name}</h3><p className="path">{session.workingDir}</p><p className="session-meta">{session.tool}</p>
+          <div className="card-top"><ProjectIcon session={session} /><span className={`state-pill ${session.runningHere ? "running" : ""} ${!session.runningHere && session.status === "failed" ? "status-warn-text" : ""}`}>{session.runningHere ? "Running" : statusLabel(session.status)}</span><button className="delete-button" aria-label={`Delete ${session.name}`} title="Delete session" onClick={() => onDelete(session)}>x</button></div>
+          <div className="card-title"><h3>{session.name}</h3>{hasUsage(summary?.sessions?.[session.id]) && <span className="card-usage" title="Estimate from harness logs; never reset">{usageText(summary!.sessions![session.id])}</span>}</div><p className="path">{session.workingDir}</p><p className="session-meta">{session.tool}</p>
           {session.lastError && <p className="card-error">{session.lastError}</p>}
           <div className="card-actions">
             {session.runningHere ? <button className="tile-button" onClick={() => onLaunch(session, "start")}>Open</button> :
               session.hasResumeId ? <><button className="tile-button" disabled={busy} title={session.resumeNote} onClick={() => setFreshSession(session)}>Start fresh</button>{!session.resumeNote && <button className="tile-button" disabled={busy} onClick={() => onLaunch(session, "restore")}>Resume</button>}</> :
                 <button className="tile-button" disabled={busy} onClick={() => onLaunch(session, "start")}>Start</button>}
             <button className="tile-button" disabled={busy} title="Copy this session definition and start the copy" onClick={() => onDuplicate(session)}>Clone</button>
+            <label className="check-option" title={autoResumeAll ? "All sessions auto-resume (global setting is on)" : "Resume this session when TauShell starts"}><input type="checkbox" checked={session.autoResume || autoResumeAll} disabled={autoResumeAll} onChange={(event) => onAutoResume(session, event.target.checked)} />Auto resume</label>
           </div>
         </article>)}</div>}
-      <div className="tools-panel"><div className="tools-header"><div><h2>Installed tools</h2><p className="muted">Detected on this machine{status && !status.wingetAvailable && " \u2014 winget is unavailable; Install uses vendor setup links instead"}</p></div><button className="secondary-button" title="Reload sessions and re-detect tools" onClick={onRefresh}>Refresh</button></div><div className="tool-list">
-        {status?.tools.map((tool) => <ToolRow key={tool.id} tool={tool} actions={tools} />) ?? <p className="muted">Checking...</p>}
+      <div className="tools-panel"><div className="tools-header"><div><h2>Installed tools</h2><p className="muted">Detected on this machine{status && !status.wingetAvailable && " \u2014 winget is unavailable; Install uses vendor setup links instead"}</p></div><div className="refresh-group">{tools.refreshing && <span className="spinner" role="status" aria-label="Refreshing" />}<button className="secondary-button" disabled={tools.refreshing} title="Reload sessions, re-detect tools and check for tool updates" onClick={onRefresh}>Refresh</button></div></div><div className="tool-list">
+        {status?.tools.map((tool) => <ToolRow key={tool.id} tool={tool} actions={tools} />) ?? <div className="loading-card" role="status"><span className="spinner" aria-hidden="true" /><span className="muted">Detecting tools...</span></div>}
       </div></div>
       {toolNoticeBanner(tools)}
     </div>
@@ -817,9 +912,13 @@ type ToolActions = {
   status: SystemStatus | null;
   installing: string;
   notice: InstallResult | null;
+  updates: Record<string, string>;
+  refreshing: boolean;
+  onUpdate: (tool: ToolStatus) => void;
   onInstall: (tool: ToolStatus) => void;
   onOpenSetup: (tool: ToolStatus) => void;
   onDismissNotice: () => void;
+  onError: (error: unknown) => void;
 };
 
 function toolUsable(tool: ToolStatus): boolean {
@@ -869,6 +968,8 @@ function ToolRow({ tool, actions }: { tool: ToolStatus; actions: ToolActions }) 
     <span>{label}{supportNote && <span className="tool-support-note"> ({supportNote})</span>}</span>
     {tool.executablePath && <code className="tool-path">{tool.executablePath}</code>}
     {unavailableCapabilities.length > 0 && <span className="tool-warning">missing: {unavailableCapabilities.map((capability) => capability.option).join(", ")}</span>}
+    {(tool.id === "claude-code" || tool.id === "copilot-cli") && <button className="sidebar-toggle tool-gear" aria-label={`Open ${tool.name} config file`} title={`Open ${tool.name} config file in your default editor`} onClick={() => void app().OpenToolConfig(tool.id).catch((err) => actions.onError(err))}><GearIcon /></button>}
+    {tool.installed && actions.updates[tool.id] && <button className="secondary-button tool-action tool-update" disabled={installing || actions.installing !== ""} title={`Update ${tool.name} to ${actions.updates[tool.id]} with winget (asks first)`} onClick={() => actions.onUpdate(tool)}>{installing ? "Updating..." : `Update to ${actions.updates[tool.id]}`}</button>}
     {!tool.installed && <button className="secondary-button tool-action" disabled={installing} onClick={() => actions.onInstall(tool)}>
       {installing ? "Installing..." : tool.install.wingetId && actions.status?.wingetAvailable ? "Install" : "Setup instructions"}
     </button>}
@@ -1015,8 +1116,9 @@ function sendToSession(session: Session, text: string, submit: boolean, label: s
     fail(sendNotice(plan, label));
     return;
   }
-  if (text.includes("\n")) terminal.paste(text);
-  else terminal.input(text, true);
+  const injected = composeInjection(readDraft(terminal), text, plan === "submit");
+  if (injected.includes("\n")) terminal.paste(injected);
+  else terminal.input(injected, true);
   // Enter goes separately so the harness has finished handling the pasted text.
   if (plan === "submit") window.setTimeout(() => terminal.input("\r", true), 150);
   notify(sendNotice(plan, label));
@@ -1046,6 +1148,7 @@ function TerminalPane({ session, visible, busy, harness, onSend, onInterrupt, on
   runningRef.current = session?.runningHere ?? false;
   const [branch, setBranch] = useState("");
   const [model, setModel] = useState("");
+  const [usage, setUsage] = useState<SessionUsage | null>(null);
   const sessionId = session?.id;
   useEffect(() => {
     if (!sessionId || !visible) return;
@@ -1053,6 +1156,7 @@ function TerminalPane({ session, visible, busy, harness, onSend, onInterrupt, on
     const load = () => {
       void app().GetGitBranch(sessionId).then((name) => { if (!cancelled) setBranch(name); }).catch(() => { if (!cancelled) setBranch(""); });
       void app().GetSessionModel(sessionId).then((name) => { if (!cancelled) setModel(name); }).catch(() => { if (!cancelled) setModel(""); });
+      void app().GetSessionUsage(sessionId).then((value) => { if (!cancelled) setUsage(value); }).catch(() => { if (!cancelled) setUsage(null); });
     };
     load();
     const timer = window.setInterval(load, 5000);
@@ -1074,7 +1178,7 @@ function TerminalPane({ session, visible, busy, harness, onSend, onInterrupt, on
     container.current.addEventListener("pointerdown", onPointerDown, true);
     container.current.addEventListener("mousedown", onMouseDown, true);
     if (!terminal) {
-      terminal = new Terminal({ convertEol: false, cursorBlink: true, scrollback: 0, fontFamily: "Cascadia Code, Consolas, monospace", fontSize: 14, theme: { background: "#0c0e12", foreground: "#d8dce5", cursor: "#a4e1c0" } });
+      terminal = new Terminal({ convertEol: false, cursorBlink: true, scrollback: 0, fontFamily: theme.fontMono(), fontSize: theme.terminal().fontSize, theme: { background: theme.terminal().background, foreground: theme.terminal().foreground, cursor: theme.terminal().cursor } });
       terminal.loadAddon(fit);
       terminal.open(container.current);
       terminalInstances.set(session.id, terminal);
@@ -1146,7 +1250,7 @@ function TerminalPane({ session, visible, busy, harness, onSend, onInterrupt, on
     return () => window.clearTimeout(timer);
   }, [visible, session?.id, session?.runningHere]);
   if (!session) return <div className="terminal-missing">Session configuration is unavailable.</div>;
-  return <div className="terminal-view"><div className="terminal-toolbar"><span className={`status-dot ${session.runningHere ? "online" : ""}`} />{session.tool} | <span className="toolbar-path">{session.workingDir}</span>{branch && <span className="toolbar-branch"> [{branch}]</span>}{model && <span className="toolbar-model" title="Model last recorded by the harness"> {model}</span>}<span className="terminal-status">{session.runningHere ? "Connected" : statusLabel(session.status) || "Not started"}</span>{!session.runningHere && (session.hasResumeId && session.resumeNote ? <button className="secondary-button terminal-action" disabled={busy} title={session.resumeNote} onClick={() => onLaunch(session, "fresh")}>Start fresh</button> : <button className="primary-button terminal-action" disabled={busy} onClick={() => onLaunch(session, session.hasResumeId ? "restore" : "start")}>{session.hasResumeId ? "Resume" : "Start"}</button>)}{harness && onSend && <HarnessToolbar session={session} widgets={harness.widgets} modelSupported={harness.modelSupported} send={onSend} interrupt={onInterrupt} onError={onError} />}</div><div className="terminal-container" ref={container} /></div>;
+  return <div className="terminal-view"><div className="terminal-toolbar"><span className={`status-dot ${session.runningHere ? "online" : ""}`} />{session.tool}<Sep /><span className="toolbar-path">{session.workingDir}</span>{branch && <><Sep /><span className="toolbar-branch">{branch}</span></>}{model && <><Sep /><span className="toolbar-model" title="Model last recorded by the harness">{model}</span></>}{hasUsage(usage?.total) && <><Sep /><span className="toolbar-usage" title={usageTooltip(usage!)}>{formatTokens(usage!.total.tokens)}</span>{(usage!.total.usd > 0 || usage!.total.unpriced) && <><Sep /><span className="toolbar-usage" title={usageTooltip(usage!)}>{formatUSD(usage!.total)}</span></>}</>}<span className={`terminal-status ${!session.runningHere && session.status === "failed" ? "status-warn-text" : ""}`}>{session.runningHere ? "" : statusLabel(session.status) || "Not started"}</span>{!session.runningHere && (session.hasResumeId && session.resumeNote ? <button className="secondary-button terminal-action" disabled={busy} title={session.resumeNote} onClick={() => onLaunch(session, "fresh")}>Start fresh</button> : <button className="primary-button terminal-action" disabled={busy} onClick={() => onLaunch(session, session.hasResumeId ? "restore" : "start")}>{session.hasResumeId ? "Resume" : "Start"}</button>)}{harness && onSend && <HarnessToolbar session={session} widgets={harness.widgets} modelSupported={harness.modelSupported} send={onSend} interrupt={onInterrupt} onError={onError} />}</div><div className="terminal-container" ref={container} /></div>;
 }
 
 function parseLaunchArgs(text: string): string[] {

@@ -33,6 +33,30 @@ func TestLoadRejectsTyposAndVersions(t *testing.T) {
 	}
 }
 
+func TestUsageSettings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), FileName)
+	config, err := Load(path)
+	if err != nil || config.Usage.StartDay() != 1 || !config.Usage.PriceUpdatesEnabled() {
+		t.Fatalf("defaults: %+v %v", config, err)
+	}
+	body := "usage:\n  month_start_day: 15\n  price_updates: false\n  claude_prices:\n    opus-5.5: { input: 4, output: 20 }\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	config, err = Load(path)
+	if err != nil || config.Usage.StartDay() != 15 || config.Usage.PriceUpdatesEnabled() || config.Usage.ClaudePrices["opus-5.5"].Output != 20 {
+		t.Fatalf("usage block: %+v %v", config.Usage, err)
+	}
+	for _, bad := range []string{"usage:\n  month_start_day: 29\n", "usage:\n  month_start_day: -1\n", "usage:\n  claude_prices:\n    opus-5.5: { input: 4 }\n", "usage:\n  month_starts: 3\n"} {
+		if err := os.WriteFile(path, []byte(bad), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Load(path); err == nil {
+			t.Fatalf("accepted %q", bad)
+		}
+	}
+}
+
 func TestEnsureExampleNeverOverwritesAndParses(t *testing.T) {
 	path := filepath.Join(t.TempDir(), FileName)
 	if err := EnsureExample(path); err != nil {

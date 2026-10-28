@@ -159,6 +159,15 @@ func TestUpdateConfigFieldPreservesCommentsAndValidates(t *testing.T) {
 	if config, err = UpdateConfigField(directory, "keep-id", "color", ""); err != nil || config.Color != "" {
 		t.Fatalf("clearing color: %+v, %v", config, err)
 	}
+	if config, err = UpdateConfigField(directory, "keep-id", "auto_resume", "true"); err != nil || !config.AutoResume {
+		t.Fatalf("setting auto_resume: %+v, %v", config, err)
+	}
+	if config, err = UpdateConfigField(directory, "keep-id", "auto_resume", ""); err != nil || config.AutoResume {
+		t.Fatalf("clearing auto_resume: %+v, %v", config, err)
+	}
+	if _, err := UpdateConfigField(directory, "keep-id", "auto_resume", "yes"); err == nil {
+		t.Fatal("invalid auto_resume accepted")
+	}
 	for _, bad := range [][2]string{{"color", "red"}, {"name", "  "}, {"name", strings.Repeat("x", 81)}, {"tool", "x"}} {
 		if _, err := UpdateConfigField(directory, "keep-id", bad[0], bad[1]); err == nil {
 			t.Fatalf("UpdateConfigField(%q, %q) should fail", bad[0], bad[1])

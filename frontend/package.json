@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc -b && vite build",
+    "check:tokens": "node scripts/check-tokens.mjs",
     "dev": "vite"
   },
   "dependencies": {

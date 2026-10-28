@@ -98,6 +98,16 @@
     state is never copied. YAML comments are not preserved in the copy.
   - Local attention alerts: see
     [`22-local-attention-notifications.md`](./22-local-attention-notifications.md).
+  - Token and cost usage: per-session never-reset totals and monthly totals
+    (all sessions, per harness; deleted sessions included) read from harness
+    logs; Copilot cost exact, Claude cost a list-price estimate with daily
+    web price refresh (opt-out). See
+    [`12-storage-layout.md`](./12-storage-layout.md) and
+    [`11-security-model.md`](./11-security-model.md). Design note: the ledger
+    lives in `internal/usage` with its own connection to `state.db`; ingest runs
+    on UI polls (throttled ~2 s), not a background loop; Copilot records
+    on UI polls (throttled ~2 s), not a background loop; Copilot records
+    without `totalNanoAiu` are unpriced rather than estimated.
 - **Shutdown/recovery:** a repeated native test verifies process, job, and
   input/output pipe handles are invalidated after ConPTY close; the opaque
   pseudoconsole is checked through successful close and cleared state. Wails-

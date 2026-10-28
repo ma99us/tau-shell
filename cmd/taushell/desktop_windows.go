@@ -24,6 +24,7 @@ import (
 	"github.com/ma99us/tau-shell/internal/session"
 	"github.com/ma99us/tau-shell/internal/sessionhost"
 	"github.com/ma99us/tau-shell/internal/tools"
+	"github.com/ma99us/tau-shell/internal/usage"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/logger"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -54,6 +55,8 @@ type App struct {
 	shutdownInProgress     bool
 	allowShutdown          bool
 	installMu              sync.Mutex
+	updatesMu              sync.Mutex
+	toolUpdates            map[string]string
 	toolInstaller          *tools.Installer
 	openURL                func(context.Context, string)
 	openFile               func(string) error
@@ -64,6 +67,9 @@ type App struct {
 type desktopSessionManager interface {
 	List(context.Context) ([]sessionhost.Snapshot, error)
 	HarnessModel(context.Context, string) (string, error)
+	SessionUsage(context.Context, string) (usage.SessionUsage, error)
+	UsageSummary(context.Context) (usage.Summary, error)
+	StartPriceUpdates(context.Context)
 	Start(context.Context, string, bool, int, int) (sessionhost.Snapshot, error)
 	StartFresh(context.Context, string, int, int) (sessionhost.Snapshot, error)
 	Write(string, []byte) error
@@ -71,6 +77,8 @@ type desktopSessionManager interface {
 	Stop(context.Context, string) error
 	Delete(context.Context, string) error
 	UpdateDisplay(id, field, value string) error
+	AutoResumeAll(ctx context.Context) (bool, error)
+	SetAutoResumeAll(ctx context.Context, enabled bool) error
 	SetOrder(context.Context, []string) error
 	PlaceAfter(ctx context.Context, id, afterID string) error
 	StopAll(context.Context) error
@@ -156,6 +164,8 @@ func (application *App) startup(ctx context.Context) {
 	application.ctx = ctx
 	application.initAttention()
 	diagnostics.Info("desktop UI ready", "webview2_version", application.webViewVersion)
+	application.manager.StartPriceUpdates(ctx)
+	application.startToolUpdateChecks(ctx)
 }
 
 func (application *App) publish(event sessionhost.Event) {
@@ -430,6 +440,40 @@ func (application *App) SetSessionColor(id, color string) (err error) {
 		}
 	}()
 	return application.manager.UpdateDisplay(id, "color", color)
+}
+
+// SetSessionAutoResume turns the per-session "resume on startup" flag on or off.
+func (application *App) SetSessionAutoResume(id string, enabled bool) (err error) {
+	defer func() {
+		if err != nil {
+			diagnostics.Error("set session auto resume failed", err, "session_id", id)
+		}
+	}()
+	value := ""
+	if enabled {
+		value = "true"
+	}
+	return application.manager.UpdateDisplay(id, "auto_resume", value)
+}
+
+// GetAutoResumeAll reports the global "resume all sessions on startup" preference.
+func (application *App) GetAutoResumeAll() (enabled bool, err error) {
+	defer func() {
+		if err != nil {
+			diagnostics.Error("read auto resume all failed", err)
+		}
+	}()
+	return application.manager.AutoResumeAll(context.Background())
+}
+
+// SetAutoResumeAll saves the global "resume all sessions on startup" preference.
+func (application *App) SetAutoResumeAll(enabled bool) (err error) {
+	defer func() {
+		if err != nil {
+			diagnostics.Error("save auto resume all failed", err)
+		}
+	}()
+	return application.manager.SetAutoResumeAll(context.Background(), enabled)
 }
 
 func (application *App) StartSession(id string, columns, rows int) (snapshot sessionhost.Snapshot, err error) {

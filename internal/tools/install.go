@@ -29,6 +29,8 @@ type Installer struct {
 	LookPath  func(string) (string, error)
 	Confirm   func(spec Spec) (bool, error)
 	RunWinget func(ctx context.Context, winget string, args []string) error
+	// ConfirmUpdate asks the user before an upgrade; only Upgrade uses it.
+	ConfirmUpdate func(spec Spec, available string) (bool, error)
 	// RefreshPath picks up PATH entries added by the installer.
 	RefreshPath func() error
 	Detect      func(ctx context.Context, spec Spec) Status

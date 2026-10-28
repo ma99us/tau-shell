@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/ma99us/tau-shell/internal/diagnostics"
 	"github.com/ma99us/tau-shell/internal/harness"
 	"github.com/ma99us/tau-shell/internal/session"
+	"github.com/ma99us/tau-shell/internal/usage"
 )
 
 const (
@@ -47,6 +49,7 @@ type Snapshot struct {
 	ID          string                `json:"id"`
 	Name        string                `json:"name"`
 	Color       string                `json:"color,omitempty"`
+	AutoResume  bool                  `json:"autoResume"`
 	Tool        session.Harness       `json:"tool"`
 	WorkingDir  string                `json:"workingDir"`
 	Status      session.RuntimeStatus `json:"status"`
@@ -93,6 +96,11 @@ type Manager struct {
 	sessions        map[string]*managedSession
 	closed          bool
 	storeClosed     bool
+	ledger          *usage.Ledger
+	prices          *usage.PriceStore
+	usageMu         sync.Mutex
+	lastIngest      map[string]time.Time
+	cancelPrices    context.CancelFunc
 }
 
 func New(configDirectory, databasePath string, emit func(Event)) (*Manager, error) {
@@ -103,7 +111,7 @@ func New(configDirectory, databasePath string, emit func(Event)) (*Manager, erro
 	if err != nil {
 		return nil, err
 	}
-	return &Manager{
+	manager := &Manager{
 		configDirectory: configDirectory,
 		store:           store,
 		closeStore:      store.Close,
@@ -120,7 +128,9 @@ func New(configDirectory, databasePath string, emit func(Event)) (*Manager, erro
 			return process, nil
 		},
 		sessions: make(map[string]*managedSession),
-	}, nil
+	}
+	manager.openUsage(databasePath)
+	return manager, nil
 }
 
 // HarnessModel reports the model the harness last recorded for the session,
@@ -152,6 +162,7 @@ func (manager *Manager) List(ctx context.Context) ([]Snapshot, error) {
 			ID:          config.ID,
 			Name:        config.Name,
 			Color:       config.Color,
+			AutoResume:  config.AutoResume,
 			Tool:        config.Tool,
 			WorkingDir:  config.WorkingDir,
 			Status:      runtime.Status,
@@ -253,7 +264,20 @@ func (manager *Manager) PlaceAfter(ctx context.Context, id, afterID string) erro
 	return manager.store.SetSessionOrder(ctx, ids)
 }
 
-// UpdateDisplay persists a new name or color ("name" or "color") for a session
+const autoResumeAllSetting = "auto_resume_all"
+
+// AutoResumeAll reports the global "resume every session on startup" preference.
+func (manager *Manager) AutoResumeAll(ctx context.Context) (bool, error) {
+	value, err := manager.store.Setting(ctx, autoResumeAllSetting)
+	return value == "true", err
+}
+
+// SetAutoResumeAll saves the global startup auto-resume preference.
+func (manager *Manager) SetAutoResumeAll(ctx context.Context, enabled bool) error {
+	return manager.store.SetSetting(ctx, autoResumeAllSetting, strconv.FormatBool(enabled))
+}
+
+// UpdateDisplay persists a new name, color or auto_resume value for a session
 // and applies it to the running session, if any, without touching its process.
 func (manager *Manager) UpdateDisplay(id, field, value string) error {
 	config, err := session.UpdateConfigField(manager.configDirectory, id, field, value)
@@ -264,6 +288,7 @@ func (manager *Manager) UpdateDisplay(id, field, value string) error {
 		current.mu.Lock()
 		current.config.Name = config.Name
 		current.config.Color = config.Color
+		current.config.AutoResume = config.AutoResume
 		current.mu.Unlock()
 	}
 	return nil
@@ -274,6 +299,8 @@ func (manager *Manager) Start(ctx context.Context, id string, restoring bool, co
 }
 
 func (manager *Manager) StartFresh(ctx context.Context, id string, columns, rows int) (Snapshot, error) {
+	// Capture the old conversation's unread tail before its ID is replaced.
+	manager.ingestSession(ctx, id, true)
 	return manager.start(ctx, id, false, true, columns, rows)
 }
 
@@ -418,11 +445,21 @@ func (manager *Manager) Delete(ctx context.Context, id string) error {
 	if runtime.Status == session.StatusRunning || runtime.Status == session.StatusStarting {
 		return fmt.Errorf("session %q is active in another TauShell process", id)
 	}
+	manager.ingestSession(ctx, id, true)
 	if err := session.DeleteConfig(manager.configDirectory, id); err != nil {
 		return err
 	}
 	delete(manager.sessions, id)
-	return manager.store.Delete(ctx, id)
+	if err := manager.store.Delete(ctx, id); err != nil {
+		return err
+	}
+	if manager.ledger != nil {
+		// Deleted sessions keep counting toward monthly totals.
+		if err := manager.ledger.Tombstone(id, time.Now()); err != nil {
+			diagnostics.Warn("usage tombstone failed", err, "session_id", id)
+		}
+	}
+	return nil
 }
 
 func (manager *Manager) Stop(ctx context.Context, id string) error {
@@ -492,6 +529,7 @@ func (manager *Manager) Close(ctx context.Context) error {
 	closeErr := manager.closeStore()
 	if closeErr == nil {
 		manager.storeClosed = true
+		closeErr = manager.closeUsage()
 	}
 	manager.mu.Unlock()
 	return closeErr
@@ -781,6 +819,7 @@ func (current *managedSession) snapshot() Snapshot {
 		ID:          current.config.ID,
 		Name:        current.config.Name,
 		Color:       current.config.Color,
+		AutoResume:  current.config.AutoResume,
 		Tool:        current.config.Tool,
 		WorkingDir:  current.config.WorkingDir,
 		Status:      current.status,

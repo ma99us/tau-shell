@@ -100,6 +100,7 @@ export function HarnessToolbar({ session, widgets, modelSupported, send, interru
   const [presets, setPresets] = useState<ResolvedPreset[] | null>(null);
   const [presetError, setPresetError] = useState("");
   const [customModel, setCustomModel] = useState("");
+  const [confirmClear, setConfirmClear] = useState(false);
   const loadPresets = () => {
     app().GetPresets(session.id)
       .then((list) => { setPresets(list ?? []); setPresetError(""); })
@@ -139,8 +140,14 @@ export function HarnessToolbar({ session, widgets, modelSupported, send, interru
       </>}
     </ToolbarMenu>}
     <button className="text-button terminal-action" title="Compact the conversation" onClick={() => send(widgets.compactText, true, widgets.compactText)}>Compact</button>
-    <button className="text-button terminal-action" title="Interrupt the harness (Esc)" onClick={interrupt}>Interrupt</button>
-  </div>;
+        <button className="text-button terminal-action" title="Clear the conversation (asks first)" onClick={() => setConfirmClear(true)}>Clear</button>
+        <button className="text-button terminal-action" title="Interrupt the harness (Esc)" onClick={interrupt}>Interrupt</button>
+        {confirmClear && <div className="modal-backdrop"><div className="modal confirm-modal">
+          <div className="modal-heading"><div><p className="eyebrow">CLEAR CONVERSATION</p><h2>Clear the current context?</h2></div></div>
+          <p className="muted">This sends <strong>{widgets.clearText}</strong> to <strong>{session.name}</strong>. The harness will discard the current conversation context, and it cannot be brought back from within the harness.</p>
+          <div className="modal-actions"><button className="secondary-button" autoFocus onClick={() => setConfirmClear(false)}>Cancel</button><button className="danger-button" onClick={() => { setConfirmClear(false); send(widgets.clearText, true, widgets.clearText); }}>Clear context</button></div>
+        </div></div>}
+      </div>;
 }
 
 export function CommandPalette({ items, onClose }: { items: PaletteItem[]; onClose: () => void }) {

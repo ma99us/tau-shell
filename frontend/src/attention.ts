@@ -43,6 +43,52 @@ function lastRows(terminal: Terminal, count: number): string[] {
   return rows;
 }
 
+const sentenceEnd = /[.!?:;]$/;
+
+// Text typed in the harness input, or "" when the input is empty. Both harnesses
+// are Ink UIs: they hide the terminal cursor and draw their own, so the cursor
+// position is useless. Instead find the lowest input row and read its cells,
+// skipping dim (placeholder) and inverse (drawn cursor) cells. The input row starts
+// with a prompt ("> ", "\u276F ", possibly inside a box border, as in Claude Code) or
+// a left bar in column 0 (Copilot CLI).
+export function readDraft(terminal: Terminal): string {
+  const buffer = terminal.buffer.active;
+  const end = buffer.baseY + terminal.rows;
+  const cell = buffer.getNullCell();
+  for (let y = end - 1; y >= Math.max(0, end - 12); y--) {
+    const line = buffer.getLine(y);
+    if (!line) continue;
+    const marker = /^(?:[\u2502\u2503\u2551\u2580-\u259F|]|[\u2502\u2503|]?\s*[>\u276F\u203A])(?:\s|$)/.exec(line.translateToString(true));
+    if (!marker) continue;
+    let text = "";
+    for (let x = marker[0].length; x < line.length; x++) {
+      const current = line.getCell(x, cell);
+      if (!current || current.isDim() || current.isInverse()) continue;
+      text += current.getChars() || " ";
+    }
+    return text.replace(/[\s\u2502\u2503|]+$/, "");
+  }
+  return "";
+}
+
+// Joins text we inject with what the user already typed: separate it from the
+// draft by ". " when needed, and leave ". " after an insert-only prompt so the
+// user can keep typing. Slash and shell commands are passed through untouched.
+export function composeInjection(draft: string, text: string, submit: boolean): string {
+  if (/^\s*[/!]/.test(text)) return text;
+  let out = text;
+  if (draft.trim()) {
+    const endsWithSpace = /\s$/.test(draft);
+    const punctuation = sentenceEnd.test(draft.trimEnd()) || endsWithSpace ? "" : ".";
+    out = `${punctuation}${endsWithSpace ? "" : " "}${out}`;
+  }
+  if (!submit) {
+    const body = out.trimEnd();
+    out = `${body}${sentenceEnd.test(body) ? "" : "."} `;
+  }
+  return out;
+}
+
 // Harness-specific cues only: terminal title for Claude Code, the status/footer
 // row (last two rows, never the whole screen) for Copilot CLI.
 export function readHarnessSignal(tool: string, terminal: Terminal | undefined, title: string): HarnessSignal {
