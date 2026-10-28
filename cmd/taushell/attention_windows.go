@@ -34,6 +34,7 @@ var (
 	procEnumWindows              = user32.NewProc("EnumWindows")
 	procGetWindowThreadProcessID = user32.NewProc("GetWindowThreadProcessId")
 	procIsWindowVisible          = user32.NewProc("IsWindowVisible")
+	procIsIconic                 = user32.NewProc("IsIconic")
 	procGetWindowTextW           = user32.NewProc("GetWindowTextW")
 )
 
@@ -175,7 +176,14 @@ func (application *App) initAttention() {
 			diagnostics.Warn("toast response failed", result.Error)
 			return
 		}
-		runtime.WindowUnminimise(application.ctx)
+		// Wails' WindowUnminimise sends SW_RESTORE unconditionally, which also
+		// un-maximizes a window that is merely behind others. Restore only when
+		// the window is actually minimized (that restores to the prior state).
+		if hwnd := mainWindowHandle(); hwnd == 0 {
+			runtime.WindowUnminimise(application.ctx)
+		} else if iconic, _, _ := procIsIconic.Call(uintptr(hwnd)); iconic != 0 {
+			runtime.WindowUnminimise(application.ctx)
+		}
 		runtime.WindowShow(application.ctx)
 		if sessionID, ok := result.Response.UserInfo["sessionId"].(string); ok && sessionID != "" {
 			runtime.EventsEmit(application.ctx, focusSessionEvnt, sessionID)

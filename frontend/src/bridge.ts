@@ -47,7 +47,7 @@ export type ToolStatus = {
   warnings: string[] | null;
   error?: string;
   widgets?: HarnessWidgets;
-  install: { wingetId?: string; source?: string; vendorUrl: string };
+  install: { wingetId?: string; npmPackage?: string; source?: string; vendorUrl: string };
 };
 
 export type HarnessWidgets = {
@@ -72,10 +72,17 @@ export type InstallResult = {
   status?: ToolStatus;
 };
 
+export type ShutdownProgress = {
+  phase: "stopping" | "done";
+  sessions: { name: string; state: "stopping" | "stopped" | "force-stopped" }[];
+  elapsedSeconds: number;
+};
+
 export type SystemStatus = {
   webView2Version: string;
   diagnosticsLogPath: string;
   wingetAvailable: boolean;
+  npmAvailable: boolean;
   tools: ToolStatus[];
 };
 

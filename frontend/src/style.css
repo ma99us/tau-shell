@@ -1394,6 +1394,77 @@ h3 {
   width: min(100%, 470px);
 }
 
+.shutdown-backdrop {
+  z-index: 30;
+}
+
+.shutdown-modal {
+  width: min(100%, 440px);
+}
+
+.shutdown-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.shutdown-heading h2,
+.shutdown-heading .eyebrow {
+  margin: 0;
+}
+
+.shutdown-mark {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-7);
+}
+
+.shutdown-bar {
+  height: 6px;
+  margin-top: 14px;
+  overflow: hidden;
+  border-radius: var(--radius-20);
+  background: var(--border-hover);
+}
+
+.shutdown-bar-fill {
+  height: 100%;
+  background: var(--accent-text-4);
+  transition: width 0.3s ease;
+}
+
+.shutdown-count {
+  margin: 6px 0 10px;
+  font-size: var(--fs-11);
+}
+
+.shutdown-list {
+  display: grid;
+  gap: 6px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.shutdown-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-13);
+}
+
+.shutdown-row strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shutdown-state {
+  color: var(--text-7);
+  font-size: var(--fs-11);
+}
+
 .modal-heading {
   display: flex;
   align-items: flex-start;

@@ -91,6 +91,7 @@ type SystemStatus struct {
 	WebView2Version    string         `json:"webView2Version"`
 	DiagnosticsLogPath string         `json:"diagnosticsLogPath"`
 	WingetAvailable    bool           `json:"wingetAvailable"`
+	NpmAvailable       bool           `json:"npmAvailable"`
 	Tools              []tools.Status `json:"tools"`
 }
 
@@ -201,10 +202,12 @@ func (application *App) GetSessions() (snapshots []sessionhost.Snapshot, err err
 
 func (application *App) GetSystemStatus() SystemStatus {
 	_, wingetErr := exec.LookPath("winget.exe")
+	_, npmErr := exec.LookPath("npm.cmd")
 	status := SystemStatus{
 		WebView2Version:    application.webViewVersion,
 		DiagnosticsLogPath: diagnostics.LogPath(),
 		WingetAvailable:    wingetErr == nil,
+		NpmAvailable:       npmErr == nil,
 		Tools:              tools.DetectAll(context.Background(), tools.DefaultEnvironment()),
 	}
 	for _, tool := range status.Tools {
@@ -763,6 +766,8 @@ func (application *App) confirmShutdown(ctx context.Context) bool {
 	}
 	stopCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
+	finishProgress := application.trackShutdownProgress(active)
+	defer finishProgress()
 	if err := application.manager.StopAll(stopCtx); err != nil {
 		diagnostics.Error("stop sessions for shutdown failed", err)
 		_, dialogErr := application.messageDialog(ctx, runtime.MessageDialogOptions{

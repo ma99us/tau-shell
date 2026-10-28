@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { app, DialogRequest, HarnessWidgets, InstallResult, LaunchPreview, Session, SessionEvent, SkillsView, SystemStatus, ToolStatus } from "./bridge";
+import { app, DialogRequest, HarnessWidgets, InstallResult, LaunchPreview, Session, SessionEvent, ShutdownProgress, SkillsView, SystemStatus, ToolStatus } from "./bridge";
 import "./theme/tokens.css";
 import "./style.css";
 import { theme } from "./theme/theme";
@@ -165,6 +165,7 @@ function App() {
   const [deleteRequest, setDeleteRequest] = useState<Session | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; session: Session } | null>(null);
   const [dialogs, setDialogs] = useState<DialogRequest[]>([]);
+  const [shutdown, setShutdown] = useState<ShutdownProgress | null>(null);
   const [renameRequest, setRenameRequest] = useState<Session | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState<{ sessionId: string; message: string; isError: boolean } | null>(null);
@@ -262,8 +263,9 @@ function App() {
       if (target) openTab(target);
     }, -1);
     runtime.EventsOnMultiple("settings-error", (message: string) => showError("settings", new Error(message + " (using default settings)")), -1);
+    runtime.EventsOnMultiple("shutdown-progress", (progress: ShutdownProgress) => setShutdown(progress.phase === "done" ? null : progress), -1);
     app().DialogHostReady().then((pending) => pending.forEach(add)).catch((err) => showError("ui.dialog-host", err));
-    return () => { runtime.EventsOff("dialog-request"); runtime.EventsOff("focus-session"); runtime.EventsOff("settings-error"); };
+    return () => { runtime.EventsOff("dialog-request"); runtime.EventsOff("focus-session"); runtime.EventsOff("settings-error"); runtime.EventsOff("shutdown-progress"); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -737,6 +739,7 @@ function App() {
         </div>
       </div></div>}
       {dialogs[0] && <AppDialog request={dialogs[0]} onAnswer={(choice) => answerDialog(dialogs[0], choice)} />}
+      {shutdown && <ShutdownPopup progress={shutdown} />}
       {palette && <CommandPalette items={palette} onClose={() => setPalette(null)} />}
     </div>
   );
@@ -759,6 +762,24 @@ function AppDialog({ request, onAnswer }: { request: DialogRequest; onAnswer: (c
     <p className="muted dialog-message">{request.message}</p>
     <div className="modal-actions">{request.buttons.map((button) =>
       <button key={button} autoFocus={button === initial} className={button === initial ? "primary-button" : "secondary-button"} onClick={() => onAnswer(button)}>{button}</button>)}</div>
+  </div></div>;
+}
+
+const shutdownStateLabel = { stopping: "Stopping...", stopped: "Stopped", "force-stopped": "Force-stopped" } as const;
+
+function ShutdownPopup({ progress }: { progress: ShutdownProgress }) {
+  const total = progress.sessions.length;
+  const finished = progress.sessions.filter((session) => session.state !== "stopping").length;
+  return <div className="modal-backdrop shutdown-backdrop" role="alertdialog" aria-modal="true" aria-labelledby="shutdown-title"><div className="modal shutdown-modal">
+    <div className="shutdown-heading"><img className="shutdown-mark" src={appIcon} alt="" />
+      <div><p className="eyebrow">SHUTTING DOWN</p><h2 id="shutdown-title">Closing TauShell</h2></div></div>
+    <p className="muted dialog-message">Asking each session to exit cleanly. Anything still running after a short wait is force-stopped.</p>
+    <div className="shutdown-bar" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={finished}><div className="shutdown-bar-fill" style={{ width: `${total ? (finished / total) * 100 : 0}%` }} /></div>
+    <p className="muted shutdown-count">{finished} of {total} stopped - {progress.elapsedSeconds}s</p>
+    <div className="shutdown-list">{progress.sessions.map((session, index) => <div key={`${session.name}-${index}`} className="shutdown-row">
+      {session.state === "stopping" ? <span className="spinner" aria-hidden="true" /> : <span className={`status-dot ${session.state === "stopped" ? "online" : "warn"}`} />}
+      <strong>{session.name}</strong><span className={`shutdown-state ${session.state === "force-stopped" ? "status-warn-text" : ""}`}>{shutdownStateLabel[session.state]}</span>
+    </div>)}</div>
   </div></div>;
 }
 
@@ -932,7 +953,7 @@ function Home({ sessions, loaded, autoResumeAll, onAutoResumeAll, onAutoResume, 
             <label className="check-option" title={autoResumeAll ? "All sessions auto-resume (global setting is on)" : "Resume this session when TauShell starts"}><input type="checkbox" checked={session.autoResume || autoResumeAll} disabled={autoResumeAll} onChange={(event) => onAutoResume(session, event.target.checked)} />Auto resume</label>
           </div>
         </article>)}</div>}
-      <div className="tools-panel"><div className="tools-header"><div><h2>Installed tools</h2><p className="muted">Detected on this machine{status && !status.wingetAvailable && " \u2014 winget is unavailable; Install uses vendor setup links instead"}</p></div><div className="refresh-group">{tools.refreshing && <span className="spinner" role="status" aria-label="Refreshing" />}<button className="secondary-button" disabled={tools.refreshing} title="Reload sessions, re-detect tools and check for tool updates" onClick={onRefresh}>Refresh</button></div></div><div className="tool-list">
+      <div className="tools-panel"><div className="tools-header"><div><h2>Tools</h2><p className="muted">Supported tools detected on this machine. Use Install on any that are missing{status && !status.wingetAvailable && " \u2014 winget is unavailable, so winget tools use vendor setup links"}{status && !status.npmAvailable && " \u2014 npm (Node.js) is unavailable, so npm tools use vendor setup links"}</p></div><div className="refresh-group">{tools.refreshing && <span className="spinner" role="status" aria-label="Refreshing" />}<button className="secondary-button" disabled={tools.refreshing} title="Reload sessions, re-detect tools and check for tool updates" onClick={onRefresh}>Refresh</button></div></div><div className="tool-list">
         {status?.tools.map((tool) => <ToolRow key={tool.id} tool={tool} actions={tools} />) ?? <div className="loading-card" role="status"><span className="spinner" aria-hidden="true" /><span className="muted">Detecting tools...</span></div>}
       </div></div>
       <SkillsPanel skills={skills} unsupportedNote={skills.view?.unsupported} />
@@ -1033,6 +1054,20 @@ function Setup({ powershell, actions, onRecheck, onContinue }: {
   </div>;
 }
 
+// Mirrors the Go installer: winget when a package is declared, otherwise npm.
+function canAutoInstall(tool: ToolStatus, status: SystemStatus | null): boolean {
+  if (tool.install.wingetId) return !!status?.wingetAvailable;
+  return !!tool.install.npmPackage && !!status?.npmAvailable;
+}
+
+function installHint(tool: ToolStatus, status: SystemStatus | null): string {
+  if (canAutoInstall(tool, status)) {
+    return `Install ${tool.name} with ${tool.install.wingetId ? "winget" : "npm"} (asks first)`;
+  }
+  if (!tool.install.wingetId && tool.install.npmPackage) return `${tool.name} installs with npm, which was not found. Install Node.js, or use the vendor page.`;
+  return `winget was not found. Open the vendor setup instructions for ${tool.name}.`;
+}
+
 function ToolRow({ tool, actions }: { tool: ToolStatus; actions: ToolActions }) {
   const usable = toolUsable(tool);
   const label = tool.installed ? tool.version || "Installed" : "Not found";
@@ -1049,8 +1084,8 @@ function ToolRow({ tool, actions }: { tool: ToolStatus; actions: ToolActions }) 
     {unavailableCapabilities.length > 0 && <span className="tool-warning">missing: {unavailableCapabilities.map((capability) => capability.option).join(", ")}</span>}
     {    isHarness(tool.id) && <button className="sidebar-toggle tool-gear" aria-label={`Open ${tool.name} config file`} title={`Open ${tool.name} config file in your default editor`} onClick={() => void app().OpenToolConfig(tool.id).catch((err) => actions.onError(err))}><GearIcon /></button>}
     {tool.installed && actions.updates[tool.id] && <button className="secondary-button tool-action tool-update" disabled={installing || actions.installing !== ""} title={`Update ${tool.name} to ${actions.updates[tool.id]} with winget (asks first)`} onClick={() => actions.onUpdate(tool)}>{installing ? "Updating..." : `Update to ${actions.updates[tool.id]}`}</button>}
-    {!tool.installed && <button className="secondary-button tool-action" disabled={installing} onClick={() => actions.onInstall(tool)}>
-      {installing ? "Installing..." : tool.install.wingetId && actions.status?.wingetAvailable ? "Install" : "Setup instructions"}
+    {!tool.installed && <button className="secondary-button tool-action" disabled={installing} title={installHint(tool, actions.status)} onClick={() => actions.onInstall(tool)}>
+      {installing ? "Installing..." : canAutoInstall(tool, actions.status) ? "Install" : "Setup instructions"}
     </button>}
     {!tool.installed && <button className="text-button" onClick={() => actions.onOpenSetup(tool)}>Vendor page</button>}
   </div>;
