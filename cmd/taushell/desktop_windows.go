@@ -23,6 +23,7 @@ import (
 	"github.com/ma99us/tau-shell/internal/harness"
 	"github.com/ma99us/tau-shell/internal/session"
 	"github.com/ma99us/tau-shell/internal/sessionhost"
+	"github.com/ma99us/tau-shell/internal/skills"
 	"github.com/ma99us/tau-shell/internal/tools"
 	"github.com/ma99us/tau-shell/internal/usage"
 	"github.com/wailsapp/wails/v2"
@@ -57,6 +58,7 @@ type App struct {
 	installMu              sync.Mutex
 	updatesMu              sync.Mutex
 	toolUpdates            map[string]string
+	skills                 *skills.Library
 	toolInstaller          *tools.Installer
 	openURL                func(context.Context, string)
 	openFile               func(string) error
@@ -115,11 +117,13 @@ func runDesktop() error {
 		return fmt.Errorf("load embedded desktop assets: %w", err)
 	}
 	application := &App{configDirectory: configDirectory, webViewVersion: version}
-	application.manager, err = sessionhost.New(configDirectory, databasePath, application.publish)
+	manager, err := sessionhost.New(configDirectory, databasePath, application.publish)
 	if err != nil {
 		diagnostics.Error("initialize session manager failed", err)
 		return fmt.Errorf("initialize session manager: %w", err)
 	}
+	application.manager = manager
+	application.initSkills(manager)
 	diagnostics.Info("desktop window starting", "webview2_version", version)
 	runErr := wails.Run(&options.App{
 		Title:              "TauShell",
@@ -166,6 +170,7 @@ func (application *App) startup(ctx context.Context) {
 	diagnostics.Info("desktop UI ready", "webview2_version", application.webViewVersion)
 	application.manager.StartPriceUpdates(ctx)
 	application.startToolUpdateChecks(ctx)
+	application.startSkillChecks(ctx)
 }
 
 func (application *App) publish(event sessionhost.Event) {

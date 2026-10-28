@@ -89,7 +89,37 @@ export type LaunchPreview = {
   warnings: string[];
 };
 
+export type SkillRow = {
+  name: string;
+  description: string;
+  source: string;
+  enabled: boolean;
+  personal?: string[];
+};
+
+export type SkillsStatus = {
+  enabled: boolean;
+  repo?: string;
+  ref?: string;
+  source: string;
+  applied?: string;
+  latest?: string;
+  updateAvailable: boolean;
+  message?: string;
+  warnings?: string[];
+};
+
+export type SkillsView = {
+  status: SkillsStatus;
+  skills: SkillRow[];
+  unsupported?: string[];
+};
+
 type WailsApp = {
+  GetSkills(): Promise<SkillsView>;
+  CheckSkills(): Promise<SkillsView>;
+  UpdateSkills(): Promise<SkillsView>;
+  SetSkillEnabled(name: string, enabled: boolean): Promise<void>;
   GetSessions(): Promise<Session[]>;
   GetSystemStatus(): Promise<SystemStatus>;
   InstallTool(id: string): Promise<InstallResult>;

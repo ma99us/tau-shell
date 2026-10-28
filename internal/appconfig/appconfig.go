@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/ma99us/tau-shell/internal/skills"
 	"gopkg.in/yaml.v3"
 )
 
@@ -24,6 +25,51 @@ type Config struct {
 	Version       int           `yaml:"version"`
 	Notifications Notifications `yaml:"notifications"`
 	Usage         Usage         `yaml:"usage"`
+	Skills        Skills        `yaml:"skills"`
+}
+
+// Skills controls the skill library TauShell loads into harness sessions.
+// Repo is a pointer so an explicit empty string can turn fetching off.
+type Skills struct {
+	Enabled      *bool    `yaml:"enabled,omitempty"`
+	Repo         *string  `yaml:"repo,omitempty"`
+	Ref          string   `yaml:"ref,omitempty"`
+	AutoUpdate   bool     `yaml:"auto_update,omitempty"`
+	LocalSources []string `yaml:"local_sources,omitempty"`
+}
+
+// Resolve applies defaults and returns the library configuration.
+func (s Skills) Resolve() skills.Config {
+	config := skills.DefaultConfig()
+	if s.Enabled != nil {
+		config.Enabled = *s.Enabled
+	}
+	if s.Repo != nil {
+		config.Repo = *s.Repo
+	}
+	if s.Ref != "" {
+		config.Ref = s.Ref
+	}
+	config.AutoUpdate = s.AutoUpdate
+	config.LocalSources = s.LocalSources
+	return config
+}
+
+func (s Skills) validate() error {
+	if s.Repo != nil && *s.Repo != "" {
+		if _, _, err := skills.ParseRepo(*s.Repo); err != nil {
+			return err
+		}
+	}
+	if s.Ref != "" && !skills.ValidRef(s.Ref) {
+		return fmt.Errorf("skills.ref %q is not a safe ref name", s.Ref)
+	}
+	for _, dir := range s.LocalSources {
+		if !filepath.IsAbs(dir) {
+			return fmt.Errorf("skills.local_sources entry %q must be an absolute path", dir)
+		}
+	}
+	return nil
 }
 
 // PriceOverride is a hand-set Claude price in USD per million tokens. Omitted
@@ -91,6 +137,9 @@ func Load(path string) (Config, error) {
 	if err := parsed.Usage.validate(); err != nil {
 		return Config{}, fmt.Errorf("%s: %w", filepath.Base(path), err)
 	}
+	if err := parsed.Skills.validate(); err != nil {
+		return Config{}, fmt.Errorf("%s: %w", filepath.Base(path), err)
+	}
 	return parsed, nil
 }
 
@@ -111,6 +160,18 @@ usage:
   # Override Claude prices (USD per million tokens). Cache prices are optional.
   # claude_prices:
   #   opus-5.5: { input: 4, output: 20, cache_write_5m: 5, cache_write_1h: 8, cache_read: 0.2 }
+
+skills:
+  # Load TauShell's skill library (from the ai-cookbook) into Claude Code and Copilot CLI sessions.
+  # enabled: true
+  # GitHub repository checked for newer skills (public, https only); "" turns all fetching off.
+  # repo: https://github.com/mgerdov-igt/ai-cookbook
+  # ref: main
+  # Apply new commits automatically instead of waiting for the Update skills button.
+  # auto_update: false
+  # Developer overrides: absolute paths to ai-cookbook checkouts, re-read at every launch.
+  # local_sources:
+  #   - C:\path\to\ai-cookbook
 `
 
 // EnsureExample creates the commented example file only when none exists.

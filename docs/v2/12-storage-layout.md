@@ -38,6 +38,13 @@ The YAML file is the source of intended session configuration. The initial imple
 
 Secret vault, workspace/project registry, plugin packages, and terminal snapshots remain later-scope storage until their behavior is specified.
 
+## Skill library
+
+Under the TauShell data directory: `skills-state.json` (applied commit and
+disabled skill names; JSON rather than `app_settings`), `sources/<owner>-<repo>/<sha>/`
+(downloaded snapshots), and `plugins/<harness>/<hash>/` (immutable plugin
+folders passed to `--plugin-dir`; old ones are garbage-collected).
+
 The tab manager currently keeps its open tabs and selected tab in memory for
 the duration of the process. It does not persist the UI layout across
 restarts; adding that UI metadata remains separate from session YAML and

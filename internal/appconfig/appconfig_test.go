@@ -6,6 +6,36 @@ import (
 	"testing"
 )
 
+func TestSkillsSettings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), FileName)
+	if config, err := Load(path); err != nil || config.Skills.Resolve().Repo == "" || !config.Skills.Resolve().Enabled {
+		t.Fatalf("defaults must fetch the cookbook: %+v %v", config.Skills.Resolve(), err)
+	}
+	good := "version: 1\nskills:\n  repo: \"\"\n  ref: dev\n  auto_update: true\n  local_sources: [" + filepath.Join(t.TempDir(), "cook") + "]\n"
+	if err := os.WriteFile(path, []byte(good), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	config, err := Load(path)
+	resolved := config.Skills.Resolve()
+	if err != nil || resolved.Repo != "" || resolved.Ref != "dev" || !resolved.AutoUpdate || len(resolved.LocalSources) != 1 {
+		t.Fatalf("resolved = %+v err=%v", resolved, err)
+	}
+	for _, bad := range []string{
+		"skills:\n  repo: http://github.com/a/b\n",
+		"skills:\n  repo: https://example.com/a/b\n",
+		"skills:\n  ref: ../x\n",
+		"skills:\n  local_sources: [relative/path]\n",
+		"skills:\n  unknown: 1\n",
+	} {
+		if err := os.WriteFile(path, []byte("version: 1\n"+bad), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Load(path); err == nil {
+			t.Fatalf("%q must be rejected", bad)
+		}
+	}
+}
+
 func TestLoadDefaultsAndFlags(t *testing.T) {
 	path := filepath.Join(t.TempDir(), FileName)
 	config, err := Load(path)

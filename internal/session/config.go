@@ -38,6 +38,8 @@ type Config struct {
 	// AutoResume resumes this session when TauShell starts, if it has a saved
 	// harness conversation. The Home tile checkbox edits it.
 	AutoResume  bool              `yaml:"auto_resume,omitempty"`
+	// Skills set to false keeps TauShell's skill library out of this session.
+	Skills      *bool             `yaml:"skills,omitempty"`
 	Tool        Harness           `yaml:"tool"`
 	WorkingDir  string            `yaml:"working_dir"`
 	LaunchArgs  []string          `yaml:"launch_args,omitempty"`
@@ -48,6 +50,10 @@ type Config struct {
 	// Presets are session-level prompt presets merged over the global
 	// prompts.yaml entries by name.
 	Presets []presets.Preset `yaml:"presets,omitempty"`
+}
+
+func (config Config) SkillsEnabled() bool {
+	return config.Skills == nil || *config.Skills
 }
 
 func (config Config) UTF8Enabled() bool {

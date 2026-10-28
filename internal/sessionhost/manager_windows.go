@@ -12,6 +12,7 @@ import (
 	"runtime/debug"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -101,6 +102,46 @@ type Manager struct {
 	usageMu         sync.Mutex
 	lastIngest      map[string]time.Time
 	cancelPrices    context.CancelFunc
+	skills          SkillProvider
+}
+
+// SkillProvider supplies the plugin folder holding TauShell's skills for a
+// harness. It never needs to succeed for a session to launch.
+type SkillProvider interface {
+	Prepare(harness string) (dir string, names, warnings []string, err error)
+}
+
+// SetSkills enables loading TauShell's skill library into new launches.
+func (manager *Manager) SetSkills(provider SkillProvider) {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	manager.skills = provider
+}
+
+// skillArgs returns the --plugin-dir arguments for one launch, or nil when
+// skills are off, unsupported, or unavailable. Problems are logged, never
+// fatal. The caller holds manager.mu.
+func (manager *Manager) skillArgs(ctx context.Context, config session.Config, executable string) []string {
+	if manager.skills == nil || !config.SkillsEnabled() {
+		return nil
+	}
+	if !harness.SupportsPluginDir(ctx, executable) {
+		diagnostics.Warn("harness does not support --plugin-dir; launching without TauShell skills", errors.New("unsupported flag"), "tool", config.Tool)
+		return nil
+	}
+	dir, names, warnings, err := manager.skills.Prepare(string(config.Tool))
+	if err != nil {
+		diagnostics.Warn("prepare TauShell skills failed; launching without them", err, "tool", config.Tool)
+		return nil
+	}
+	for _, warning := range warnings {
+		diagnostics.Warn("TauShell skill warning", errors.New(warning), "tool", config.Tool)
+	}
+	if dir == "" {
+		return nil
+	}
+	diagnostics.Info("TauShell skills attached", "session_id", config.ID, "tool", config.Tool, "plugin_dir", dir, "skills", strings.Join(names, ","))
+	return harness.PluginDirArgs(dir)
 }
 
 func New(configDirectory, databasePath string, emit func(Event)) (*Manager, error) {
@@ -358,6 +399,7 @@ func (manager *Manager) start(ctx context.Context, id string, restoring, fresh b
 	} else {
 		args = append(args, adapter.StartArgs(runtime.HarnessSessionID)...)
 	}
+	args = append(args, manager.skillArgs(ctx, config, harnessExecutable)...)
 	command := harness.PowerShellInvocation(harnessExecutable, args, config.Environment, config.UTF8Enabled())
 	if columns < 2 || rows < 2 {
 		columns, rows = 80, 24

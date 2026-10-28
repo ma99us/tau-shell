@@ -65,4 +65,24 @@ keystrokes typed into the harness: they are not confirmed by it, and the lists
 are tied to the tested version range. Adding a harness means declaring them or
 leaving `Widgets` nil, in which case the terminal simply has no widgets.
 
+### Skill library
+
+`internal/skills` provides one harness-neutral skill library. Sources, first
+match wins: local folders (`skills.local_sources`), the applied GitHub snapshot
+(`skills.repo`, default the ai-cookbook repo; its `tau-shell.yaml` lists the
+exposed skills and prompt presets, each preset gated by `skill:`), then the
+bundled snapshot (`internal/skills/bundled`, refreshed with
+`scripts/sync-cookbook-skills.ps1`). Skills the user already has personally
+(Claude `~/.claude/skills`, Copilot `~/.copilot/skills`, `~/.agents/skills`) are
+left out so the personal copy wins.
+
+At launch and resume the session manager asks the library for a content-hashed
+plugin folder (`.claude-plugin/plugin.json`, `plugin.json`, `skills/<name>`) and
+appends `--plugin-dir <dir>` after the adapter's own arguments. It is skipped
+when the session sets `skills: false`, when `--help` does not list
+`--plugin-dir`, or when preparing fails; each case is logged and never blocks
+launch. Tested: Copilot CLI 1.0.105 lists the skills; Claude Code 2.1.312
+validates the manifest only. `--resume` combined with `--plugin-dir` and
+same-name duplicates across sources are untested.
+
 Future adapters may add supported actions and state hints, but tool-specific behavior must remain out of the core session manager.

@@ -70,6 +70,10 @@ Do not put secrets in presets. `submit: true` presses Enter only when the
 harness is idle; see
 [`08-UI-Design.md`](../v1/08-UI-Design.md#10-harness-widgets).
 
+Skill library presets (from `tau-shell.yaml`) accept an extra `skill: <name>`
+field and appear only while that skill is available and enabled. Layering is
+library < global < session, by name.
+
 The isolated [`spikes/session-config/`](../../spikes/session-config/) prototype records the earlier validation of strict YAML parsing and the separate runtime-state boundary.
 
 ## Cloning a session
@@ -97,6 +101,21 @@ usage:
   claude_prices:       # optional USD per million tokens; cache prices default to
     opus-5.5: { input: 4, output: 20 }  # 1.25x / 2x / 0.1x input when omitted
 ```
+
+Skills block (all optional):
+
+```yaml
+skills:
+  enabled: true        # false turns the skill library off
+  repo: https://github.com/mgerdov-igt/ai-cookbook  # "" disables fetching
+  ref: main            # branch, tag or commit
+  auto_update: false   # true applies new commits without a click
+  local_sources:       # absolute folders with skills/ (and tau-shell.yaml); win over GitHub
+    - C:/Projects/ai-cookbook
+```
+
+A session YAML may set `skills: false` to skip loading the library for that
+session. See [`05-plugin-system.md`](05-plugin-system.md).
 
 `usage.claude_prices` entries win over fetched prices, which win over the
 built-in table. Invalid values reject the file like any other unknown field.

@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { app, DialogRequest, HarnessWidgets, InstallResult, LaunchPreview, Session, SessionEvent, SystemStatus, ToolStatus } from "./bridge";
+import { app, DialogRequest, HarnessWidgets, InstallResult, LaunchPreview, Session, SessionEvent, SkillsView, SystemStatus, ToolStatus } from "./bridge";
 import "./theme/tokens.css";
 import "./style.css";
 import { theme } from "./theme/theme";
@@ -173,6 +173,8 @@ function App() {
   const [toolNotice, setToolNotice] = useState<InstallResult | null>(null);
   const [toolUpdates, setToolUpdates] = useState<Record<string, string>>({});
   const [refreshing, setRefreshing] = useState(false);
+  const [skillsView, setSkillsView] = useState<SkillsView | null>(null);
+  const [skillsUpdating, setSkillsUpdating] = useState(false);
   const [setupDismissed, setSetupDismissed] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [autoResumeAll, setAutoResumeAll] = useState(false);
@@ -571,6 +573,31 @@ function App() {
     const timer = window.setInterval(load, 10 * 60 * 1000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, []);
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => { void app().GetSkills().then((value) => { if (!cancelled) setSkillsView(value); }).catch(() => undefined); };
+    load();
+    const timer = window.setInterval(load, 10 * 60 * 1000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, []);
+  const updateSkills = async () => {
+    setSkillsUpdating(true);
+    try {
+      setSkillsView(await app().UpdateSkills());
+    } catch (err) {
+      showError("ui.update-skills", err);
+    } finally {
+      setSkillsUpdating(false);
+    }
+  };
+  const toggleSkill = (name: string, enabled: boolean) => {
+    setSkillsView((view) => view && { ...view, skills: view.skills.map((skill) => skill.name === name ? { ...skill, enabled } : skill) });
+    app().SetSkillEnabled(name, enabled).catch((err) => {
+      setSkillsView((view) => view && { ...view, skills: view.skills.map((skill) => skill.name === name ? { ...skill, enabled: !enabled } : skill) });
+      showError("ui.set-skill-enabled", err);
+    });
+  };
+  const skillActions: SkillsActions = { view: skillsView, refreshing, updating: skillsUpdating, onUpdate: () => void updateSkills(), onToggle: toggleSkill };
   const refreshAll = async () => {
     if (refreshing) return;
     setRefreshing(true);
@@ -578,6 +605,7 @@ function App() {
       await Promise.all([
         refresh(true),
         app().CheckToolUpdates().then((value) => setToolUpdates(value ?? {})).catch((err) => showError("ui.check-tool-updates", err)),
+        app().CheckSkills().then(setSkillsView).catch((err) => showError("ui.check-skills", err)),
       ]);
     } catch (err) {
       showError("ui.refresh", err);
@@ -652,7 +680,7 @@ function App() {
           <section className="main-content">
             <div id="panel-home" className={`home-container ${selected ? "hidden" : ""}`} role="tabpanel" aria-labelledby="tab-home" tabIndex={0}>
               {showSetup && powershell ? <Setup powershell={powershell} actions={toolActions} onRecheck={() => void refresh(true)} onContinue={() => setSetupDismissed(true)} /> :
-                <Home sessions={sessions} loaded={loaded} autoResumeAll={autoResumeAll} onAutoResumeAll={(enabled) => { setAutoResumeAll(enabled); void app().SetAutoResumeAll(enabled).catch((err) => { setAutoResumeAll(!enabled); showError("ui.auto-resume-all", err); }); }} onAutoResume={(session, enabled) => void updateSession("ui.auto-resume", () => app().SetSessionAutoResume(session.id, enabled))} status={status} busy={busy} tools={toolActions} onNew={() => setDialogOpen(true)} onRefresh={() => void refreshAll()} onHome={() => setSelected("")} onLaunch={launch} onDelete={setDeleteRequest} onDuplicate={duplicateSession} dragProps={dragProps} dropClass={dropClass} dragId={dragId} />}
+                <Home sessions={sessions} loaded={loaded} autoResumeAll={autoResumeAll} onAutoResumeAll={(enabled) => { setAutoResumeAll(enabled); void app().SetAutoResumeAll(enabled).catch((err) => { setAutoResumeAll(!enabled); showError("ui.auto-resume-all", err); }); }} onAutoResume={(session, enabled) => void updateSession("ui.auto-resume", () => app().SetSessionAutoResume(session.id, enabled))} status={status} busy={busy} tools={toolActions} skills={skillActions} onNew={() => setDialogOpen(true)} onRefresh={() => void refreshAll()} onHome={() => setSelected("")} onLaunch={launch} onDelete={setDeleteRequest} onDuplicate={duplicateSession} dragProps={dragProps} dropClass={dropClass} dragId={dragId} />}
             </div>
             {terminalIds.map((id) => {
               const tab = tabs.find((current) => current.id === id);
@@ -829,7 +857,8 @@ function monthTooltip(summary: UsageSummary): string {
   return lines.join("\n");
 }
 
-function Home({ sessions, loaded, autoResumeAll, onAutoResumeAll, onAutoResume, status, busy, tools, onNew, onRefresh, onHome, onLaunch, onDelete, onDuplicate, dragProps, dropClass, dragId }: {
+function Home({ sessions, loaded, autoResumeAll, onAutoResumeAll, onAutoResume, status, busy, tools, skills, onNew, onRefresh, onHome, onLaunch, onDelete, onDuplicate, dragProps, dropClass, dragId }: {
+  skills: SkillsActions;
   autoResumeAll: boolean;
   onAutoResumeAll: (enabled: boolean) => void;
   onAutoResume: (session: Session, enabled: boolean) => void;
@@ -897,6 +926,7 @@ function Home({ sessions, loaded, autoResumeAll, onAutoResumeAll, onAutoResume, 
       <div className="tools-panel"><div className="tools-header"><div><h2>Installed tools</h2><p className="muted">Detected on this machine{status && !status.wingetAvailable && " \u2014 winget is unavailable; Install uses vendor setup links instead"}</p></div><div className="refresh-group">{tools.refreshing && <span className="spinner" role="status" aria-label="Refreshing" />}<button className="secondary-button" disabled={tools.refreshing} title="Reload sessions, re-detect tools and check for tool updates" onClick={onRefresh}>Refresh</button></div></div><div className="tool-list">
         {status?.tools.map((tool) => <ToolRow key={tool.id} tool={tool} actions={tools} />) ?? <div className="loading-card" role="status"><span className="spinner" aria-hidden="true" /><span className="muted">Detecting tools...</span></div>}
       </div></div>
+      <SkillsPanel skills={skills} unsupportedNote={skills.view?.unsupported} />
       {toolNoticeBanner(tools)}
     </div>
     {freshSession && <div className="modal-backdrop"><div className="modal confirm-modal">
@@ -906,6 +936,42 @@ function Home({ sessions, loaded, autoResumeAll, onAutoResumeAll, onAutoResume, 
     </div></div>}
     </>
   );
+}
+
+type SkillsActions = {
+  view: SkillsView | null;
+  refreshing: boolean;
+  updating: boolean;
+  onUpdate: () => void;
+  onToggle: (name: string, enabled: boolean) => void;
+};
+
+const toolLabel = (tool: string) => tool === "claude-code" ? "Claude" : tool === "copilot-cli" ? "Copilot" : tool;
+
+function SkillsPanel({ skills, unsupportedNote }: { skills: SkillsActions; unsupportedNote?: string[] }) {
+  const view = skills.view;
+  if (view && !view.status.enabled) return null;
+  const status = view?.status;
+  const origin = status ? (status.source === "cookbook" ? `ai-cookbook @${status.applied}` : `bundled @${status.applied || "snapshot"}`) : "";
+  return <div className="tools-panel skills-panel">
+    <div className="tools-header">
+      <div><h2>Skills</h2><p className="muted">{view ? `${origin}. Applies to new or resumed sessions.` : "Loading skills..."}</p></div>
+      <div className="refresh-group">
+        {(skills.updating || !view) && <span className="spinner" role="status" aria-label="Updating skills" />}
+        {status?.updateAvailable && <button className="secondary-button" disabled={skills.updating || skills.refreshing} title={`Download and use ai-cookbook commit ${status.latest}`} onClick={skills.onUpdate}>Update skills ({status.latest})</button>}
+      </div>
+    </div>
+    <div className="skill-list">
+      {view?.skills.map((skill) => <label className="skill-row" key={skill.name} title={skill.description}>
+        <input type="checkbox" checked={skill.enabled} onChange={(event) => skills.onToggle(skill.name, event.target.checked)} />
+        <strong>{skill.name}</strong>
+        <span className="skill-source">{skill.personal?.length ? `${skill.personal.map(toolLabel).join(", ")}: your copy is used` : skill.source}</span>
+      </label>)}
+    </div>
+    {status?.message && <p className="muted skill-note">{status.message}</p>}
+    {unsupportedNote?.length ? <p className="skill-note skill-warn">Skills are not supported by the installed {unsupportedNote.map(toolLabel).join(", ")} version.</p> : null}
+    {status?.warnings?.map((warning) => <p className="skill-note skill-warn" key={warning}>{warning}</p>)}
+  </div>;
 }
 
 type ToolActions = {

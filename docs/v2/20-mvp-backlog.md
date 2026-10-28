@@ -132,6 +132,14 @@
 The detailed step dependencies and acceptance criteria remain in
 [`docs/v1/09-UI-Implementation-Plan.md`](../v1/09-UI-Implementation-Plan.md).
 
+### Research: Copilot quota chip (not started)
+
+The cookbook `copilot-quota` script reads `gh api /copilot_internal/user`
+(`quota_snapshots.premium_interactions`, `quota_reset_date_utc`) and projects
+month-end usage. A native chip could poll every 15 minutes and on Refresh. Risks:
+undocumented endpoint, requires a `gh` login, extra outbound calls, and
+usage-based billing may replace quotas. No code yet.
+
 ## Later phases
 
 - Workspaces and group restore.

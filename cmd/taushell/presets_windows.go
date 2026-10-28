@@ -38,10 +38,18 @@ func (application *App) GetPresets(sessionID string) (resolved []presets.Resolve
 	if err != nil {
 		return nil, err
 	}
-	return presets.Resolve(context.Background(), presets.Merge(global, config.Presets), presets.Context{
+	var source []presets.Preset
+	var available map[string]bool
+	if application.skills != nil {
+		source = application.skills.Presets()
+		available = application.skills.Available(string(config.Tool))
+	}
+	layered := presets.Merge(presets.Merge(source, global), config.Presets)
+	return presets.Resolve(context.Background(), layered, presets.Context{
 		Tool:       string(config.Tool),
 		Session:    config.Name,
 		WorkingDir: config.WorkingDir,
+		Skills:     available,
 	}), nil
 }
 

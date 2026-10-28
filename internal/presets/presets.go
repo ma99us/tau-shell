@@ -39,6 +39,8 @@ type Preset struct {
 	Text   string   `yaml:"text"`
 	Tools  []string `yaml:"tools,omitempty"`
 	Submit *bool    `yaml:"submit,omitempty"`
+	// Skill hides the preset unless that skill is available to the session.
+	Skill string `yaml:"skill,omitempty"`
 }
 
 // Resolved is a preset ready to send.
@@ -60,6 +62,8 @@ type Context struct {
 	Tool       string
 	Session    string
 	WorkingDir string
+	// Skills is the set of skill names available to the session's harness.
+	Skills map[string]bool
 }
 
 // Load reads the global presets. A missing file is an empty list; invalid
@@ -149,6 +153,9 @@ func Resolve(ctx context.Context, list []Preset, values Context) []Resolved {
 	resolved := []Resolved{}
 	for _, preset := range list {
 		if len(preset.Tools) > 0 && !contains(preset.Tools, values.Tool) {
+			continue
+		}
+		if preset.Skill != "" && !values.Skills[preset.Skill] {
 			continue
 		}
 		item := Resolved{Name: preset.Name, Submit: preset.Submit == nil || *preset.Submit}

@@ -119,6 +119,18 @@ powershell:
   utf8: true
 ```
 
+**Skills.** TauShell ships a library of agent skills (screenshots, PR flow,
+plan execution, repository cleanup) from the
+[ai-cookbook](https://github.com/mgerdov-igt/ai-cookbook) repo. A bundled
+snapshot works offline; Home checks GitHub on startup and daily and offers
+**Update skills** (applied only on click unless `skills.auto_update: true`).
+Enabled skills are loaded into new or resumed sessions with the harness's
+`--plugin-dir` option, so they stay out of your own skill folders; a skill you
+already have personally wins. Toggle skills on Home, or set `skills: false`
+in a session YAML. Settings: [schema](docs/v2/18-yaml-schema.md).
+Verified live only with Copilot CLI 1.0.105; Claude Code 2.1.312's plugin
+manifest validates but a live skill listing was not verified.
+
 Install PowerShell 7 and the harness CLI (`claude` or `copilot`) on `PATH`.
 `start` creates a harness session ID and `restore` reuses it. TauShell closes
 the managed PowerShell process when its harness exits.

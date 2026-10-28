@@ -842,6 +842,52 @@ h3 {
   padding: 0;
 }
 
+.skill-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: 8px;
+}
+
+.skill-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-6);
+  background: var(--bg-card);
+  color: var(--text-6);
+  font-size: var(--fs-11);
+  cursor: pointer;
+}
+
+.skill-row strong {
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: var(--fs-11);
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-source {
+  grid-column: 2;
+  overflow: hidden;
+  color: var(--text-10);
+  font-size: var(--fs-10);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-note {
+  margin: 8px 0 0;
+  font-size: var(--fs-11);
+}
+
+.skill-warn {
+  color: var(--status-warn);
+}
+
 .refresh-group {
   display: flex;
   align-items: center;

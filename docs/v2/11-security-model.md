@@ -92,6 +92,20 @@ values are sanity-checked, and failures keep the last good cache and log one
 diagnostics line. Set `usage.price_updates: false` to disable. There is no
 Copilot price fetch; its cost comes from the harness log.
 
+## Skill library
+
+Skills are prompts that agents may follow with their own tool permissions, so
+treat them as code. TauShell fetches them only from `skills.repo` (https
+`github.com/<owner>/<repo>` only): a GET to `api.github.com` for the commit
+sha and `codeload.github.com` for the archive, no credentials, 15 s timeout, 20
+MB cap. Extraction accepts only `tau-shell.yaml` and `skills/`, rejects links,
+special files, `..`, backslashes, colons and files over 1 MB, and writes to a
+temp folder before renaming. Downloads are applied only when the user clicks
+**Update skills** unless `skills.auto_update` is true. Set `skills.repo: ""`
+to disable fetching, or `skills.enabled: false` to disable the library. The
+snapshot is a moving branch, not a signed release; pin `skills.ref` to a tag or
+commit to freeze it.
+
 ## Diagnostic logging
 
 The per-run log is stored under the current user's system temp directory and
