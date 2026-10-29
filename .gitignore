@@ -19,3 +19,6 @@ docs\.todo
 /dist/
 /sign/
 /dist-dev/
+
+# Local machine notes
+/LOCAL-ENVIRONMENT.md

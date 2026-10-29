@@ -116,6 +116,13 @@
   handle growth over 10 cycles. Stale-runtime reconciliation now covers the
   abandoned-starting, recent-starting, missing/exited-PID, reused-PID, and
   live-other-window cases.
+- **Security fix (open):** session `environment:` values are written as
+  `$env:NAME = 'value'` into the script passed as the `pwsh -NoLogo -NoProfile
+  -Command <script>` argument (`harness.PowerShellInvocation`,
+  `internal/sessionhost/manager_windows.go`), so any process of the same user can
+  read them from the process command line. Pass them through the child
+  environment block instead. Prerequisite for the V3 secret vault
+  ([`docs/v3/features/08-secret-vault.md`](../v3/features/08-secret-vault.md)).
 - **Harness compatibility:** provider-backed Claude Code and Copilot CLI
   hosted-terminal walkthroughs are done (both render correctly end to end,
   user-authorized, live credentials); hosted-terminal restore for a session

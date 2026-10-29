@@ -21,6 +21,9 @@ See [UI design](../v1/08-UI-Design.md) and
 
 ## Later phases
 
+Future-only V3 planning (research, gap analysis, ranked feature specs) lives in
+[`docs/v3/`](../v3/README.md); it is not a current requirement.
+
 - Capability-gated model selection, reusable prompt presets, and harness
   command widgets.
 - Broader harness/plugin support and workspace management.

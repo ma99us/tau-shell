@@ -10,6 +10,14 @@
 - Do not silently install software, elevate privileges, or execute downloaded
   scripts.
 
+## Known issue: environment values on the command line
+
+Session `environment:` values are currently embedded in the `pwsh -Command`
+script argument, so any process running as the same user can read them from the
+process command line. This contradicts the principle above and is tracked as an
+open fix in [`20-mvp-backlog.md`](20-mvp-backlog.md). Do not place secrets in
+`environment:` until it is fixed.
+
 ## Tool installation
 
 TauShell may offer installation of known prerequisites and supported harnesses.
