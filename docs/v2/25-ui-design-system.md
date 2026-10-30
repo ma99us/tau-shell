@@ -126,12 +126,15 @@ never for body text or inside buttons.
   total tokens and `~$` price pulled to the right (name ellipsizes, usage
   never wraps); path and meta; error text; actions (primary tile button plus
   text buttons).
-- **Tools panel:** one row per tool, version on the left, a gear icon pinned
-  to the row's top-right corner (row padding reserves the space so the
-  version never overlaps it). The gear appears only for tools whose config is
-  a real file (Claude Code, Copilot CLI). An "Update to X" button appears only
-  when winget reports one. Refresh sits in the panel header with a spinner to
-  its left; the button is disabled while refreshing and always re-enabled.
+- **Tools panels:** general tools first, then AI Harnesses in a separate panel
+  underneath. Each tile has a non-wrapping name/version heading, executable
+  path on the second line, optional warnings below, then optional install or
+  update actions. Long names and paths ellipsize with full-text tooltips. The
+  status dot is vertically centered on the left, opposite the config gear in
+  a reserved right-hand column. Harness config gears keep their existing host
+  action. An "Update to X" button appears only when winget reports one.
+  Refresh in the Tools header refreshes both panels, with a spinner to its
+  left; the button is disabled while refreshing and always re-enabled.
 - **Session top bar:** `tool | path | branch | model | tokens | ~$cost`,
   with dim `|` separators (`.toolbar-sep`). A part with no value is dropped
   together with its separator. Status text and the harness widgets (Commands,

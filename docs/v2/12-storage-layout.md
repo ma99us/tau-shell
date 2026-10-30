@@ -46,9 +46,13 @@ disabled skill names; JSON rather than `app_settings`), `sources/<owner>-<repo>/
 folders passed to `--plugin-dir`; old ones are garbage-collected).
 
 The tab manager currently keeps its open tabs and selected tab in memory for
-the duration of the process. It does not persist the UI layout across
-restarts; adding that UI metadata remains separate from session YAML and
-harness runtime fields.
+the duration of the process. Open tabs are not persisted across restarts.
+The desktop frame defaults to a normal 1280x920 window. Its normal bounds and
+maximized state are saved on confirmed close in `window-placement.json` under
+the TauShell data directory, separately from YAML and harness runtime fields.
+Minimized windows reopen in their previous normal or maximized state. Native
+Windows placement restoration adjusts an off-screen window when monitors change.
+Missing or invalid placement falls back to the default window.
 
 The planned desktop GUI will open to Home and may make the previous tab layout
 available without relaunching sessions. Persisted tab IDs/order/selection, if

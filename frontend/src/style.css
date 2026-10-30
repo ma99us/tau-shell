@@ -798,19 +798,17 @@ h3 {
 
 .tool-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
   gap: 8px;
 }
 
 .tool-row {
-  position: relative;
   display: grid;
   min-height: 48px;
-  grid-template-columns: 10px minmax(0, 1fr) auto;
-  grid-template-rows: auto auto;
+  grid-template-columns: 10px minmax(0, 1fr) 24px;
   align-items: center;
   gap: 8px;
-  padding: 5px 34px 5px 10px;
+  padding: 10px;
   border-radius: var(--radius-6);
   background: var(--bg-card);
   color: var(--text-6);
@@ -818,27 +816,39 @@ h3 {
 }
 
 .tool-row strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-3);
   font-size: var(--fs-11);
   font-weight: 550;
 }
 
-.tool-row .status-dot {
-  grid-row: 1 / span 2;
+.tool-details {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 6px;
 }
 
-.tool-row > span:nth-of-type(2) {
-  max-width: 150px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.tool-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tool-version {
+  flex-shrink: 0;
   white-space: nowrap;
 }
 
 .tool-gear {
-  position: absolute;
-  top: 5px;
-  right: 6px;
-  min-width: 24px;
+  justify-self: end;
+  align-self: center;
+  width: 24px;
+  height: 24px;
   padding: 0;
 }
 
@@ -913,13 +923,14 @@ h3 {
   background: var(--bg-panel);
 }
 
-.tool-update {
-  grid-column: 2 / span 2;
-  justify-self: start;
+.tool-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
 .tool-path {
-  grid-column: 2 / span 2;
   overflow: hidden;
   color: var(--text-10);
   font-size: var(--fs-10);
@@ -932,9 +943,13 @@ h3 {
 }
 
 .tool-warning {
-  grid-column: 2 / span 2;
   color: var(--danger-text-4);
   font-size: var(--fs-10);
+}
+
+.tool-row .tool-warning {
+  color: var(--status-warn);
+  overflow-wrap: anywhere;
 }
 
 .tool-action {
@@ -1508,7 +1523,8 @@ h3 {
 
 .harness-picker {
   display: flex;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .harness-option {
@@ -1516,15 +1532,16 @@ h3 {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  width: 132px;
-  height: 132px;
-  padding: 10px;
+  flex: 0 0 80px;
+  gap: 6px;
+  width: 80px;
+  height: 80px;
+  padding: 6px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-10);
   background: var(--bg-raised);
   color: var(--text-4);
-  font-size: var(--fs-12);
+  font-size: var(--fs-10);
   font-weight: 600;
   text-align: center;
   cursor: pointer;
@@ -1543,8 +1560,9 @@ h3 {
 }
 
 .harness-svg {
-  width: 48px;
-  height: 48px;
+  flex-shrink: 0;
+  width: 29px;
+  height: 29px;
 }
 
 .modal input,

@@ -128,11 +128,12 @@ func runDesktop() error {
 	diagnostics.Info("desktop window starting", "webview2_version", version)
 	runErr := wails.Run(&options.App{
 		Title:              "TauShell",
-		Width:              1180,
-		Height:             780,
+		Width:              1280,
+		Height:             920,
 		MinWidth:           760,
 		MinHeight:          520,
-		WindowStartState:   options.Maximised,
+		WindowStartState:   options.Normal,
+		StartHidden:        true,
 		AssetServer:        &assetserver.Options{Assets: assetFS},
 		Bind:               []interface{}{application},
 		Logger:             diagnostics.WailsLogger{},
@@ -146,6 +147,7 @@ func runDesktop() error {
 			return false
 		},
 		OnStartup:     application.startup,
+		OnDomReady:    application.restoreWindowPlacement,
 		OnBeforeClose: application.beforeClose,
 		OnShutdown:    application.shutdown,
 		Windows: &windowsOptions.Options{
@@ -672,6 +674,7 @@ func (application *App) beforeClose(ctx context.Context) bool {
 	if application.allowShutdown {
 		application.allowShutdown = false
 		application.shutdownMu.Unlock()
+		application.saveWindowPlacement()
 		return false
 	}
 	if application.shutdownInProgress {

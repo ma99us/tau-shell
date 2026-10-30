@@ -953,8 +953,13 @@ function Home({ sessions, loaded, autoResumeAll, onAutoResumeAll, onAutoResume, 
             <label className="check-option" title={autoResumeAll ? "All sessions auto-resume (global setting is on)" : "Resume this session when TauShell starts"}><input type="checkbox" checked={session.autoResume || autoResumeAll} disabled={autoResumeAll} onChange={(event) => onAutoResume(session, event.target.checked)} />Auto resume</label>
           </div>
         </article>)}</div>}
-      <div className="tools-panel"><div className="tools-header"><div><h2>Tools</h2><p className="muted">Supported tools detected on this machine. Use Install on any that are missing{status && !status.wingetAvailable && " \u2014 winget is unavailable, so winget tools use vendor setup links"}{status && !status.npmAvailable && " \u2014 npm (Node.js) is unavailable, so npm tools use vendor setup links"}</p></div><div className="refresh-group">{tools.refreshing && <span className="spinner" role="status" aria-label="Refreshing" />}<button className="secondary-button" disabled={tools.refreshing} title="Reload sessions, re-detect tools and check for tool updates" onClick={onRefresh}>Refresh</button></div></div><div className="tool-list">
-        {status?.tools.map((tool) => <ToolRow key={tool.id} tool={tool} actions={tools} />) ?? <div className="loading-card" role="status"><span className="spinner" aria-hidden="true" /><span className="muted">Detecting tools...</span></div>}
+      <div className="tools-panel"><div className="tools-header"><h2>Tools</h2><div className="refresh-group">{tools.refreshing && <span className="spinner" role="status" aria-label="Refreshing" />}<button className="secondary-button" disabled={tools.refreshing} title="Reload sessions, re-detect tools and check for tool updates" onClick={onRefresh}>Refresh</button></div></div><div className="tool-list">
+        {status?.tools.filter((tool) => !isHarness(tool.id)).map((tool) => <ToolRow key={tool.id} tool={tool} actions={tools} />) ?? <div className="loading-card" role="status"><span className="spinner" aria-hidden="true" /><span className="muted">Detecting tools...</span></div>}
+      </div></div>
+      <div className="tools-panel"><div className="tools-header"><h2>AI Harnesses</h2></div><div className="tool-list">
+        {status?.tools.filter((tool) => isHarness(tool.id))
+          .sort((left, right) => harnesses.findIndex(({ id }) => id === left.id) - harnesses.findIndex(({ id }) => id === right.id))
+          .map((tool) => <ToolRow key={tool.id} tool={tool} actions={tools} />) ?? <div className="loading-card" role="status"><span className="spinner" aria-hidden="true" /><span className="muted">Detecting harnesses...</span></div>}
       </div></div>
       <SkillsPanel skills={skills} unsupportedNote={skills.view?.unsupported} />
       {toolNoticeBanner(tools)}
@@ -1076,18 +1081,24 @@ function ToolRow({ tool, actions }: { tool: ToolStatus; actions: ToolActions }) 
   const unavailableCapabilities = (tool.capabilities ?? []).filter((capability) => !capability.available && !capability.optional);
   const installing = actions.installing === tool.id;
   const title = [tool.error, ...(tool.warnings ?? [])].filter(Boolean).join("\n");
+  const warning = [...new Set([supportNote, tool.error, ...(tool.warnings ?? []),
+    unavailableCapabilities.length > 0 ? `missing: ${unavailableCapabilities.map((capability) => capability.option).join(", ")}` : "",
+  ].filter(Boolean))].join("; ");
   return <div className="tool-row" title={title || undefined}>
     <span className={`status-dot ${usable ? "online" : tool.installed ? "warn" : ""}`} />
-    <strong>{tool.name}</strong>
-    <span>{label}{supportNote && <span className="tool-support-note"> ({supportNote})</span>}</span>
-    {tool.executablePath && <code className="tool-path">{tool.executablePath}</code>}
-    {unavailableCapabilities.length > 0 && <span className="tool-warning">missing: {unavailableCapabilities.map((capability) => capability.option).join(", ")}</span>}
-    {    isHarness(tool.id) && <button className="sidebar-toggle tool-gear" aria-label={`Open ${tool.name} config file`} title={`Open ${tool.name} config file in your default editor`} onClick={() => void app().OpenToolConfig(tool.id).catch((err) => actions.onError(err))}><GearIcon /></button>}
-    {tool.installed && actions.updates[tool.id] && <button className="secondary-button tool-action tool-update" disabled={installing || actions.installing !== ""} title={`Update ${tool.name} to ${actions.updates[tool.id]} with winget (asks first)`} onClick={() => actions.onUpdate(tool)}>{installing ? "Updating..." : `Update to ${actions.updates[tool.id]}`}</button>}
+    <div className="tool-details">
+      <div className="tool-heading"><strong title={tool.name}>{tool.name}</strong><span className="tool-version">{label}</span></div>
+      {tool.executablePath && <code className="tool-path" title={tool.executablePath}>{tool.executablePath}</code>}
+      {warning && <span className="tool-warning tool-support-note">{warning}</span>}
+      {(!tool.installed || actions.updates[tool.id]) && <div className="tool-actions">
+    {tool.installed && actions.updates[tool.id] && <button className="secondary-button tool-action" disabled={installing || actions.installing !== ""} title={`Update ${tool.name} to ${actions.updates[tool.id]} with winget (asks first)`} onClick={() => actions.onUpdate(tool)}>{installing ? "Updating..." : `Update to ${actions.updates[tool.id]}`}</button>}
     {!tool.installed && <button className="secondary-button tool-action" disabled={installing} title={installHint(tool, actions.status)} onClick={() => actions.onInstall(tool)}>
       {installing ? "Installing..." : canAutoInstall(tool, actions.status) ? "Install" : "Setup instructions"}
     </button>}
     {!tool.installed && <button className="text-button" onClick={() => actions.onOpenSetup(tool)}>Vendor page</button>}
+      </div>}
+    </div>
+    {isHarness(tool.id) && <button className="sidebar-toggle tool-gear" aria-label={`Open ${tool.name} config file`} title={`Open ${tool.name} config file in your default editor`} onClick={() => void app().OpenToolConfig(tool.id).catch((err) => actions.onError(err))}><GearIcon /></button>}
   </div>;
 }
 
@@ -1453,7 +1464,7 @@ function CreateSession({ recentFolders, onClose, onCreated, onError }: {
     } catch (err) { onError(err); } finally { setSaving(false); }
   };
   return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="modal">
-    <div className="modal-heading"><div><p className="eyebrow">NEW WORKSPACE</p><h2>New session</h2></div><button className="icon-button" onClick={onClose}>x</button></div>
+    <div className="modal-heading"><h2>Start new AI session</h2><button className="icon-button" onClick={onClose}>x</button></div>
     <form onSubmit={(event) => void submit(event)}>
       <label>Project folder<div className="folder-row"><input autoFocus required list="recent-project-folders" value={workingDir} onChange={(event) => setWorkingDir(event.target.value)} placeholder="Choose a local project folder" /><datalist id="recent-project-folders">{recentFolders.map((folder) => <option key={folder} value={folder} />)}</datalist><button type="button" className="secondary-button" onClick={() => void chooseDirectory()}>Browse</button></div></label>
       <div className="harness-field"><span className="harness-label" id="harness-label">AI harness</span>
@@ -1480,7 +1491,7 @@ function CreateSession({ recentFolders, onClose, onCreated, onError }: {
           <p className="form-note">{yamlDirty ? "Edited by hand: the form fields above no longer change this text. " : "Follows the form until you edit it. "}The definition is validated and saved in normal form.{yamlDirty && <> <button type="button" className="text-button" onClick={() => setYamlDirty(false)}>Reset from form</button></>}</p>
         </>}
       </div>
-      <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button" disabled={saving}>{saving ? "Creating..." : "New session"}</button></div>
+      <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button" disabled={saving}>{saving ? "Creating..." : "Start new AI session"}</button></div>
     </form>
   </div></div>;
 }

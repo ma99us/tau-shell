@@ -195,6 +195,10 @@ func (application *App) initAttention() {
 }
 
 func mainWindowHandle() windows.HWND {
+	return findMainWindowHandle(true)
+}
+
+func findMainWindowHandle(visibleOnly bool) windows.HWND {
 	var found windows.HWND
 	pid := windows.GetCurrentProcessId()
 	callback := syscall.NewCallback(func(hwnd windows.HWND, _ uintptr) uintptr {
@@ -203,8 +207,10 @@ func mainWindowHandle() windows.HWND {
 		if owner != pid {
 			return 1
 		}
-		if visible, _, _ := procIsWindowVisible.Call(uintptr(hwnd)); visible == 0 {
-			return 1
+		if visibleOnly {
+			if visible, _, _ := procIsWindowVisible.Call(uintptr(hwnd)); visible == 0 {
+				return 1
+			}
 		}
 		buffer := make([]uint16, 64)
 		procGetWindowTextW.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&buffer[0])), uintptr(len(buffer)))

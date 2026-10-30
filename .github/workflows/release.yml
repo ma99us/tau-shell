@@ -114,6 +114,16 @@ jobs:
           $bare = $env:VERSION.TrimStart('v')
           [string[]]$flags = if ('${{ github.event_name }}' -eq 'push') { @('--prerelease') } else { @('--draft', '--prerelease') }
           if ('${{ github.event_name }}' -ne 'push') { $flags += @('--target', '${{ github.sha }}') }
+          if ('${{ github.event_name }}' -eq 'push') {
+            gh release view $env:VERSION --json tagName
+            if ($LASTEXITCODE -eq 0) {
+              gh release upload $env:VERSION "dist/TauShell-$bare-windows-x64.zip" dist/SHA256SUMS.txt --clobber
+              if ($LASTEXITCODE -ne 0) { throw 'gh release upload failed' }
+              gh release edit $env:VERSION --prerelease
+              if ($LASTEXITCODE -ne 0) { throw 'gh release edit failed' }
+              exit 0
+            }
+          }
           gh release create $env:VERSION "dist/TauShell-$bare-windows-x64.zip" dist/SHA256SUMS.txt `
             --title "TauShell $bare" --notes-file packaging/RELEASE_README.md --generate-notes @flags
           if ($LASTEXITCODE -ne 0) { throw 'gh release create failed' }

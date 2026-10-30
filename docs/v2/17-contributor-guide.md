@@ -61,6 +61,10 @@ Go extension (Delve) is required.
   `SHA256SUMS.txt`, attests build provenance and publishes a GitHub
   **pre-release**. Running the workflow manually with a version builds a
   **draft** instead (dry run; delete the draft afterwards).
+- An explicitly authorized update of an existing release tag rebuilds that
+  version and overwrites its ZIP and checksum assets. The release page and
+  notes are preserved and the release remains a prerelease. Do not move an
+  existing release tag without the owner's approval.
 - Code signing is optional. When the repository secrets `AZURE_TENANT_ID`,
   `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_SIGNING_ENDPOINT`,
   `AZURE_SIGNING_ACCOUNT` and `AZURE_SIGNING_PROFILE` (Azure Trusted Signing)
