@@ -32,6 +32,7 @@ type Options struct {
 	Executable string
 	Directory  string
 	Args       []string
+	Env        []string
 	OnStart    func(processID int) error
 	OnFinish   func(status string, detail string) error
 }
@@ -145,7 +146,7 @@ func runInConsole(options Options) (returnErr error) {
 	if err != nil {
 		return fmt.Errorf("read terminal dimensions: %w", err)
 	}
-	process, fallbackErr, err := conpty.StartPreferred(conpty.ExecutableDirectory(), width, height, options.Executable, options.Directory, options.Args...)
+	process, fallbackErr, err := conpty.StartPreferredEnv(conpty.ExecutableDirectory(), options.Env, width, height, options.Executable, options.Directory, options.Args...)
 	if fallbackErr != nil {
 		diagnostics.Warn("bundled ConPTY unavailable; using inbox ConPTY", fallbackErr)
 	}

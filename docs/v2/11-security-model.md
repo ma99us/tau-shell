@@ -10,13 +10,16 @@
 - Do not silently install software, elevate privileges, or execute downloaded
   scripts.
 
-## Known issue: environment values on the command line
+## Session environment values
 
-Session `environment:` values are currently embedded in the `pwsh -Command`
-script argument, so any process running as the same user can read them from the
-process command line. This contradicts the principle above and is tracked as an
-open fix in [`20-mvp-backlog.md`](20-mvp-backlog.md). Do not place secrets in
-`environment:` until it is fixed.
+Session `environment:` values are passed to the session's PowerShell process
+through the child environment block (`conpty.ChildEnvironment` merged over the
+host environment), not through the `pwsh -Command` script, so they do not
+appear on any process command line. Tests confirm a real child receives the
+value and that its `Win32_Process.CommandLine` does not contain it. Values are
+still stored as plaintext in the session YAML and are visible to the session's
+own process tree (and to same-user tools that read process environments), so
+secrets should wait for the planned secret vault.
 
 ## Tool installation
 
@@ -113,6 +116,14 @@ temp folder before renaming. Downloads are applied only when the user clicks
 to disable fetching, or `skills.enabled: false` to disable the library. The
 snapshot is a moving branch, not a signed release; pin `skills.ref` to a tag or
 commit to freeze it.
+
+## Copilot quota
+
+The Home quota chip makes one outbound call, `gh api /copilot_internal/user`,
+through the user's own GitHub CLI sign-in. TauShell never reads or stores the
+token and never logs response bodies; failures are logged once without detail
+and the chip is hidden. It is on by default and disabled with
+`quota: { copilot: false }` in `~/.tau_shell/config.yaml`.
 
 ## Diagnostic logging
 

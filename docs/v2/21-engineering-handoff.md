@@ -642,8 +642,11 @@ to include the custom app icon.
   harness and `pwsh` to quit. If that is absent, fails, or times out, it falls
   back to a single Ctrl+C (3 s) and then force-termination, which is shown as
   "Graceful interrupt failed or timed out". Claude Code still uses the
-  Ctrl+C-only path until a real probe shows `/exit` is safe for it (a real
-  probe since showed Ctrl+C, `/exit`, Enter exits Claude in about 0.4 s).
+  Ctrl+C-only path in the adapter. A real probe showed Ctrl+C, `/exit`, Enter
+  exits Claude in about 0.4 s, but whether a later Restore resumes the
+  conversation is unverified (login-gated; see
+  [`24-claude-code-verification-plan.md`](24-claude-code-verification-plan.md) T6),
+  so the adapter change is deferred.
   Unit tests
   use fake processes; the real Copilot `/exit` path was smoke-tested in the
   production window (clean exit in about 1.5 s, exit code 0, not forced). That

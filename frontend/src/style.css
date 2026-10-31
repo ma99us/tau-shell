@@ -1066,6 +1066,10 @@ h3 {
   font-size: var(--fs-14);
 }
 
+.home-quota.warn {
+  color: #e8b45a;
+}
+
 .home-footer {
   display: flex;
   align-items: baseline;

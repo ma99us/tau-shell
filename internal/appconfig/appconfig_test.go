@@ -87,6 +87,21 @@ func TestUsageSettings(t *testing.T) {
 	}
 }
 
+func TestQuotaSetting(t *testing.T) {
+	path := filepath.Join(t.TempDir(), FileName)
+	config, err := Load(path)
+	if err != nil || !config.Quota.CopilotEnabled() {
+		t.Fatalf("default: %+v %v", config, err)
+	}
+	if err := os.WriteFile(path, []byte("quota:\n  copilot: false\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	config, err = Load(path)
+	if err != nil || config.Quota.CopilotEnabled() {
+		t.Fatalf("disabled: %+v %v", config.Quota, err)
+	}
+}
+
 func TestEnsureExampleNeverOverwritesAndParses(t *testing.T) {
 	path := filepath.Join(t.TempDir(), FileName)
 	if err := EnsureExample(path); err != nil {

@@ -14,8 +14,8 @@ import (
 // useRealPowerShell runs sessions in a real ConPTY with script as the harness stand-in.
 func useRealPowerShell(t *testing.T, manager *Manager, realPwsh, script string) {
 	t.Helper()
-	manager.startProcess = func(columns, rows int, _, directory string, _ ...string) (sessionProcess, error) {
-		process, _, err := conpty.StartPreferred(conpty.ExecutableDirectory(), columns, rows, realPwsh, directory,
+	manager.startProcess = func(columns, rows int, _, directory string, env []string, _ ...string) (sessionProcess, error) {
+		process, _, err := conpty.StartPreferredEnv(conpty.ExecutableDirectory(), env, columns, rows, realPwsh, directory,
 			"-NoLogo", "-NoProfile", "-Command", script)
 		if err != nil {
 			return nil, err

@@ -114,15 +114,21 @@ func ExecutableDirectory() string {
 // back to inbox ConPTY when it is absent or cannot be loaded. fallbackErr
 // reports why a present bundle was not used so callers can surface it.
 func StartPreferred(libraryDirectory string, width, height int, executable, directory string, args ...string) (process *Process, fallbackErr error, err error) {
+	return StartPreferredEnv(libraryDirectory, nil, width, height, executable, directory, args...)
+}
+
+// StartPreferredEnv is StartPreferred with an explicit child environment
+// block (nil inherits the current environment).
+func StartPreferredEnv(libraryDirectory string, env []string, width, height int, executable, directory string, args ...string) (process *Process, fallbackErr error, err error) {
 	if library := BundledLibrary(libraryDirectory); library != "" {
 		api, loadErr := loadBundledAPI(library)
 		if loadErr == nil {
-			process, err = start(api, width, height, executable, directory, args...)
+			process, err = start(api, width, height, executable, directory, env, args...)
 			return process, nil, err
 		}
 		fallbackErr = loadErr
 	}
-	process, err = start(inboxAPI, width, height, executable, directory, args...)
+	process, err = start(inboxAPI, width, height, executable, directory, env, args...)
 	return process, fallbackErr, err
 }
 

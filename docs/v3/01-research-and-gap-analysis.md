@@ -100,7 +100,7 @@ Status values: **Done** exists today. **Partial** exists in part. **Gap** is mis
 | Broadcast and side-by-side view | Orca | **Gap** | One terminal per tab |
 | Mobile companion | V3 #7, Orca | **Gap** | None (outside Phase 1 scope) |
 | File drawer, Markdown viewer, copy path | user, Orca | **Gap** | None |
-| Secret vault | V3 #3 | **Gap** | `environment:` values are plaintext in YAML and also visible on the command line ([finding 2.1](02-cross-cutting.md#21-environment-values-are-visible-on-the-process-command-line-phase-1-bug)) |
+| Secret vault | V3 #3 | **Gap** | `environment:` values are plaintext in YAML (no longer visible on the command line; [finding 2.1](02-cross-cutting.md#21-environment-values-are-visible-on-the-process-command-line-phase-1-bug-fixed) fixed) |
 | Portability | user | **Gap** | The host runs on Windows only |
 | Scrollback search and persistence | Orca | **Conflicts** | `scrollback: 0` by design; the harness owns scrolling |
 | Worktrees, diff review, editor, browser, SSH | Orca | **Out** | User decision; see [parked and rejected](03-parked-and-rejected.md) |

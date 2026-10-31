@@ -44,11 +44,11 @@ func (application *App) installer() tools.Installer {
 		return *application.toolInstaller
 	}
 	return tools.Installer{
-		LookPath:    exec.LookPath,
-		Confirm:     application.confirmInstall,
-		RunWinget:   tools.RunWingetInConsole,
+		LookPath:      exec.LookPath,
+		Confirm:       application.confirmInstall,
+		RunWinget:     tools.RunWingetInConsole,
 		ConfirmUpdate: application.confirmUpdate,
-		RefreshPath: tools.RefreshProcessPath,
+		RefreshPath:   tools.RefreshProcessPath,
 		Detect: func(ctx context.Context, spec tools.Spec) tools.Status {
 			return tools.Detect(ctx, tools.DefaultEnvironment(), spec)
 		},

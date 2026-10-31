@@ -21,6 +21,7 @@ import (
 
 	"github.com/ma99us/tau-shell/internal/diagnostics"
 	"github.com/ma99us/tau-shell/internal/harness"
+	"github.com/ma99us/tau-shell/internal/quota"
 	"github.com/ma99us/tau-shell/internal/session"
 	"github.com/ma99us/tau-shell/internal/sessionhost"
 	"github.com/ma99us/tau-shell/internal/skills"
@@ -64,6 +65,11 @@ type App struct {
 	openFile               func(string) error
 	attention              attentionState
 	attentionHooks         *attentionHooks
+	quotaMu                sync.Mutex
+	quotaAt                time.Time
+	quotaValue             *quota.Snapshot
+	quotaLogged            bool
+	quotaRunner            quota.Runner
 }
 
 type desktopSessionManager interface {

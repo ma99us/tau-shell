@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/pprof"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -143,6 +144,34 @@ func TestManagerReportsForcedTermination(t *testing.T) {
 	}
 	if !process.isClosed() {
 		t.Fatal("force-terminated process was not closed")
+	}
+}
+
+func TestManagerPassesSessionEnvironmentOutsideTheCommandLine(t *testing.T) {
+	manager, factory, _ := newLifecycleTestManager(t)
+	workingDir := filepath.Join(t.TempDir(), "env")
+	if err := os.MkdirAll(workingDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.SaveConfig(manager.configDirectory, session.Config{
+		ID:          "env",
+		Name:        "env",
+		Tool:        session.ClaudeCode,
+		WorkingDir:  workingDir,
+		Environment: map[string]string{"TAU_SECRET_PROBE": "s3cret value"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Start(context.Background(), "env", false, 80, 24); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(factory.lastEnv, "TAU_SECRET_PROBE=s3cret value") {
+		t.Fatalf("child environment is missing the session value: %d entries", len(factory.lastEnv))
+	}
+	for _, arg := range factory.lastArgs {
+		if strings.Contains(arg, "s3cret") {
+			t.Fatalf("session value leaked into the command line: %q", arg)
+		}
 	}
 }
 
@@ -661,11 +690,15 @@ type fakeProcessFactory struct {
 	mu        sync.Mutex
 	processes map[string]*fakeSessionProcess
 	startErr  error
+	lastEnv   []string
+	lastArgs  []string
 }
 
-func (factory *fakeProcessFactory) start(_, _ int, _, directory string, _ ...string) (sessionProcess, error) {
+func (factory *fakeProcessFactory) start(_, _ int, _, directory string, env []string, args ...string) (sessionProcess, error) {
 	factory.mu.Lock()
 	defer factory.mu.Unlock()
+	factory.lastEnv = env
+	factory.lastArgs = args
 	if factory.startErr != nil {
 		err := factory.startErr
 		factory.startErr = nil

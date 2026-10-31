@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { app, DialogRequest, HarnessWidgets, InstallResult, LaunchPreview, Session, SessionEvent, ShutdownProgress, SkillsView, SystemStatus, ToolStatus } from "./bridge";
+import { app, CopilotQuota, DialogRequest, HarnessWidgets, InstallResult, LaunchPreview, Session, SessionEvent, ShutdownProgress, SkillsView, SystemStatus, ToolStatus } from "./bridge";
 import "./theme/tokens.css";
 import "./style.css";
 import { theme } from "./theme/theme";
@@ -908,6 +908,14 @@ function Home({ sessions, loaded, autoResumeAll, onAutoResumeAll, onAutoResume, 
     const timer = window.setInterval(load, 15000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, []);
+  const [quota, setQuota] = useState<CopilotQuota | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => { void app().GetCopilotQuota(false).then((value) => { if (!cancelled) setQuota(value ?? null); }).catch(() => { if (!cancelled) setQuota(null); }); };
+    load();
+    const timer = window.setInterval(load, 300000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, []);
   const [resumeProgress, setResumeProgress] = useState("");
   const [appVersion, setAppVersion] = useState("");
   const [appUpdate, setAppUpdate] = useState<{ tag: string; url: string } | null>(null);
@@ -939,6 +947,7 @@ function Home({ sessions, loaded, autoResumeAll, onAutoResumeAll, onAutoResume, 
         </div>
       </div>
       <div className="section-title"><div><h2>Your sessions</h2></div>{!loaded && <span className="spinner" role="status" aria-label="Loading sessions" />}</div>
+      {quota && !quota.unlimited && <p className={`home-usage home-quota${quota.canProject && quota.projected > quota.entitlement ? " warn" : ""}`} title={`Copilot plan: ${quota.plan}. Read through your GitHub CLI sign-in. ${quota.daysLeft} days left in the cycle.`}>Copilot: {Math.round(quota.used)} / {Math.round(quota.entitlement)} credits ({Math.round(quota.percentUsed)}%), resets {quota.resetDate}{quota.canProject ? `, on pace for ~${Math.round(quota.projected)}` : ""}</p>}
       {summary && hasUsage(summary.month) && <p className="home-usage" title={monthTooltip(summary)}>This month: {usageText(summary.month)}{harnessIds.map((tool) => hasUsage(summary.monthByTool?.[tool]) ? <span key={tool}> | {harnessShort(tool)} {usageText(summary.monthByTool![tool])}</span> : null)}</p>}
       {sessions.length === 0 ? (!loaded ? <div className="loading-card" role="status"><span className="spinner" aria-hidden="true" /><span className="muted">Loading sessions...</span></div> : <div className="empty-card"><div className="empty-icon">+</div><h3>No sessions yet</h3><p>Create a session to connect a project folder to an AI harness such as Claude Code or GitHub Copilot CLI.</p>      <button className="primary-button" onClick={onNew}>New session</button></div>) :
         <div className="session-grid">{sessions.map((session) => <article className={`session-card ${dragId === session.id ? "dragging" : ""} ${dropClass(session.id)}`} key={session.id} {...dragProps(session.id)}>
