@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/ma99us/tau-shell/internal/presets"
+
+	"github.com/ma99us/tau-shell/internal/fsutil"
 )
 
 //go:embed all:bundled
@@ -100,7 +102,7 @@ func (l *Library) saveStateLocked() error {
 	if err := os.MkdirAll(l.dir, 0o700); err != nil {
 		return err
 	}
-	return os.WriteFile(l.statePath(), data, 0o600)
+	return fsutil.ReplaceFile(l.statePath(), data)
 }
 
 func (l *Library) snapshotDir(sha string) string {

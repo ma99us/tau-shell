@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/ma99us/tau-shell/internal/fsutil"
 )
 
 var managedVersionPattern = regexp.MustCompile(`^[0-9][A-Za-z0-9.-]*$`)
@@ -69,19 +71,7 @@ func (layout ManagedToolLayout) SetActiveVersion(id ID, version string) error {
 		return fmt.Errorf("create managed tools directory: %w", err)
 	}
 	marker := filepath.Join(layout.Root, strings.ToLower(string(id))+"-version")
-	temporary, err := os.CreateTemp(layout.Root, ".active-version-*")
-	if err != nil {
-		return fmt.Errorf("create active version marker: %w", err)
-	}
-	defer os.Remove(temporary.Name())
-	if _, err := temporary.WriteString(version + "\n"); err != nil {
-		_ = temporary.Close()
-		return fmt.Errorf("write active version marker: %w", err)
-	}
-	if err := temporary.Close(); err != nil {
-		return fmt.Errorf("close active version marker: %w", err)
-	}
-	if err := os.Rename(temporary.Name(), marker); err != nil {
+	if err := fsutil.ReplaceFile(marker, []byte(version+"\n")); err != nil {
 		return fmt.Errorf("activate managed %s version: %w", id, err)
 	}
 	return nil

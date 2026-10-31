@@ -53,12 +53,21 @@ jobs:
             throw "Release version '$env:VERSION' is not vX.Y.Z"
           }
 
+      # cmd/taushell embeds frontend/dist, which is generated and not tracked.
+      - name: Frontend build and tests
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+          npm run check:tokens
+          npm test
+
       - name: Test
         run: go test -timeout 15m ./...
 
       - name: Build and stage
         shell: pwsh
-        run: ./scripts/build-release.ps1 -Version $env:VERSION -SkipPackage
+        run: ./scripts/build-release.ps1 -Version $env:VERSION -SkipPackage -SkipFrontend
 
       - name: Copy taushell.exe aside for signing
         if: env.HAS_SIGNING == 'true'

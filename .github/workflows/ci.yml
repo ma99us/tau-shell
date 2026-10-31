@@ -35,21 +35,19 @@ jobs:
 
       - run: python -m pip install pillow
 
-      - name: Frontend build and token check
+      - name: Frontend build, token check and tests
         working-directory: frontend
         run: |
           npm ci
           npm run build
           npm run check:tokens
+          npm test
 
-      - name: Committed frontend build is up to date
+      - name: Go format
         shell: pwsh
         run: |
-          git add -A cmd/taushell/frontend/dist
-          git diff --cached --ignore-cr-at-eol --exit-code --stat -- cmd/taushell/frontend/dist
-          if ($LASTEXITCODE -ne 0) {
-            throw 'cmd/taushell/frontend/dist is stale: run the frontend build and commit the result'
-          }
+          $unformatted = gofmt -l cmd internal
+          if ($unformatted) { throw "gofmt needed: $($unformatted -join ', ')" }
 
       - name: Go vet
         run: go vet ./...

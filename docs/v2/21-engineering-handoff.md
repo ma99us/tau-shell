@@ -8,6 +8,10 @@ active product and engineering requirements are in `docs/v2/`; the desktop
 interaction decisions and feasibility gate are in
 `docs/v1/08-UI-Design.md` and `docs/v1/09-UI-Implementation-Plan.md`.
 
+For the open architecture-cleanup findings, priorities, safeguards, and
+regression-test plans, see the
+[architecture audit handoff](26-architecture-audit-handoff.md).
+
 ## Product boundaries
 
 - Phase 1 is a local Windows desktop app using PowerShell 7 through ConPTY.
@@ -136,8 +140,8 @@ interaction decisions and feasibility gate are in
   Go test process's handle count also rose during ordinary child-process runs;
   this does not establish a ConPTY leak or prove its absence.
 - TUI-specific Bubble Tea, ultraviolet, and x/vt modules were removed by
-  `go mod tidy`. The checked-in `cmd/taushell/frontend/dist/` directory is
-  required by Go's `embed` directive; it is generated from `frontend/`.
+  `go mod tidy`. The generated, gitignored `cmd/taushell/frontend/dist/`
+  directory is required by Go's `embed` directive; build `frontend/` first.
 
 ## Distribution
 

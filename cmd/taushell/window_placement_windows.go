@@ -13,6 +13,8 @@ import (
 
 	"github.com/ma99us/tau-shell/internal/diagnostics"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
+
+	"github.com/ma99us/tau-shell/internal/fsutil"
 )
 
 var (
@@ -80,17 +82,7 @@ func writeWindowPlacement(path string, placement windowPlacement) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	temporary, err := os.CreateTemp(filepath.Dir(path), ".window-placement-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(temporary.Name())
-	_, writeErr := temporary.Write(data)
-	closeErr := temporary.Close()
-	if err := errors.Join(writeErr, closeErr); err != nil {
-		return err
-	}
-	return os.Rename(temporary.Name(), path)
+	return fsutil.ReplaceFile(path, data)
 }
 
 func (application *App) windowPlacementPath() string {

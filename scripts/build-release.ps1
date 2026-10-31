@@ -78,7 +78,7 @@ try {
     if (Test-Path $zip) { Remove-Item -Force $zip }
     Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -CompressionLevel Optimal
     $hash = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLower()
-    "$hash  $name.zip" | Set-Content -Encoding ascii (Join-Path $OutputDir 'SHA256SUMS.txt')
+    [IO.File]::WriteAllText($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath((Join-Path $OutputDir 'SHA256SUMS.txt')), "$hash  $name.zip`n")
     Write-Host "Built $zip"
     Write-Host "SHA256 $hash"
 } finally {

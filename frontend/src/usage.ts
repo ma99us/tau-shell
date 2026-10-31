@@ -45,6 +45,17 @@ export function hasUsage(totals?: UsageTotals | null): totals is UsageTotals {
   return !!totals && (totals.tokens > 0 || totals.usd > 0);
 }
 
+export function usageText(totals: UsageTotals): string {
+  return `${formatTokens(totals.tokens)}, ${formatUSD(totals)}`;
+}
+
+export function monthTooltip(summary: UsageSummary): string {
+  const lines = [`Since ${summary.monthStart}; includes deleted sessions`];
+  if (hasUsage(summary.prevMonth)) lines.push(`Last month (from ${summary.prevMonthStart}): ${usageText(summary.prevMonth)}`);
+  lines.push(`Claude prices: ${summary.prices.source}${summary.prices.stale ? " - stale" : ""}`);
+  return lines.join("\n");
+}
+
 export function usageTooltip(usage: SessionUsage): string {
   const lines = ["Estimate from harness logs; never reset"];
   for (const model of usage.models ?? []) lines.push(`${model.model}: ${formatTokens(model.tokens)} ${formatUSD(model)}`);

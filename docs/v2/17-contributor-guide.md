@@ -51,10 +51,10 @@ Go extension (Delve) is required.
 
 ## CI and releases
 
-- `.github/workflows/ci.yml` runs on pushes to `main` and PRs: frontend build and
-  token check, a check that the committed `cmd/taushell/frontend/dist` matches a
-  fresh build (rebuild and commit it when the frontend changes), `go vet`,
-  `go test`, and a release-build smoke test.
+- `.github/workflows/ci.yml` runs on pushes to `main` and PRs: frontend build,
+  token check and unit tests (`npm test`), `gofmt -l`, `go vet`, `go test`, and a
+  release-build smoke test. `cmd/taushell/frontend/dist` is generated and
+  gitignored, so the frontend must be built before any Go build or test.
 - Releases: push a SemVer tag (`git tag v1.0.0 && git push origin v1.0.0`).
   `.github/workflows/release.yml` tests, builds
   `TauShell-<version>-windows-x64.zip` with `scripts/build-release.ps1`, writes
@@ -82,3 +82,11 @@ Go extension (Delve) is required.
   when done.
 - Update the handoff and backlog when behavior changes; do not claim
   unverified behavior.
+- Text files use LF line endings everywhere, including Windows working trees:
+  `.gitattributes` (`* text=auto eol=lf`) overrides `core.autocrlf`, and
+  `.editorconfig` tells editors. Scripts that write repository or release text
+  files must write `\n` explicitly (for example
+  `[IO.File]::WriteAllText(path, text)` with `` `n ``), not `Set-Content` or
+  `Out-File`, which use CRLF on Windows. After pulling the `.gitattributes`
+  change into an old CRLF checkout, refresh it once:
+  `git rm --cached -r -q . && git reset --hard` (only with no local changes).

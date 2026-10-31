@@ -13,6 +13,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/ma99us/tau-shell/internal/fsutil"
 	"github.com/ma99us/tau-shell/internal/presets"
 )
 
@@ -47,12 +48,12 @@ var (
 const maxNameLength = 80
 
 type Config struct {
-	ID          string            `yaml:"id"`
-	Name        string            `yaml:"name"`
-	Color       string            `yaml:"color,omitempty"`
+	ID    string `yaml:"id"`
+	Name  string `yaml:"name"`
+	Color string `yaml:"color,omitempty"`
 	// AutoResume resumes this session when TauShell starts, if it has a saved
 	// harness conversation. The Home tile checkbox edits it.
-	AutoResume  bool              `yaml:"auto_resume,omitempty"`
+	AutoResume bool `yaml:"auto_resume,omitempty"`
 	// Skills set to false keeps TauShell's skill library out of this session.
 	Skills      *bool             `yaml:"skills,omitempty"`
 	Tool        Harness           `yaml:"tool"`
@@ -335,22 +336,7 @@ func stringNode(key, value string) *yaml.Node {
 // replaceFile writes data beside path and renames it over path so a crash
 // cannot leave a truncated session definition.
 func replaceFile(path string, data []byte) error {
-	temp, err := os.CreateTemp(filepath.Dir(path), ".update-*.tmp")
-	if err != nil {
-		return fmt.Errorf("create temporary session config: %w", err)
-	}
-	writeErr := func() error {
-		if _, err := temp.Write(data); err != nil {
-			return err
-		}
-		return temp.Sync()
-	}()
-	if err := errors.Join(writeErr, temp.Close()); err != nil {
-		_ = os.Remove(temp.Name())
-		return fmt.Errorf("write temporary session config: %w", err)
-	}
-	if err := os.Rename(temp.Name(), path); err != nil {
-		_ = os.Remove(temp.Name())
+	if err := fsutil.ReplaceFile(path, data); err != nil {
 		return fmt.Errorf("replace session config %q: %w", path, err)
 	}
 	return nil

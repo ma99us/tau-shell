@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc -b && vite build",
     "check:tokens": "node scripts/check-tokens.mjs",
-    "dev": "vite"
+    "dev": "vite",
+    "test": "node --test test/"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",

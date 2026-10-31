@@ -8,6 +8,24 @@ export type HarnessSignal = "working" | "idle" | "input" | undefined;
 export type AttentionKind = "input" | "done";
 export const minWorkMsForDone = 3000;
 
+export type Activity = { working: boolean; input: boolean; unseen: boolean };
+// Output newer than this means the session is "working"; older means "quiet".
+export const workingWindowMs = 2500;
+// A harness "working" cue with no output for this long is treated as stale: a live
+// harness animates its cue (spinner/timer), which produces output.
+export const staleWorkingMs = 15000;
+
+// One poll step for a running session. The harness cue wins; output timing is the
+// fallback when the harness gives none. lastOutputAt excludes keystroke echo.
+// "seen" means the session is selected and TauShell has focus.
+export function nextActivity(old: Activity, signal: HarnessSignal, lastOutputAt: number | undefined, now: number, seen: boolean): Activity {
+  const outputAge = lastOutputAt === undefined ? Infinity : now - lastOutputAt;
+  const working = signal === undefined ? outputAge < workingWindowMs : signal === "working" && outputAge <= staleWorkingMs;
+  const input = signal === "input";
+  const unseen = seen ? false : old.unseen || (old.working && !working) || (input && !old.input);
+  return { working, input, unseen };
+}
+
 // Edge detector for background alerts: fires once when the harness starts
 // waiting for an answer, or when it stops working after a real piece of work
 // (not a brief blip and not a hand-off to a prompt).

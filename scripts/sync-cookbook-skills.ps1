@@ -32,6 +32,15 @@ foreach ($name in $names) {
   if (-not (Test-Path (Join-Path $source 'SKILL.md'))) { throw "Skill $name has no SKILL.md" }
   Copy-Item -Recurse $source "$stage\skills\$name"
 }
+# The snapshot is embedded with go:embed, so store text files with LF endings
+# even when the cookbook checkout uses CRLF.
+Get-ChildItem -Recurse -File $stage | ForEach-Object {
+  $bytes = [IO.File]::ReadAllBytes($_.FullName)
+  if ($bytes -notcontains 0) {
+    $text = [Text.Encoding]::UTF8.GetString($bytes)
+    if ($text.Contains("`r`n")) { [IO.File]::WriteAllText($_.FullName, $text.Replace("`r`n", "`n")) }
+  }
+}
 $source = "repo: https://github.com/mgerdov-igt/ai-cookbook`ncommit: $commit`n"
 if ($dirty) { $source += "note: synced from a checkout with uncommitted changes`n" }
 [IO.File]::WriteAllText((Join-Path $stage 'SOURCE'), $source)
