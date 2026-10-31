@@ -2,8 +2,6 @@
 /frontend/node_modules/
 /frontend/tsconfig.tsbuildinfo
 /.vscode/
-/build/windows/appicon.ico
-/build/windows/appicon.png
 docs\.todo
 /docs/.todo
 /docs/.todo.md
