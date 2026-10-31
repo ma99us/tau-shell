@@ -61,7 +61,7 @@ jobs:
         shell: pwsh
         run: ./scripts/build-release.ps1 -Version 0.0.0-ci -SkipFrontend
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: TauShell-ci-windows-x64
           path: dist/TauShell-0.0.0-ci-windows-x64.zip
