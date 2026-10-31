@@ -28,7 +28,7 @@ jobs:
       # Secrets cannot be used in step conditions directly; expose presence only.
       HAS_SIGNING: ${{ secrets.AZURE_CLIENT_SECRET != '' && secrets.AZURE_SIGNING_ENDPOINT != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v5
         with:
