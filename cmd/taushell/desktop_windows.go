@@ -204,13 +204,24 @@ func (application *App) GetSessions() (snapshots []sessionhost.Snapshot, err err
 
 func (application *App) GetSystemStatus() SystemStatus {
 	_, wingetErr := exec.LookPath("winget.exe")
-	_, npmErr := exec.LookPath("npm.cmd")
+	environment := tools.DefaultEnvironment()
+	if layout, err := tools.ManagedToolLayoutFromEnvironment(); err == nil {
+		environment.ManagedRoots = layout.ManagedRoots()
+	}
+	toolStatuses := tools.DetectAll(context.Background(), environment)
+	npmAvailable := false
+	for _, tool := range toolStatuses {
+		if tool.ID == tools.NodeJS {
+			npmAvailable = tool.Usable()
+			break
+		}
+	}
 	status := SystemStatus{
 		WebView2Version:    application.webViewVersion,
 		DiagnosticsLogPath: diagnostics.LogPath(),
 		WingetAvailable:    wingetErr == nil,
-		NpmAvailable:       npmErr == nil,
-		Tools:              tools.DetectAll(context.Background(), tools.DefaultEnvironment()),
+		NpmAvailable:       npmAvailable,
+		Tools:              toolStatuses,
 	}
 	for _, tool := range status.Tools {
 		logToolStatus(tool)

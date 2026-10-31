@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -35,6 +37,58 @@ func RunWingetInConsole(ctx context.Context, winget string, args []string) error
 	command := exec.CommandContext(ctx, winget, args...)
 	command.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NEW_CONSOLE}
 	return command.Run()
+}
+
+func RunNpm(ctx context.Context, args ...string) error {
+	return runNpm(ctx, false, args...)
+}
+
+func RunNpmInConsole(ctx context.Context, args []string) error {
+	return runNpm(ctx, true, args...)
+}
+
+func runNpm(ctx context.Context, visible bool, args ...string) error {
+	node, err := exec.LookPath("node.exe")
+	if err != nil {
+		return fmt.Errorf("Node.js executable not found: %w", err)
+	}
+	npm, err := exec.LookPath("npm.cmd")
+	if err != nil {
+		return fmt.Errorf("npm.cmd not found: %w", err)
+	}
+	cli, err := npmCLIPath(node, npm)
+	if err != nil {
+		return err
+	}
+	command := exec.CommandContext(ctx, node, append([]string{cli}, args...)...)
+	if visible {
+		command.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NEW_CONSOLE}
+	} else {
+		hideWindow(command)
+	}
+	if err := command.Run(); err != nil {
+		return fmt.Errorf("run npm: %w", err)
+	}
+	return nil
+}
+
+func npmCLIPath(node, npm string) (string, error) {
+	candidates := []string{
+		filepath.Join(filepath.Dir(npm), "node_modules", "npm", "bin", "npm-cli.js"),
+		filepath.Join(filepath.Dir(node), "node_modules", "npm", "bin", "npm-cli.js"),
+	}
+	seen := make(map[string]struct{}, len(candidates))
+	for _, candidate := range candidates {
+		key := strings.ToLower(filepath.Clean(candidate))
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("npm CLI JavaScript entry point not found beside %s or %s", npm, node)
 }
 
 // RefreshProcessPath appends machine and user PATH entries from the registry

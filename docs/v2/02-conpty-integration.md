@@ -17,6 +17,65 @@ PowerShell and harnesses must continue to behave as interactive console applicat
 - Forward keyboard input, including Ctrl+C, and propagate local terminal size changes using `ResizePseudoConsole`.
 - Attempt graceful interruption during confirmed shutdown, then force-stop the session process tree after a bounded wait. Use a Windows Job Object to prevent orphaned harness child processes.
 
+## Deferred alternative: launch the harness directly
+
+This is a research spike for a later phase, not a Phase 1 change. The supported
+architecture remains `TauShell -> ConPTY -> PowerShell 7 -> AI harness`;
+PowerShell stays first-class and remains the session shell for now.
+
+ConPTY itself is shell-agnostic. `internal/conpty.StartPreferred` accepts an
+executable, working directory, and argv, so a harness with a directly
+launchable Windows executable could instead run as
+`TauShell -> ConPTY -> AI harness`. This may remove PowerShell as a prerequisite
+for harness-only sessions and removes one process and the PowerShell command
+string from that launch path. It also removes shell parsing from the normal
+launch path. It does not provide an interactive PowerShell prompt or let the
+user run shell commands in the same terminal; it changes a session from a
+shell-hosted harness to a harness-owned terminal.
+
+The spike must resolve these Windows-specific boundaries before any product
+decision:
+
+- **Executable resolution:** `exec.LookPath` may resolve an npm-installed
+	harness to a `.cmd` shim rather than a PE executable. `CreateProcess` cannot
+	launch a batch shim as an ordinary executable. Compare resolving the actual
+	runtime plus script with invoking the shim through `cmd.exe /d /s /c`;
+	document quoting, `%`/`!`, spaces, Unicode paths, argument preservation, and
+	wrapper exit/child-process behavior. Do not construct an unvalidated shell
+	command from YAML arguments.
+- **Environment:** the current PowerShell invocation applies session variables
+	in its script. A direct launcher must construct and pass a Unicode Windows
+	environment block, define whether it inherits the TauShell environment, and
+	test overrides and empty values. Keep secrets out of command lines and
+	diagnostics. A `cmd.exe` shim adds another command-line boundary and must not
+	undo that property.
+- **Encoding and terminal setup:** the PowerShell bootstrap currently sets
+	UTF-8 encodings and code page 65001. Direct launch has no universal shell
+	bootstrap that guarantees equivalent behavior for every runtime. Establish
+	a documented supported contract for each harness/runtime, then verify raw
+	Unicode/emoji input and output, ANSI, resize, terminal queries and mouse
+	tracking through the bundled and inbox ConPTY backends.
+- **Lifecycle and recovery:** confirm the tracked process is the one whose
+	lifetime represents the harness session, its exit code/state is truthful,
+	its children stay in TauShell's Job Object, and graceful interruption and
+	forced termination work. A wrapper that exits separately from its child
+	could otherwise make a live harness appear stopped. Re-run start, restore,
+	start-fresh and resume-ID discovery tests; direct launch must not imply that
+	a terminal buffer or conversation was restored.
+- **Product boundary:** compare a harness-only TUI session with today's
+	PowerShell prompt experience. Decide whether this is an opt-in launch mode,
+	a per-harness adapter capability, or a separately named session kind. Keep
+	the WebView2 requirement; only reconsider PowerShell setup gating if the
+	product intentionally supports sessions that do not use PowerShell.
+
+Start with a deterministic native `.exe` terminal fixture and a `.cmd` shim
+fixture; require exact argv/environment assertions, Unicode and ANSI bytes,
+resize, graceful exit, child cleanup, and failure reporting. Then run one
+user-authorized real-harness compatibility probe in a disposable project and
+session, without printing credentials or retaining transcripts. Compare
+against the existing PowerShell-hosted path and record measured outcomes and
+unsupported cases. See the [deferred backlog item](20-mvp-backlog.md#deferred-alternative-spike-direct-conpty-harness-launch).
+
 ## Spike findings
 
 The executable proof of concept is in [`spikes/conpty/`](../../spikes/conpty/). The Windows application host is implemented under `internal/conpty/` and `internal/terminal/`; it uses Go with `golang.org/x/sys/windows` and `golang.org/x/term`.

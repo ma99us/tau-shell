@@ -26,6 +26,7 @@ Run the real CLI and record, before writing code:
 | Question | Used by |
 |---|---|
 | Executable name on PATH, and `--version` output format | tool spec, version parse |
+| Whether the vendor distributes the CLI as an npm package and its Node.js minimum | install source; npm installs require a usable Node.js/npm companion |
 | Help command (`--help`) and whether it lists the options below | capability probes |
 | How to start a conversation with an ID TauShell chooses (Claude/Copilot: `--session-id <uuid>`) | `StartArgs` |
 | How to resume by that ID (Claude/Copilot: `--resume <uuid>`) | `ResumeArgs` |
@@ -39,6 +40,13 @@ Run the real CLI and record, before writing code:
 If the harness cannot start or resume with a caller-chosen ID, stop and
 raise it: the current adapter shape (`StartArgs`/`ResumeArgs` keyed by a
 TauShell-owned ID) assumes it can. Do not bend the core to fit one tool.
+
+For an npm-distributed harness, TauShell first verifies Node.js and npm as a
+pair. When they are unusable or missing, installation offers a separately
+confirmed per-user Node LTS ZIP install, re-detects Node/npm, and then asks
+separately before installing the harness package. npm runs via the detected
+Node runtime and its npm CLI JavaScript entry point, not through interpolated
+shell text. Harness package lifecycle scripts execute as the current user.
 
 ## 1. Register the ID in session config
 

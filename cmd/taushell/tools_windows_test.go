@@ -65,3 +65,42 @@ func TestOpenToolSetupPageUsesDeclaredURL(t *testing.T) {
 		t.Fatalf("unknown tool opened %q, err = %v", opened, err)
 	}
 }
+
+func TestManagedInstallConfirmationsDescribePerUserNoAdminSource(t *testing.T) {
+	for _, test := range []struct {
+		id   tools.ID
+		want []string
+	}{
+		{tools.NodeJS, []string{"nodejs.org", "signed SHA-256 manifest", "per-user", "No administrator rights"}},
+		{tools.Git, []string{"PortableGit", "SHA-256 digest", "per-user", "No administrator rights"}},
+	} {
+		t.Run(string(test.id), func(t *testing.T) {
+			spec, ok := tools.Lookup(test.id)
+			if !ok {
+				t.Fatalf("tool %s was not declared", test.id)
+			}
+			confirmation := installConfirmation(spec)
+			if confirmation.DefaultButton != "No" || confirmation.CancelButton != "No" {
+				t.Fatalf("confirmation defaults = %+v", confirmation)
+			}
+			for _, want := range test.want {
+				if !strings.Contains(confirmation.Message, want) {
+					t.Errorf("confirmation missing %q: %s", want, confirmation.Message)
+				}
+			}
+		})
+	}
+}
+
+func TestNpmHarnessConfirmationDisclosesLifecycleScripts(t *testing.T) {
+	spec, ok := tools.Lookup(tools.GSD)
+	if !ok {
+		t.Fatal("GSD spec not found")
+	}
+	confirmation := installConfirmation(spec)
+	for _, want := range []string{"npm install --global @opengsd/gsd-pi", "Node.js/npm pair", "lifecycle scripts as your user"} {
+		if !strings.Contains(confirmation.Message, want) {
+			t.Errorf("npm confirmation missing %q: %s", want, confirmation.Message)
+		}
+	}
+}

@@ -22,10 +22,35 @@ open fix in [`20-mvp-backlog.md`](20-mvp-backlog.md). Do not place secrets in
 
 TauShell may offer installation of known prerequisites and supported harnesses.
 An install action must identify the package and source and require user
-confirmation before invoking winget. If winget is unavailable, direct the user
-to official vendor installation instructions. Re-detect the executable and
-version after installation; do not treat the installer's exit code alone as
+confirmation before invoking winget, npm, or a managed archive installer. If
+the required package manager is unavailable, direct the user to official vendor
+installation instructions. Re-detect the executable, version, and required
+companions after installation; do not treat the installer's exit code alone as
 proof of success.
+
+Optional Node.js/npm and Git for Windows use per-user managed installs under
+`%LOCALAPPDATA%\TauShell\tools`; they are not host prerequisites. Node's
+version comes from the official Node release index, but installation verifies
+the Node release-key signature on `SHASUMS256.txt` and the selected ZIP hash
+before extraction. The trusted signer fingerprints are pinned to the current
+Node.js release-key list and must be reviewed when updated. Git's full
+PortableGit archive is selected from the official Git for Windows GitHub
+release and checked against the release asset's SHA-256 digest. Downloads are
+HTTPS-only with bounded response sizes and redirects restricted to the known
+vendor/CDN hosts. Extractors reject absolute/traversal paths, cap extracted
+size, create files only within the managed staging/version directory, and
+activate a version only after runtime verification. Partial installs are
+removed. Node/npm and Git paths are prepended to TauShell's process environment
+only; no user or machine PATH registry value is written. Explicit session
+`environment.PATH` remains a complete override.
+
+Installing an npm harness executes its package installation scripts as the
+current user. TauShell asks separately before installing a missing Node runtime
+and before installing the harness. These installs do not request elevation.
+Package lifecycle scripts are still third-party code and must be treated as
+such; confirmation displays the package and source. Do not install packages
+silently or claim that a Node ZIP or a PortableGit archive has been tested
+beyond the exact versions exercised on Windows.
 
 ## Bundled ConPTY
 

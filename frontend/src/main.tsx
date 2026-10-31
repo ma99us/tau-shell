@@ -544,7 +544,18 @@ function App() {
     setInstalling(tool.id);
     setToolNotice(null);
     try {
-      const result = await app().InstallTool(tool.id);
+      let result = await app().InstallTool(tool.id);
+      if (result.outcome === "prerequisite-required" && result.prerequisiteId === "node") {
+        const node = status?.tools.find((candidate) => candidate.id === "node");
+        if (!node) throw new Error("Node.js / npm status was not returned by TauShell.");
+        setInstalling(node.id);
+        const nodeResult = await app().InstallTool(node.id);
+        setToolNotice(nodeResult);
+        if (nodeResult.outcome !== "installed") return;
+        await refresh(true);
+        setInstalling(tool.id);
+        result = await app().InstallTool(tool.id);
+      }
       setToolNotice(result);
       if (result.outcome === "installed" || result.outcome === "failed") await refresh(true);
     } catch (err) {
@@ -1061,41 +1072,56 @@ function Setup({ powershell, actions, onRecheck, onContinue }: {
 
 // Mirrors the Go installer: winget when a package is declared, otherwise npm.
 function canAutoInstall(tool: ToolStatus, status: SystemStatus | null): boolean {
+  if (tool.install.managedStrategy) return true;
   if (tool.install.wingetId) return !!status?.wingetAvailable;
-  return !!tool.install.npmPackage && !!status?.npmAvailable;
+  return !!tool.install.npmPackage;
 }
 
 function installHint(tool: ToolStatus, status: SystemStatus | null): string {
+  if (tool.install.managedStrategy === "node-lts") return "Install the current Node.js LTS ZIP into TauShell's per-user tools folder; no administrator rights or PATH registry changes.";
+  if (tool.install.managedStrategy === "portable-git") return "Install full Git for Windows PortableGit into TauShell's per-user tools folder; no administrator rights or PATH registry changes.";
+  if (tool.install.npmPackage && !status?.npmAvailable) return `Install ${tool.name} with npm? TauShell will first offer a separate Node.js LTS install.`;
   if (canAutoInstall(tool, status)) {
     return `Install ${tool.name} with ${tool.install.wingetId ? "winget" : "npm"} (asks first)`;
   }
-  if (!tool.install.wingetId && tool.install.npmPackage) return `${tool.name} installs with npm, which was not found. Install Node.js, or use the vendor page.`;
   return `winget was not found. Open the vendor setup instructions for ${tool.name}.`;
 }
 
 function ToolRow({ tool, actions }: { tool: ToolStatus; actions: ToolActions }) {
   const usable = toolUsable(tool);
-  const label = tool.installed ? tool.version || "Installed" : "Not found";
   const supportNote = tool.installed && tool.support === "below-minimum" ? `below minimum ${tool.minimum}` :
-    tool.installed && tool.support === "untested" ? `untested (tested: ${tool.testedRange})` : "";
+    tool.installed && tool.support === "untested" ? `untested (tested: ${tool.testedRange})` :
+    tool.installed && tool.support === "unknown" && tool.version ? "version support not tested" : "";
   const unavailableCapabilities = (tool.capabilities ?? []).filter((capability) => !capability.available && !capability.optional);
   const installing = actions.installing === tool.id;
   const title = [tool.error, ...(tool.warnings ?? [])].filter(Boolean).join("\n");
+  const companionVersions = (tool.companions ?? []).map((companion) => `${companion.name} ${companion.version || (companion.installed ? "installed" : "not found")}`);
+  const label = tool.id === "node" && tool.version ? [`Node ${tool.version}`, ...companionVersions].join(" | ") :
+    tool.installed ? tool.version || "Installed" : "Not found";
+  const executablePaths = [
+    tool.executablePath && (tool.id === "node" ? `Node: ${tool.executablePath}` : tool.executablePath),
+    ...(tool.companions ?? []).map((companion) => companion.executablePath && `${companion.name}: ${companion.executablePath}`),
+  ].filter((path): path is string => !!path);
+  const pathLabel = executablePaths.join(" | ");
+  const needsManagedInstall = !!tool.install.managedStrategy && !usable;
+  const needsInstall = !tool.installed || needsManagedInstall;
+  const canUpdateManaged = tool.managed && usable && !!tool.install.managedStrategy;
   const warning = [...new Set([supportNote, tool.error, ...(tool.warnings ?? []),
     unavailableCapabilities.length > 0 ? `missing: ${unavailableCapabilities.map((capability) => capability.option).join(", ")}` : "",
   ].filter(Boolean))].join("; ");
   return <div className="tool-row" title={title || undefined}>
-    <span className={`status-dot ${usable ? "online" : tool.installed ? "warn" : ""}`} />
+    <span className={`status-dot ${usable ? "online" : tool.installed || tool.error ? "warn" : ""}`} />
     <div className="tool-details">
       <div className="tool-heading"><strong title={tool.name}>{tool.name}</strong><span className="tool-version">{label}</span></div>
-      {tool.executablePath && <code className="tool-path" title={tool.executablePath}>{tool.executablePath}</code>}
+      {pathLabel && <code className="tool-path" title={executablePaths.join("\n")}>{pathLabel}</code>}
       {warning && <span className="tool-warning tool-support-note">{warning}</span>}
-      {(!tool.installed || actions.updates[tool.id]) && <div className="tool-actions">
+      {(needsInstall || actions.updates[tool.id] || canUpdateManaged) && <div className="tool-actions">
+    {canUpdateManaged && <button className="secondary-button tool-action" disabled={installing || actions.installing !== ""} title={installHint(tool, actions.status)} onClick={() => actions.onInstall(tool)}>{installing ? "Updating..." : "Update"}</button>}
     {tool.installed && actions.updates[tool.id] && <button className="secondary-button tool-action" disabled={installing || actions.installing !== ""} title={`Update ${tool.name} to ${actions.updates[tool.id]} with winget (asks first)`} onClick={() => actions.onUpdate(tool)}>{installing ? "Updating..." : `Update to ${actions.updates[tool.id]}`}</button>}
-    {!tool.installed && <button className="secondary-button tool-action" disabled={installing} title={installHint(tool, actions.status)} onClick={() => actions.onInstall(tool)}>
+    {needsInstall && <button className="secondary-button tool-action" disabled={installing || actions.installing !== ""} title={installHint(tool, actions.status)} onClick={() => actions.onInstall(tool)}>
       {installing ? "Installing..." : canAutoInstall(tool, actions.status) ? "Install" : "Setup instructions"}
     </button>}
-    {!tool.installed && <button className="text-button" onClick={() => actions.onOpenSetup(tool)}>Vendor page</button>}
+    {needsInstall && <button className="text-button" onClick={() => actions.onOpenSetup(tool)}>Vendor page</button>}
       </div>}
     </div>
     {isHarness(tool.id) && <button className="sidebar-toggle tool-gear" aria-label={`Open ${tool.name} config file`} title={`Open ${tool.name} config file in your default editor`} onClick={() => void app().OpenToolConfig(tool.id).catch((err) => actions.onError(err))}><GearIcon /></button>}

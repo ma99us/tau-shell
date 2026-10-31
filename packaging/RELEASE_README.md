@@ -12,8 +12,16 @@ too.
 2. Run `taushell.exe`. There is no installer and no admin rights are needed.
 
 **Requirements:** Windows 10 or later, the Microsoft Edge WebView2 Runtime, and
-PowerShell 7. If something is missing, TauShell offers to install it on first
-run (nothing is installed without your confirmation).
+PowerShell 7. If PowerShell 7 is missing, TauShell offers a confirmed install;
+if WebView2 is missing, TauShell directs you to Microsoft's official runtime
+installer. Nothing is installed without your confirmation.
+
+Administrator rights are not required to run TauShell. Node.js/npm and Git for
+Windows are optional tools shown on Home, not TauShell prerequisites. TauShell
+can install Node.js LTS and Git for Windows PortableGit into the current user's
+profile after confirmation. Node.js is needed only for harnesses installed
+through npm, such as GSD; other supported harnesses can be installed without
+Node. Existing tool installations are detected and reused.
 
 ### Unsigned app warning
 

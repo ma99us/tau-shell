@@ -19,6 +19,8 @@ type ID string
 
 const (
 	PowerShell ID = "powershell"
+	NodeJS     ID = "node"
+	Git        ID = "git"
 	ClaudeCode ID = "claude-code"
 	CopilotCLI ID = "copilot-cli"
 	GSD        ID = "gsd"
@@ -66,9 +68,31 @@ type InstallSource struct {
 	WingetID string `json:"wingetId,omitempty"`
 	// NpmPackage is used when no winget package exists: TauShell runs a
 	// confirmed `npm install --global <package>`.
-	NpmPackage string `json:"npmPackage,omitempty"`
-	Source     string `json:"source,omitempty"`
-	VendorURL  string `json:"vendorUrl"`
+	NpmPackage      string          `json:"npmPackage,omitempty"`
+	Source          string          `json:"source,omitempty"`
+	ManagedStrategy ManagedStrategy `json:"managedStrategy,omitempty"`
+	VendorURL       string          `json:"vendorUrl"`
+}
+
+type ManagedStrategy string
+
+const (
+	ManagedNodeLTS     ManagedStrategy = "node-lts"
+	ManagedPortableGit ManagedStrategy = "portable-git"
+)
+
+type CompanionSpec struct {
+	Name        string
+	Executable  string
+	VersionArgs []string
+}
+
+type CompanionStatus struct {
+	Name           string `json:"name"`
+	ExecutablePath string `json:"executablePath,omitempty"`
+	Version        string `json:"version,omitempty"`
+	Installed      bool   `json:"installed"`
+	Error          string `json:"error,omitempty"`
 }
 
 // Spec is the metadata contract for one detectable tool. Minimum is optional;
@@ -86,6 +110,7 @@ type Spec struct {
 	TestedBefore string
 	Capabilities []Capability
 	Widgets      *Widgets
+	Companions   []CompanionSpec
 	Install      InstallSource
 }
 
@@ -110,6 +135,28 @@ var specs = []Spec{
 			Source:    "winget",
 			VendorURL: "https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows",
 		},
+	},
+	{
+		ID:           NodeJS,
+		Name:         "Node.js / npm",
+		Executable:   "node.exe",
+		VersionArgs:  []string{"--version"},
+		Minimum:      "22.0.0",
+		TestedFrom:   "26.13.0",
+		TestedBefore: "26.13.1",
+		Companions: []CompanionSpec{{
+			Name:        "npm",
+			Executable:  "npm.cmd",
+			VersionArgs: []string{"--version"},
+		}},
+		Install: InstallSource{ManagedStrategy: ManagedNodeLTS, VendorURL: "https://nodejs.org/en/download"},
+	},
+	{
+		ID:          Git,
+		Name:        "Git for Windows",
+		Executable:  "git.exe",
+		VersionArgs: []string{"--version"},
+		Install:     InstallSource{ManagedStrategy: ManagedPortableGit, VendorURL: "https://gitforwindows.org/"},
 	},
 	{
 		ID:           ClaudeCode,
@@ -343,6 +390,9 @@ func (spec Spec) Classify(version Version) Support {
 	if spec.Minimum != "" && version.Compare(mustParse(spec.Minimum)) < 0 {
 		return SupportBelowMinimum
 	}
+	if spec.TestedFrom == "" || spec.TestedBefore == "" {
+		return SupportUnknown
+	}
 	if version.Compare(mustParse(spec.TestedFrom)) >= 0 && version.Compare(mustParse(spec.TestedBefore)) < 0 {
 		return SupportTested
 	}
@@ -350,6 +400,9 @@ func (spec Spec) Classify(version Version) Support {
 }
 
 func (spec Spec) TestedRange() string {
+	if spec.TestedFrom == "" || spec.TestedBefore == "" {
+		return ""
+	}
 	return fmt.Sprintf(">=%s <%s", spec.TestedFrom, spec.TestedBefore)
 }
 
@@ -363,6 +416,7 @@ type Status struct {
 	Name           string             `json:"name"`
 	Required       bool               `json:"required"`
 	Installed      bool               `json:"installed"`
+	Managed        bool               `json:"managed"`
 	ExecutablePath string             `json:"executablePath,omitempty"`
 	Version        string             `json:"version,omitempty"`
 	VersionOutput  string             `json:"versionOutput,omitempty"`
@@ -370,6 +424,7 @@ type Status struct {
 	TestedRange    string             `json:"testedRange"`
 	Support        Support            `json:"support"`
 	Capabilities   []CapabilityStatus `json:"capabilities"`
+	Companions     []CompanionStatus  `json:"companions,omitempty"`
 	Warnings       []string           `json:"warnings"`
 	Error          string             `json:"error,omitempty"`
 	Widgets        *Widgets           `json:"widgets,omitempty"`
@@ -392,8 +447,9 @@ func (status Status) Usable() bool {
 
 // Environment abstracts executable lookup and command execution for tests.
 type Environment struct {
-	LookPath func(string) (string, error)
-	Run      func(ctx context.Context, path string, args ...string) ([]byte, error)
+	LookPath     func(string) (string, error)
+	Run          func(ctx context.Context, path string, args ...string) ([]byte, error)
+	ManagedRoots []string
 }
 
 func DefaultEnvironment() Environment {
@@ -434,6 +490,7 @@ func Detect(ctx context.Context, environment Environment, spec Spec) Status {
 	}
 	status.Installed = true
 	status.ExecutablePath = path
+	status.Managed = IsManagedPath(path, environment.ManagedRoots)
 
 	output, err := runProbe(ctx, environment, path, spec.VersionArgs)
 	versionOutput := strings.TrimSpace(string(output))
@@ -456,6 +513,33 @@ func Detect(ctx context.Context, environment Environment, spec Spec) Status {
 		}
 	} else {
 		status.Warnings = append(status.Warnings, "The installed version could not be determined.")
+	}
+	for _, companion := range spec.Companions {
+		component := CompanionStatus{Name: companion.Name}
+		componentPath, lookupErr := environment.LookPath(companion.Executable)
+		if lookupErr != nil {
+			component.Error = fmt.Sprintf("%s was not found on PATH", companion.Executable)
+			status.Installed = false
+			status.Error = component.Error
+			status.Companions = append(status.Companions, component)
+			continue
+		}
+		component.ExecutablePath = componentPath
+		component.Installed = true
+		componentOutput, runErr := runProbe(ctx, environment, componentPath, companion.VersionArgs)
+		if runErr != nil {
+			component.Error = fmt.Sprintf("run %s %s: %v", filepath.Base(componentPath), strings.Join(companion.VersionArgs, " "), runErr)
+			component.Installed = false
+			status.Installed = false
+			status.Error = component.Error
+		} else if version, ok := ParseVersion(string(componentOutput)); ok {
+			component.Version = version.String()
+		} else {
+			component.Error = fmt.Sprintf("could not determine %s version", companion.Name)
+			status.Installed = false
+			status.Error = component.Error
+		}
+		status.Companions = append(status.Companions, component)
 	}
 
 	if len(spec.Capabilities) == 0 {

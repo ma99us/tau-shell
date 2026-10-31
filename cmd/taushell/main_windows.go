@@ -16,6 +16,7 @@ import (
 	"github.com/ma99us/tau-shell/internal/harness"
 	"github.com/ma99us/tau-shell/internal/session"
 	"github.com/ma99us/tau-shell/internal/terminal"
+	"github.com/ma99us/tau-shell/internal/tools"
 	"golang.org/x/sys/windows"
 )
 
@@ -49,6 +50,11 @@ func runMain() (exitCode int) {
 			exitCode = 2
 		}
 	}()
+	if layout, err := tools.ManagedToolLayoutFromEnvironment(); err != nil {
+		diagnostics.Warn("managed tool paths unavailable", err)
+	} else if err := layout.PrependToProcessPath(); err != nil {
+		diagnostics.Warn("configure managed tool PATH failed", err)
+	}
 
 	command := "desktop"
 	if len(os.Args) > 1 {

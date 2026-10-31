@@ -6,9 +6,9 @@
 - In progress: a Go/Wails WebView2 host, bundled React/xterm.js launcher, local tabs, session creation, tool inventory, session lifecycle bridge, and shutdown confirmation are implemented. A user-authorized, live-credential walkthrough exercised both supported harnesses (Claude Code, GitHub Copilot CLI) through the real hosted terminal on this Windows 10 machine; a clean-environment test without WebView2 will not be performed (user decision); the missing-runtime prompt is accepted as working. See [`docs/v1/08-UI-Design.md`](../v1/08-UI-Design.md) and [`docs/v1/09-UI-Implementation-Plan.md`](../v1/09-UI-Implementation-Plan.md).
 - Security hardening: the Windows host now cancels top-level WebView2 navigations outside the bundled `http://wails.localhost` origin before they load. Wails' bound-method origin validation remains a separate defense.
 - Session-manager lifecycle coverage is implemented for concurrent independent fake sessions, input/output/resize, process exit, failed restore preserving the resume ID, graceful and forced stop, and cleanup. This does not cover a real hosted xterm or harness.
-- Implemented executable detection, resolved version parsing, minimum/tested-version classification, and per-adapter capability probes (via `--help` option matching) for PowerShell 7, Claude Code, and Copilot CLI; Home shows each tool's resolved executable path, version, support classification, and any unmet capability. A first-run Setup screen blocks on a missing/unusable PowerShell 7 with a "continue without" escape hatch. Do not silently pin or downgrade.
+- Implemented executable detection, resolved version parsing, minimum/tested-version classification, and per-adapter capability probes (via `--help` option matching) for PowerShell 7 and supported harnesses; Home shows each tool's resolved executable path, version, support classification, and any unmet capability. Optional Node.js/npm and Git for Windows are also detected in the Tools panel; their absence never gates Home. Node reports npm as a required companion. A first-run Setup screen still gates only on missing/unusable PowerShell 7, with a "continue without" escape hatch. Do not silently pin or downgrade.
 - Implemented schema: strict YAML accepts ordered harness `launch_args`; managed session/resume arguments cannot be overridden. Implemented generated per-harness launch-argument templates (Claude Code → `--dangerously-skip-permissions`, Copilot CLI → `--yolo`, via `Adapter.DefaultLaunchArgs()`), prefilled editably in the New Session dialog without overwriting user edits, plus a live launch preview (`PreviewSessionLaunch`) showing the resolved executable and full effective argv and warning on options the installed harness does not support.
-- **Planned setup:** WebView2 and PowerShell 7 are TauShell host prerequisites; missing harnesses do not block Home. winget is optional; installation requires a confirmation dialog showing the exact winget command before it runs in a visible console (never silent/elevated), and the tool is always re-detected after winget exits — success is reported only once it becomes usable. When winget is unavailable or a tool has no winget package, Home instead links to the vendor's official setup page.
+- **Tool setup:** WebView2 and PowerShell 7 remain host prerequisites; missing harnesses, Node/npm, or Git do not block Home. Winget installs still require confirmation and run in a visible console. Node uses the current supported LTS Windows ZIP after verifying Node's signed SHA-256 manifest; Git uses the full PortableGit archive after verifying the GitHub release digest. Both install under `%LOCALAPPDATA%\TauShell\tools`, require no admin rights, and only affect TauShell-launched processes. Existing PATH tools are used unless a TauShell-managed copy exists, which takes precedence. npm-backed harness installs ask to install Node first when Node/npm is unusable, then ask separately before installing the harness. No automatic updates or registry PATH writes.
 - ConPTY host for PowerShell 7 on Windows 10, with automated Windows tests for output, exit codes, resizing, and child-process cleanup.
 - Implemented per-run JSON diagnostics at `%TEMP%\TauShell\taushell.log`; startup truncates the file and the UI exposes its location. Host/lifecycle, Wails, frontend runtime, React render, and operation failures are logged with sensitive payload boundaries. Prompt/terminal contents, credentials, and environment values are intentionally excluded.
 - Session registry and human-edited, per-session YAML definitions; keep mutable runtime state separate.
@@ -45,6 +45,19 @@
   fallbacks when winget is absent or a tool has no package. Verified via unit
   tests and a production Wails smoke of the Home/Setup rendering; a live
   winget install run itself was not exercised.
+- **Optional Node/Git portable setup: implemented.** The app detects Node plus
+  npm and Git for Windows, uses existing PATH installs when no managed copy is
+  active, and prefers managed copies thereafter. Confirmed per-user installers
+  use the official Node current-LTS ZIP (Node 26.13.0) with Node.js release-key
+  signature verification and the full Git for Windows PortableGit archive
+  (2.56.0.windows.4) with GitHub release SHA-256 verification. A non-elevated
+  Windows smoke in a disposable path containing spaces and Unicode verified
+  both installs, a local npm CLI shim through PowerShell 7, and `git init`;
+  machine and user PATH registry values remained unchanged. This verifies those
+  exact artifacts and paths, not all Node/Git releases or npm packages. Node
+  below 22 is below minimum; newer Node/Git versions remain untested until
+  tested ranges are established. Missing Node for npm harness installation
+  prompts separately for Node and then the harness.
 - **Session authoring:** generate harness-specific editable YAML defaults,
   preview and validate effective discrete argv before saving, and offer to
   start after creation.
@@ -148,6 +161,48 @@ undocumented endpoint, requires a `gh` login, extra outbound calls, and
 usage-based billing may replace quotas. No code yet.
 
 ## Later phases
+
+### Deferred alternative spike: direct ConPTY harness launch
+
+**Not Phase 1 scope or an approved implementation change.** Keep the current
+PowerShell 7 session host. Later, compare it with direct `ConPTY -> harness`
+launch, using ConPTY's existing executable/working-directory/argv process
+interface.
+
+- **Potential wins:** PowerShell would not be required for harness-only
+  sessions; remove one process and the PowerShell command-string construction
+  from that path; launch can pass discrete argv directly. A correctly built
+  child environment block could also keep session environment values out of a
+  command string. These are hypotheses to verify, not guaranteed performance
+  or security improvements.
+- **Tradeoffs:** the terminal would belong to the harness, not an interactive
+  shell. Users would lose the PowerShell prompt and ability to run ad-hoc shell
+  commands in that session. WebView2 remains required. Decide whether the
+  product needs an explicit shell-vs-harness session mode before changing
+  prerequisite or setup UX.
+- **Windows gotchas:** npm-installed CLIs can resolve to `.cmd` shims, which
+  `CreateProcess` cannot run as normal executables. Compare resolving the
+  runtime/script with `cmd.exe /d /s /c`; test robust quoting, `%`/`!`, spaces,
+  Unicode paths, exact discrete argv, exit propagation and wrapper child
+  lifetime. Direct launch must explicitly pass the session environment via a
+  Unicode environment block rather than interpolating values into a command
+  line. Re-establish the UTF-8/code-page contract currently provided by the
+  PowerShell bootstrap; there is no universal bootstrap for arbitrary native
+  and runtime-based harnesses. Re-test Job Object membership, graceful stop,
+  process-exit detection, restore IDs and failed-launch reporting.
+- **Spike sequence:** first add opt-in test-only launch plumbing without
+  changing the YAML schema or default launch mode. Prove behavior with native
+  `.exe` and `.cmd` fixtures: exact argv/environment, Unicode/emoji input and
+  output bytes, ANSI, resize, terminal queries/mouse, graceful exit, child
+  cleanup and accurate errors. Then run one authorized real-harness probe in a
+  disposable project/session; never log credentials or retain transcripts.
+- **Decision gate:** compare the fixture and real-harness results against the
+  existing PowerShell-hosted flow. Adopt only if supported harnesses have
+  reliable executable resolution, identical session/environment semantics,
+  truthful lifecycle/restore results, and acceptable loss or explicit
+  replacement of the interactive-shell experience. Otherwise retain the
+  current architecture and record blockers. Detailed constraints are in
+  [`02-conpty-integration.md`](02-conpty-integration.md#deferred-alternative-launch-the-harness-directly).
 
 - Workspaces and group restore.
 - Remote/mobile access, web dashboards, and remote push notifications. Local attention alerts (taskbar flash and Windows toast) are in Phase 1: [`22-local-attention-notifications.md`](./22-local-attention-notifications.md).

@@ -1,6 +1,6 @@
 # Engineering Handoff
 
-**Updated:** 2026-10-24
+**Updated:** 2026-10-31
 **Project state:** Phase 1 desktop migration in progress; not release-ready.
 
 This is the implementation handoff for the next engineering session. The
@@ -100,6 +100,17 @@ interaction decisions and feasibility gate are in
   its xterm pane mounted, so its buffer continues receiving output and the
   screen is reused when the session is reopened. Built assets are embedded
   from `cmd/taushell/frontend/dist/`; build the frontend before Go compilation.
+- Optional Node.js/npm and Git for Windows appear as general Home tools and do
+  not gate Home. Existing PATH installs are used until a TauShell-managed
+  version is active; managed Node/Git paths then take precedence in the
+  TauShell process only. Node uses a verified current-LTS ZIP and per-user npm
+  prefix; Git uses full PortableGit. A non-elevated live smoke verified Node
+  26.13.0, Git for Windows 2.56.0.windows.4, a local npm CLI shim launched
+  through PowerShell 7, and `git init` under a Unicode/spaced temp path. No
+  user/machine PATH registry values changed. npm installs are separately
+  confirmed after the Node prerequisite, and use `node.exe` with npm's CLI JS
+  entry point to preserve argv across Windows paths with spaces. Node below 22
+  is below minimum; broader runtime/package compatibility is not claimed.
 - `internal/sessionhost/manager_windows.go` owns the desktop session lifecycle:
   session listing, start/restore/fresh, ConPTY output events, terminal input
   and resize, exit supervision, and bounded graceful/forced shutdown. Fake

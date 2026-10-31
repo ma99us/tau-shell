@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -9,26 +10,30 @@ import (
 type InstallOutcome string
 
 const (
-	InstallSucceeded         InstallOutcome = "installed"
-	InstallCancelled         InstallOutcome = "cancelled"
-	InstallWingetUnavailable InstallOutcome = "winget-unavailable"
-	InstallFailed            InstallOutcome = "failed"
+	InstallSucceeded            InstallOutcome = "installed"
+	InstallCancelled            InstallOutcome = "cancelled"
+	InstallWingetUnavailable    InstallOutcome = "winget-unavailable"
+	InstallPrerequisiteRequired InstallOutcome = "prerequisite-required"
+	InstallFailed               InstallOutcome = "failed"
 )
 
 type InstallResult struct {
-	Outcome   InstallOutcome `json:"outcome"`
-	Message   string         `json:"message"`
-	VendorURL string         `json:"vendorUrl,omitempty"`
-	Status    *Status        `json:"status,omitempty"`
+	Outcome        InstallOutcome `json:"outcome"`
+	Message        string         `json:"message"`
+	VendorURL      string         `json:"vendorUrl,omitempty"`
+	PrerequisiteID ID             `json:"prerequisiteId,omitempty"`
+	Status         *Status        `json:"status,omitempty"`
 }
 
 // Installer runs a user-confirmed winget installation and verifies the result
 // by re-detecting the tool. The installer exit code alone is never treated as
 // success.
 type Installer struct {
-	LookPath  func(string) (string, error)
-	Confirm   func(spec Spec) (bool, error)
-	RunWinget func(ctx context.Context, winget string, args []string) error
+	LookPath   func(string) (string, error)
+	Confirm    func(spec Spec) (bool, error)
+	RunWinget  func(ctx context.Context, winget string, args []string) error
+	RunNpm     func(ctx context.Context, args []string) error
+	RunManaged func(ctx context.Context, spec Spec) (string, error)
 	// ConfirmUpdate asks the user before an upgrade; only Upgrade uses it.
 	ConfirmUpdate func(spec Spec, available string) (bool, error)
 	// RefreshPath picks up PATH entries added by the installer.
@@ -65,6 +70,38 @@ func (installer Installer) Install(ctx context.Context, id ID) (InstallResult, e
 	if !ok {
 		return InstallResult{}, fmt.Errorf("unknown tool %q", id)
 	}
+	if spec.Install.NpmPackage != "" {
+		node, _ := Lookup(NodeJS)
+		if installer.Detect == nil {
+			return InstallResult{}, errors.New("Node.js/npm prerequisite cannot be checked")
+		}
+		if !installer.Detect(ctx, node).Usable() {
+			return InstallResult{
+				Outcome:        InstallPrerequisiteRequired,
+				Message:        fmt.Sprintf("%s needs a usable Node.js/npm installation first.", spec.Name),
+				PrerequisiteID: NodeJS,
+			}, nil
+		}
+	}
+	if spec.Install.ManagedStrategy != "" {
+		confirmed, err := installer.Confirm(spec)
+		if err != nil {
+			return InstallResult{}, fmt.Errorf("confirm %s installation: %w", spec.Name, err)
+		}
+		if !confirmed {
+			return InstallResult{Outcome: InstallCancelled, Message: fmt.Sprintf("Installation/update of %s was cancelled.", spec.Name)}, nil
+		}
+		if installer.RunManaged == nil {
+			return InstallResult{}, fmt.Errorf("no managed installer is configured for %s", spec.Name)
+		}
+		message, runErr := installer.RunManaged(ctx, spec)
+		var refreshErr error
+		if installer.RefreshPath != nil {
+			refreshErr = installer.RefreshPath()
+		}
+		status := installer.Detect(ctx, spec)
+		return verifiedInstallResult(spec, "managed installer", message, runErr, refreshErr, status), nil
+	}
 	executable, label, args := installCommand(spec)
 	if executable == "" {
 		return InstallResult{
@@ -89,14 +126,29 @@ func (installer Installer) Install(ctx context.Context, id ID) (InstallResult, e
 		return InstallResult{Outcome: InstallCancelled, Message: fmt.Sprintf("Installation of %s was cancelled.", spec.Name)}, nil
 	}
 
-	runErr := installer.RunWinget(ctx, winget, args)
+	var runErr error
+	if label == "npm" {
+		if installer.RunNpm == nil {
+			return InstallResult{}, errors.New("no npm runner is configured")
+		}
+		runErr = installer.RunNpm(ctx, args)
+	} else {
+		runErr = installer.RunWinget(ctx, winget, args)
+	}
 	var refreshErr error
 	if installer.RefreshPath != nil {
 		refreshErr = installer.RefreshPath()
 	}
 	status := installer.Detect(ctx, spec)
+	return verifiedInstallResult(spec, label, "", runErr, refreshErr, status), nil
+}
+
+func verifiedInstallResult(spec Spec, label, detail string, runErr, refreshErr error, status Status) InstallResult {
 	if status.Usable() {
 		message := fmt.Sprintf("%s %s was detected at %s.", spec.Name, status.Version, status.ExecutablePath)
+		if detail != "" {
+			message += " " + detail
+		}
 		if runErr != nil {
 			message += fmt.Sprintf(" %s reported: %v.", label, runErr)
 		}
@@ -106,9 +158,8 @@ func (installer Installer) Install(ctx context.Context, id ID) (InstallResult, e
 		if len(status.Warnings) > 0 {
 			message += " " + strings.Join(status.Warnings, " ")
 		}
-		return InstallResult{Outcome: InstallSucceeded, Message: message, Status: &status}, nil
+		return InstallResult{Outcome: InstallSucceeded, Message: message, Status: &status}
 	}
-
 	var problems []string
 	if runErr != nil {
 		problems = append(problems, fmt.Sprintf("%s failed: %v", label, runErr))
@@ -128,7 +179,7 @@ func (installer Installer) Install(ctx context.Context, id ID) (InstallResult, e
 		Message:   fmt.Sprintf("%s could not be verified after installation: %s", spec.Name, strings.Join(problems, "; ")),
 		VendorURL: spec.Install.VendorURL,
 		Status:    &status,
-	}, nil
+	}
 }
 
 // MergePathEntries appends entries from additions that are not already present

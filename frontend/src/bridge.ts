@@ -33,10 +33,11 @@ export type SessionEvent = {
 };
 
 export type ToolStatus = {
-  id: "powershell" | HarnessId;
+  id: "powershell" | "node" | "git" | HarnessId;
   name: string;
   required: boolean;
   installed: boolean;
+  managed: boolean;
   executablePath?: string;
   version?: string;
   versionOutput?: string;
@@ -44,10 +45,11 @@ export type ToolStatus = {
   testedRange: string;
   support: "tested" | "untested" | "below-minimum" | "unknown";
   capabilities: { name: string; option: string; optional?: boolean; available: boolean }[] | null;
+  companions?: { name: string; executablePath?: string; version?: string; installed: boolean; error?: string }[];
   warnings: string[] | null;
   error?: string;
   widgets?: HarnessWidgets;
-  install: { wingetId?: string; npmPackage?: string; source?: string; vendorUrl: string };
+  install: { wingetId?: string; npmPackage?: string; managedStrategy?: "node-lts" | "portable-git"; source?: string; vendorUrl: string };
 };
 
 export type HarnessWidgets = {
@@ -66,9 +68,10 @@ export type ResolvedPreset = {
 };
 
 export type InstallResult = {
-  outcome: "installed" | "cancelled" | "winget-unavailable" | "failed";
+  outcome: "installed" | "cancelled" | "winget-unavailable" | "prerequisite-required" | "failed";
   message: string;
   vendorUrl?: string;
+  prerequisiteId?: "node";
   status?: ToolStatus;
 };
 

@@ -26,6 +26,12 @@ Future-only V3 planning (research, gap analysis, ranked feature specs) lives in
 
 - Capability-gated model selection, reusable prompt presets, and harness
   command widgets.
+- **Deferred architecture spike (not Phase 1 scope):** evaluate launching a
+  harness directly under ConPTY as an alternative to the current PowerShell
+  host. Do not change the PowerShell-first design before the spike's Windows
+  process, `.cmd` resolution, environment, encoding, lifecycle, and UX criteria
+  pass. See the [backlog](20-mvp-backlog.md#deferred-alternative-spike-direct-conpty-harness-launch)
+  and [ConPTY notes](02-conpty-integration.md#deferred-alternative-launch-the-harness-directly).
 - Broader harness/plugin support and workspace management.
 - Remote access, mobile control, remote push notifications, web dashboards,
   multi-agent orchestration, and distributed agents remain later-scope
