@@ -30,9 +30,10 @@
   spike passed: `Microsoft.Windows.Console.ConPTY` forwards all of these, and
   a production smoke delivered real WebView clicks and the device-status reply
   to the fixture. TauShell now prefers the bundled ConPTY
-  (`scripts/fetch-conpty.ps1`) and falls back to inbox. Remaining: conduct
-  user-authorized non-destructive Claude Code and Copilot CLI hosted-terminal
-  walkthroughs using the user's existing sign-ins.
+  (`scripts/fetch-conpty.ps1`) and falls back to inbox. Done: user-authorized
+  non-destructive Claude Code and Copilot CLI hosted-terminal walkthroughs
+  (Claude restore after a completed login remains open; see
+  [`24-claude-code-verification-plan.md`](./24-claude-code-verification-plan.md)).
 - **Host prerequisite:** registry-detection unit tests cover Phase 1; the
   missing-WebView2 native prompt and official download handoff are deferred to
   a manual Windows Sandbox/VM check (the current machine has WebView2).
@@ -119,7 +120,6 @@
     [`11-security-model.md`](./11-security-model.md). Design note: the ledger
     lives in `internal/usage` with its own connection to `state.db`; ingest runs
     on UI polls (throttled ~2 s), not a background loop; Copilot records
-    on UI polls (throttled ~2 s), not a background loop; Copilot records
     without `totalNanoAiu` are unpriced rather than estimated.
 - **Shutdown/recovery:** a repeated native test verifies process, job, and
   input/output pipe handles are invalidated after ConPTY close; the opaque
@@ -129,13 +129,16 @@
   handle growth over 10 cycles. Stale-runtime reconciliation now covers the
   abandoned-starting, recent-starting, missing/exited-PID, reused-PID, and
   live-other-window cases.
-- **Security fix (open):** session `environment:` values are written as
-  `$env:NAME = 'value'` into the script passed as the `pwsh -NoLogo -NoProfile
-  -Command <script>` argument (`harness.PowerShellInvocation`,
-  `internal/sessionhost/manager_windows.go`), so any process of the same user can
-  read them from the process command line. Pass them through the child
-  environment block instead. Prerequisite for the V3 secret vault
-  ([`docs/v3/features/08-secret-vault.md`](../v3/features/08-secret-vault.md)).
+- **Security fix (done):** session `environment:` values now travel in the child
+  environment block (`conpty.ChildEnvironment`, `StartPreferredEnv`,
+  `terminal.Options.Env`) instead of `$env:` lines in the `pwsh -Command`
+  argument; `harness.PowerShellInvocation` no longer takes the environment.
+  Tests (`TestSessionEnvironmentReachesChildButNotItsCommandLine`,
+  `TestManagerPassesSessionEnvironmentOutsideTheCommandLine`) show a real child
+  receives the value and its command line lacks it. Values remain plaintext in
+  YAML; the V3 secret vault
+  ([`docs/v3/features/08-secret-vault.md`](../v3/features/08-secret-vault.md))
+  can now build on this.
 - **Harness compatibility:** provider-backed Claude Code and Copilot CLI
   hosted-terminal walkthroughs are done (both render correctly end to end,
   user-authorized, live credentials); hosted-terminal restore for a session
@@ -152,13 +155,16 @@
 The detailed step dependencies and acceptance criteria remain in
 [`docs/v1/09-UI-Implementation-Plan.md`](../v1/09-UI-Implementation-Plan.md).
 
-### Research: Copilot quota chip (not started)
+### Copilot quota chip (done)
 
-The cookbook `copilot-quota` script reads `gh api /copilot_internal/user`
-(`quota_snapshots.premium_interactions`, `quota_reset_date_utc`) and projects
-month-end usage. A native chip could poll every 15 minutes and on Refresh. Risks:
-undocumented endpoint, requires a `gh` login, extra outbound calls, and
-usage-based billing may replace quotas. No code yet.
+Home shows `Copilot: used / entitlement credits (N%), resets DATE, on pace for ~N`
+(amber when the projection exceeds the entitlement). It runs
+`gh api /copilot_internal/user` using the user's own GitHub CLI sign-in
+(`internal/quota`), caches for 5 minutes and polls every 5 minutes; nothing is
+stored. It is hidden silently when `gh` is missing, signed out, or the plan has no
+quota. Opt out with `quota: { copilot: false }` in `~/.tau_shell/config.yaml`.
+Risks: the endpoint is undocumented and may change, and usage-based billing may
+replace quotas. Verified in the real window with live numbers.
 
 ## Later phases
 

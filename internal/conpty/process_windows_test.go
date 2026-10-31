@@ -24,6 +24,53 @@ func hasHandleInformation(handle windows.Handle) bool {
 	return result != 0
 }
 
+func TestMergeEnvironmentOverridesCaseInsensitively(t *testing.T) {
+	merged := MergeEnvironment(
+		[]string{"Path=C:\\bin", "tau_x=old", "=C:=C:\\dir"},
+		map[string]string{"TAU_X": "new", "OTHER": "1"},
+	)
+	want := []string{"Path=C:\\bin", "=C:=C:\\dir", "OTHER=1", "TAU_X=new"}
+	if strings.Join(merged, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("merged = %q, want %q", merged, want)
+	}
+	if ChildEnvironment(nil) != nil {
+		t.Fatal("no session values must inherit the environment (nil block)")
+	}
+}
+
+func TestSessionEnvironmentReachesChildButNotItsCommandLine(t *testing.T) {
+	powershell, err := exec.LookPath("pwsh.exe")
+	if err != nil {
+		t.Skip("PowerShell 7 is unavailable")
+	}
+	const secret = "TAU-ENV-SECRET-7731"
+	script := "[Console]::Write('GOT:' + $env:TAU_ENV_PROBE + ';CMD:' + ((Get-CimInstance Win32_Process -Filter \"ProcessId=$PID\").CommandLine -like '*TAU-ENV-SECRE[T]-7731*'))"
+	process, _, err := StartPreferredEnv("", ChildEnvironment(map[string]string{"TAU_ENV_PROBE": secret}),
+		120, 24, powershell, t.TempDir(), "-NoLogo", "-NoProfile", "-Command", script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer process.Close()
+	output := make(chan []byte, 1)
+	go func() {
+		data, _ := io.ReadAll(process.Output())
+		output <- data
+	}()
+	exited, _, err := process.Wait(20 * time.Second)
+	if err != nil || !exited {
+		_ = process.Terminate()
+		t.Fatalf("child did not exit: exited=%v err=%v", exited, err)
+	}
+	process.CloseConsole()
+	text := string(<-output)
+	if !strings.Contains(text, "GOT:"+secret) {
+		t.Fatalf("child did not receive the environment value: %q", text)
+	}
+	if !strings.Contains(text, "CMD:False") {
+		t.Fatalf("value appeared on the command line: %q", text)
+	}
+}
+
 func TestProcessRunsPowerShellThroughConPTY(t *testing.T) {
 	powershell, err := exec.LookPath("pwsh.exe")
 	if err != nil {

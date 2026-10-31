@@ -170,7 +170,7 @@ exists on GitHub, a small "available" link. It only links to the Releases page
 and never downloads or installs anything itself.
 
 ## Build
-Requires Windows, Go 1.26+, Node.js and Python 3 (icon generation).
+Requires Windows, Go 1.26+, Node.js and Python 3 (Windows resource embedding).
 
 ```powershell
 Push-Location frontend
@@ -187,7 +187,10 @@ go build -tags production -ldflags "-H=windowsgui" -o taushell.exe ./cmd/taushel
   window can cover the app.
 - If `npm ci` fails with `EALLOWSCRIPTS` because of a user-level `allow-scripts`
   npm setting, set `$env:npm_config_allow_scripts=''` for that shell.
-- `gen_icon.py` writes the gitignored app icon and `.syso` resource.
+- The default app icon PNG and ICO are tracked assets in `build/windows/`;
+  the UI uses its tracked `frontend/src/assets/appicon.png`.
+- `gen_icon.py` embeds the fixed ICO and file-version details in the gitignored
+  `.syso` resource without regenerating the icon. No Pillow dependency is needed.
 - `fetch-conpty.ps1` downloads the pinned MIT-licensed
   `Microsoft.Windows.Console.ConPTY` package, verifies its SHA-256 and
   Authenticode signatures, and copies `conpty.dll` and `OpenConsole.exe` next to

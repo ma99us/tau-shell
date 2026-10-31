@@ -1,83 +1,34 @@
-"""Generate the TauShell icon (appicon.png, appicon.ico) and the Windows
-resource object cmd/taushell/rsrc_windows_amd64.syso that embeds it.
+"""Embed the fixed TauShell appicon.ico in the Windows resource object
+cmd/taushell/rsrc_windows_amd64.syso.
 
-Requires Pillow. Run from the repository root:
+Uses only the Python standard library. Run from the repository root:
     python build\\windows\\gen_icon.py [version]
 The icon group is resource ID 3, which is what the Wails window loads. The
 optional version (for example 1.0.0) fills the exe's file-version details.
 """
-import io
 import struct
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
-
 ROOT = Path(__file__).resolve().parents[2]
 OUT_DIR = Path(__file__).resolve().parent
 SYSO = ROOT / "cmd" / "taushell" / "rsrc_windows_amd64.syso"
-SIZES = [16, 24, 32, 48, 64, 128, 256]
 GROUP_ICON_ID = 3
-FONT = "C:/Windows/Fonts/consolab.ttf"
 
 
-def render(size=1024):
-    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    mask = Image.new("L", (size, size), 0)
-    pad = int(size * 0.04)
-    radius = int(size * 0.22)
-    ImageDraw.Draw(mask).rounded_rectangle((pad, pad, size - pad, size - pad), radius, fill=255)
-
-    # Diagonal dark gradient background.
-    grad = Image.new("RGBA", (size, size))
-    px = grad.load()
-    top, bottom = (28, 38, 50), (9, 12, 18)
-    for y in range(size):
-        for x in range(size):
-            t = (x + y) / (2 * size)
-            px[x, y] = tuple(int(top[i] + (bottom[i] - top[i]) * t) for i in range(3)) + (255,)
-    img.paste(grad, (0, 0), mask)
-
-    # Subtle green rim.
-    rim = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    ImageDraw.Draw(rim).rounded_rectangle(
-        (pad, pad, size - pad, size - pad), radius, outline=(111, 211, 155, 150), width=int(size * 0.018))
-    img = Image.alpha_composite(img, rim)
-
-    # Tau glyph with a soft glow, plus a terminal cursor block.
-    font = ImageFont.truetype(FONT, int(size * 0.80))
-    glyph = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    gd = ImageDraw.Draw(glyph)
-    box = gd.textbbox((0, 0), "\u03c4", font=font)
-    gw, gh = box[2] - box[0], box[3] - box[1]
-    gx, gy = (size - gw) / 2 - box[0] - size * 0.04, (size - gh) / 2 - box[1] - size * 0.06
-    green = (111, 211, 155, 255)
-    gd.text((gx, gy), "\u03c4", font=font, fill=green)
-    cw, ch = int(size * 0.11), int(size * 0.035)
-    cx = int(gx + box[2] + size * 0.02)
-    cy = int(gy + box[3] - ch)
-    gd.rectangle((cx, cy, cx + cw, cy + ch), fill=green)
-
-    glow = glyph.filter(ImageFilter.GaussianBlur(size * 0.03))
-    img = Image.alpha_composite(img, glow)
-    img = Image.alpha_composite(img, glyph)
-    return img
-
-
-def png_bytes(img):
-    buf = io.BytesIO()
-    img.save(buf, "PNG")
-    return buf.getvalue()
-
-
-def build_ico(images):
-    header = struct.pack("<HHH", 0, 1, len(images))
-    entries, blobs, offset = b"", b"", 6 + 16 * len(images)
-    for size, data in images:
-        entries += struct.pack("<BBBBHHII", size % 256, size % 256, 0, 0, 1, 32, len(data), offset)
-        blobs += data
-        offset += len(data)
-    return header + entries + blobs
+def read_ico(path):
+    data = path.read_bytes()
+    reserved, kind, count = struct.unpack_from("<HHH", data)
+    if reserved != 0 or kind != 1 or count == 0:
+        raise ValueError("invalid application icon")
+    images = []
+    for index in range(count):
+        width, height, _, _, planes, bits, length, offset = struct.unpack_from(
+            "<BBBBHHII", data, 6 + 16 * index)
+        if width != height or planes != 1 or bits != 32 or offset < 6 + 16 * count or offset + length > len(data):
+            raise ValueError("unsupported application icon entry")
+        images.append((width or 256, data[offset:offset + length]))
+    return images
 
 
 def _pad4(data):
@@ -175,12 +126,9 @@ def build_syso(images, version_info):
 
 def main():
     version = sys.argv[1].lstrip("v") if len(sys.argv) > 1 else "dev"
-    master = render()
-    images = [(s, png_bytes(master.resize((s, s), Image.LANCZOS))) for s in SIZES]
-    master.resize((512, 512), Image.LANCZOS).save(OUT_DIR / "appicon.png")
-    (OUT_DIR / "appicon.ico").write_bytes(build_ico(images))
+    images = read_ico(OUT_DIR / "appicon.ico")
     SYSO.write_bytes(build_syso(images, build_version_info(version)))
-    print("wrote", OUT_DIR / "appicon.png", OUT_DIR / "appicon.ico", SYSO)
+    print("wrote", SYSO)
 
 
 if __name__ == "__main__":

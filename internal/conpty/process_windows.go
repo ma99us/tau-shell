@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
+	"strings"
 	"time"
 	"unsafe"
 
@@ -26,7 +28,7 @@ type Process struct {
 }
 
 func Start(width, height int, executable, directory string, args ...string) (*Process, error) {
-	return start(inboxAPI, width, height, executable, directory, args...)
+	return start(inboxAPI, width, height, executable, directory, nil, args...)
 }
 
 // StartWithLibrary hosts the process through a bundled conpty.dll at the given
@@ -36,10 +38,70 @@ func StartWithLibrary(library string, width, height int, executable, directory s
 	if err != nil {
 		return nil, err
 	}
-	return start(api, width, height, executable, directory, args...)
+	return start(api, width, height, executable, directory, nil, args...)
 }
 
-func start(api pseudoConsoleAPI, width, height int, executable, directory string, args ...string) (*Process, error) {
+// MergeEnvironment returns the current process environment with overrides
+// applied. Names match case-insensitively, as on Windows.
+func MergeEnvironment(base []string, overrides map[string]string) []string {
+	merged := make([]string, 0, len(base)+len(overrides))
+	for _, entry := range base {
+		name, _, _ := strings.Cut(entry, "=")
+		if name == "" {
+			// Entries such as "=C:=C:\dir" begin with '='; keep them untouched.
+			merged = append(merged, entry)
+			continue
+		}
+		overridden := false
+		for key := range overrides {
+			if strings.EqualFold(key, name) {
+				overridden = true
+				break
+			}
+		}
+		if !overridden {
+			merged = append(merged, entry)
+		}
+	}
+	names := make([]string, 0, len(overrides))
+	for name := range overrides {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		merged = append(merged, name+"="+overrides[name])
+	}
+	return merged
+}
+
+// ChildEnvironment returns the child environment block for session values, or
+// nil to inherit the host environment when there are none.
+func ChildEnvironment(values map[string]string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	return MergeEnvironment(os.Environ(), values)
+}
+
+func environmentBlock(env []string) (*uint16, error) {
+	if len(env) == 0 {
+		return nil, nil
+	}
+	var block []uint16
+	for _, entry := range env {
+		if strings.ContainsRune(entry, 0) {
+			return nil, errors.New("environment entry contains NUL")
+		}
+		encoded, err := windows.UTF16FromString(entry)
+		if err != nil {
+			return nil, err
+		}
+		block = append(block, encoded...)
+	}
+	return &append(block, 0)[0], nil
+}
+
+func start(api pseudoConsoleAPI, width, height int, executable, directory string, env []string, args ...string) (*Process, error) {
 	if width < 1 || height < 1 || width > maxDimension || height > maxDimension {
 		return nil, fmt.Errorf("invalid terminal size %dx%d", width, height)
 	}
@@ -107,6 +169,12 @@ func start(api pseudoConsoleAPI, width, height int, executable, directory string
 		return nil, fmt.Errorf("encode working directory: %w", err)
 	}
 
+	environmentUTF16, err := environmentBlock(env)
+	if err != nil {
+		closePipes()
+		return nil, fmt.Errorf("encode environment: %w", err)
+	}
+
 	var processInfo windows.ProcessInformation
 	flags := uint32(windows.EXTENDED_STARTUPINFO_PRESENT | windows.CREATE_UNICODE_ENVIRONMENT | windows.CREATE_SUSPENDED)
 	if err := windows.CreateProcess(
@@ -116,7 +184,7 @@ func start(api pseudoConsoleAPI, width, height int, executable, directory string
 		nil,
 		false,
 		flags,
-		nil,
+		environmentUTF16,
 		directoryUTF16,
 		&startup.StartupInfo,
 		&processInfo,

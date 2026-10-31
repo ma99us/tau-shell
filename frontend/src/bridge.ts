@@ -1,4 +1,20 @@
 import type { SessionUsage, UsageSummary } from "./usage";
+
+export type CopilotQuota = {
+  plan: string;
+  unlimited: boolean;
+  entitlement: number;
+  used: number;
+  remaining: number;
+  percentUsed: number;
+  resetDate: string;
+  cycleDays: number;
+  daysLeft: number;
+  projected: number;
+  overLimit: boolean;
+  overagesPermitted: boolean;
+  canProject: boolean;
+};
 import type { HarnessId } from "./harnesses";
 
 export type Session = {
@@ -170,6 +186,7 @@ type WailsApp = {
   GetSessionModel(sessionId: string): Promise<string>;
   GetSessionUsage(sessionId: string): Promise<SessionUsage>;
   GetUsageSummary(): Promise<UsageSummary>;
+  GetCopilotQuota(refresh: boolean): Promise<CopilotQuota | null>;
   GetAppVersion(): Promise<string>;
   CheckAppUpdate(): Promise<{ tag: string; url: string } | null>;
   OpenReleasePage(): Promise<void>;

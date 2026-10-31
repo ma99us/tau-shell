@@ -20,9 +20,13 @@ V3 work starts only after the remaining Phase 1 verification items are closed, c
 These findings come from checking the V3 ideas against the code. Feature specs reference
 them by number.
 
-### 2.1 Environment values are visible on the process command line (Phase 1 bug)
+### 2.1 Environment values are visible on the process command line (Phase 1 bug, FIXED)
 
-`harness.PowerShellInvocation` (`internal/harness/adapter.go`) writes each session
+**Fixed:** values now travel in the child environment block (see
+[`11-security-model.md`](../v2/11-security-model.md)). The text below describes the
+original defect.
+
+`harness.PowerShellInvocation` (`internal/harness/adapter.go`) wrote each session
 `environment:` entry as `$env:NAME = 'value'` into a script. The session host passes that
 script as an argument: `pwsh -NoLogo -NoProfile -Command <script>`
 (`internal/sessionhost/manager_windows.go`). Any process running as the same user can read

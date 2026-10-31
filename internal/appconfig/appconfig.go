@@ -25,8 +25,17 @@ type Config struct {
 	Version       int           `yaml:"version"`
 	Notifications Notifications `yaml:"notifications"`
 	Usage         Usage         `yaml:"usage"`
+	Quota         Quota         `yaml:"quota"`
 	Skills        Skills        `yaml:"skills"`
 }
+
+// Quota controls the Home screen's Copilot premium-request chip, which reads
+// the quota through the GitHub CLI. A nil flag means enabled.
+type Quota struct {
+	Copilot *bool `yaml:"copilot,omitempty"`
+}
+
+func (q Quota) CopilotEnabled() bool { return q.Copilot == nil || *q.Copilot }
 
 // Skills controls the skill library TauShell loads into harness sessions.
 // Repo is a pointer so an explicit empty string can turn fetching off.
@@ -160,6 +169,12 @@ usage:
   # Override Claude prices (USD per million tokens). Cache prices are optional.
   # claude_prices:
   #   opus-5.5: { input: 4, output: 20, cache_write_5m: 5, cache_write_1h: 8, cache_read: 0.2 }
+
+quota:
+  # Show your Copilot premium-request usage and month-end projection on Home.
+  # Runs "gh api /copilot_internal/user" with your own GitHub CLI sign-in; set
+  # false to stop all quota calls. The chip is hidden if gh is missing or signed out.
+  # copilot: true
 
 skills:
   # Load TauShell's skill library (from the ai-cookbook) into Claude Code and Copilot CLI sessions.

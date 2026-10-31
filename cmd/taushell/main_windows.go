@@ -12,6 +12,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/ma99us/tau-shell/internal/conpty"
 	"github.com/ma99us/tau-shell/internal/diagnostics"
 	"github.com/ma99us/tau-shell/internal/harness"
 	"github.com/ma99us/tau-shell/internal/session"
@@ -266,8 +267,9 @@ func runSession(id string, restoring bool) (returnErr error) {
 		Directory:  config.WorkingDir,
 		Args: []string{
 			"-NoLogo", "-NoProfile", "-Command",
-			harness.PowerShellInvocation(executable, args, config.Environment, config.UTF8Enabled()),
+			harness.PowerShellInvocation(executable, args, config.UTF8Enabled()),
 		},
+		Env: conpty.ChildEnvironment(config.Environment),
 		OnStart: func(processID int) error {
 			if err := store.MarkRunning(context.Background(), id, processID); err != nil {
 				return err

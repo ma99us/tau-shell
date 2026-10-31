@@ -87,7 +87,7 @@ type sessionProcess interface {
 	Close() error
 }
 
-type processFactory func(int, int, string, string, ...string) (sessionProcess, error)
+type processFactory func(columns, rows int, executable, directory string, env []string, args ...string) (sessionProcess, error)
 
 type Manager struct {
 	configDirectory string
@@ -165,8 +165,8 @@ func New(configDirectory, databasePath string, emit func(Event)) (*Manager, erro
 		store:           store,
 		closeStore:      store.Close,
 		emit:            emit,
-		startProcess: func(columns, rows int, executable, directory string, args ...string) (sessionProcess, error) {
-			process, fallbackErr, err := conpty.StartPreferred(conpty.ExecutableDirectory(), columns, rows, executable, directory, args...)
+		startProcess: func(columns, rows int, executable, directory string, env []string, args ...string) (sessionProcess, error) {
+			process, fallbackErr, err := conpty.StartPreferredEnv(conpty.ExecutableDirectory(), env, columns, rows, executable, directory, args...)
 			if fallbackErr != nil {
 				diagnostics.Warn("bundled ConPTY unavailable; using inbox ConPTY", fallbackErr)
 			}
@@ -410,11 +410,11 @@ func (manager *Manager) start(ctx context.Context, id string, restoring, fresh b
 	launchedAt := time.Now()
 	args := adapter.Argv(config.LaunchArgs, restoring, runtime.HarnessSessionID)
 	args = append(args, manager.skillArgs(ctx, config, harnessExecutable)...)
-	command := harness.PowerShellInvocation(harnessExecutable, args, config.Environment, config.UTF8Enabled())
+	command := harness.PowerShellInvocation(harnessExecutable, args, config.UTF8Enabled())
 	if columns < 2 || rows < 2 {
 		columns, rows = 80, 24
 	}
-	process, err := manager.startProcess(columns, rows, powershell, config.WorkingDir,
+	process, err := manager.startProcess(columns, rows, powershell, config.WorkingDir, conpty.ChildEnvironment(config.Environment),
 		"-NoLogo", "-NoProfile", "-Command", command)
 	if err != nil {
 		finishErr := manager.store.Finish(ctx, id, session.StatusFailed, err.Error())

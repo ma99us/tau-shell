@@ -73,15 +73,13 @@ func TestWindowsHarnessLookupUsesPATHEXTResolution(t *testing.T) {
 	}
 }
 
-func TestPowerShellInvocationQuotesValuesAndSetsSessionEnvironment(t *testing.T) {
+func TestPowerShellInvocationQuotesValuesAndKeepsEnvironmentOffTheCommand(t *testing.T) {
 	command := PowerShellInvocation(
 		"C:\\Program Files\\Agent\\agent.exe",
 		[]string{"--session-id", "session-id", "space ' quote"},
-		map[string]string{"MESSAGE": "O'Brien; Remove-Item *"},
 		true,
 	)
 	for _, expected := range []string{
-		"$env:MESSAGE = 'O''Brien; Remove-Item *'",
 		"'C:\\Program Files\\Agent\\agent.exe'",
 		"'space '' quote'",
 		"chcp 65001",
@@ -90,10 +88,13 @@ func TestPowerShellInvocationQuotesValuesAndSetsSessionEnvironment(t *testing.T)
 			t.Errorf("PowerShell command missing %q: %s", expected, command)
 		}
 	}
+	if strings.Contains(command, "$env:") {
+		t.Errorf("command must not set environment values: %s", command)
+	}
 }
 
 func TestPowerShellInvocationCanLeaveBootstrapEncodingAlone(t *testing.T) {
-	command := PowerShellInvocation("copilot.exe", []string{"--resume", "id"}, nil, false)
+	command := PowerShellInvocation("copilot.exe", []string{"--resume", "id"}, false)
 	if strings.Contains(command, "chcp") || strings.Contains(command, "Encoding") {
 		t.Fatalf("unexpected encoding setup in command: %s", command)
 	}

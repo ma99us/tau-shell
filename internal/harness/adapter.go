@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -230,8 +229,11 @@ func (adapter cliAdapter) DefaultLaunchArgs() []string {
 	return append([]string(nil), adapter.defaultArgs...)
 }
 
-func PowerShellInvocation(executable string, args []string, environment map[string]string, utf8 bool) string {
-	lines := make([]string, 0, len(environment)+4)
+// PowerShellInvocation builds the -Command script. Session environment values
+// are deliberately not part of it: they travel in the child environment block
+// so they never appear on a process command line.
+func PowerShellInvocation(executable string, args []string, utf8 bool) string {
+	lines := make([]string, 0, 6)
 	if utf8 {
 		lines = append(lines,
 			"$utf8 = [System.Text.UTF8Encoding]::new($false)",
@@ -240,15 +242,6 @@ func PowerShellInvocation(executable string, args []string, environment map[stri
 			"$OutputEncoding = $utf8",
 			"chcp 65001 > $null",
 		)
-	}
-	names := make([]string, 0, len(environment))
-	for name := range environment {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		value := environment[name]
-		lines = append(lines, "$env:"+name+" = "+QuotePowerShell(value))
 	}
 
 	quoted := make([]string, 0, len(args)+1)
