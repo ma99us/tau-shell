@@ -190,7 +190,7 @@ func loadSessionEntries(configDirectory, databasePath string) ([]sessionEntry, e
 	}
 	entries := make([]sessionEntry, 0, len(configs))
 	for _, config := range configs {
-		runtime, err := recoverRuntime(context.Background(), store, config.ID)
+		runtime, err := session.RecoverRuntime(context.Background(), store, config.ID)
 		if err != nil {
 			return nil, errors.Join(err, store.Close())
 		}
@@ -230,12 +230,17 @@ func runSession(id string, restoring bool) (returnErr error) {
 	defer func() {
 		returnErr = errors.Join(returnErr, store.Close())
 	}()
-	runtime, err := recoverRuntime(context.Background(), store, id)
+	runtime, err := session.RecoverRuntime(context.Background(), store, id)
 	if err != nil {
 		return err
 	}
 	if runtime.Status == session.StatusRunning || runtime.Status == session.StatusStarting {
 		return fmt.Errorf("session %q is already active in another TauShell process", id)
+	}
+	if restoring && runtime.HarnessSessionID != "" {
+		if resumeErr := adapter.CheckResume(runtime.HarnessSessionID); resumeErr != nil {
+			return resumeErr
+		}
 	}
 	if adapter.DiscoversSessionID() {
 		runtime, err = store.BeginDiscovered(context.Background(), id, config.Tool, restoring, false)
@@ -245,22 +250,33 @@ func runSession(id string, restoring bool) (returnErr error) {
 	if err != nil {
 		return err
 	}
+	var existingSessionIDs map[string]bool
+	discoveryNote := ""
+	if adapter.DiscoversSessionID() && runtime.HarnessSessionID == "" {
+		existingSessionIDs, err = adapter.ExistingSessionIDs(config.WorkingDir)
+		if err != nil {
+			discoveryNote = "Resume ID unknown: existing " + string(config.Tool) + " conversations could not be enumerated; use Start fresh."
+			diagnostics.Warn("snapshot existing harness sessions failed", err, "session_id", id, "tool", config.Tool)
+		}
+	}
 	launchedAt := time.Now()
 	args := adapter.Argv(config.LaunchArgs, restoring, runtime.HarnessSessionID)
 	started, finished := false, false
 	stopDiscovery := make(chan struct{})
-	discoveryDone := make(chan struct{})
-	if adapter.DiscoversSessionID() && runtime.HarnessSessionID == "" {
+	discoveryDone := make(chan string, 1)
+	if adapter.DiscoversSessionID() && runtime.HarnessSessionID == "" && discoveryNote == "" {
 		go func() {
-			defer close(discoveryDone)
-			discoverCLISessionID(store, adapter, config, launchedAt, stopDiscovery)
+			discoveryDone <- discoverCLISessionID(store, adapter, config, launchedAt, existingSessionIDs, runtime.LaunchToken, stopDiscovery)
 		}()
 	} else {
+		discoveryDone <- discoveryNote
 		close(discoveryDone)
 	}
 	defer func() {
 		close(stopDiscovery)
-		<-discoveryDone
+		if note, ok := <-discoveryDone; ok && note != "" {
+			fmt.Fprintln(os.Stderr, note)
+		}
 	}()
 	runErr := terminal.Run(terminal.Options{
 		Executable: powershell,
@@ -291,65 +307,35 @@ func runSession(id string, restoring bool) (returnErr error) {
 	return runErr
 }
 
-const startupRecoveryDelay = time.Minute
-
-func recoverRuntime(ctx context.Context, store *session.Store, id string) (session.Runtime, error) {
-	for attempt := 0; attempt < 3; attempt++ {
-		runtime, err := store.Runtime(ctx, id)
-		if err != nil {
-			return session.Runtime{}, err
-		}
-		switch runtime.Status {
-		case session.StatusStarting:
-			if time.Since(runtime.UpdatedAt) < startupRecoveryDelay {
-				return runtime, nil
-			}
-		case session.StatusRunning:
-			alive, err := session.RuntimeProcessAlive(runtime)
-			if err != nil {
-				return session.Runtime{}, err
-			}
-			if alive {
-				return runtime, nil
-			}
-		default:
-			return runtime, nil
-		}
-
-		detail := "TauShell exited unexpectedly; use restore to resume the saved harness session."
-		if runtime.Status == session.StatusStarting {
-			detail = "TauShell stopped while starting the session; use start or restore to retry."
-		}
-		updated, err := store.FailIfCurrent(ctx, runtime, detail)
-		if err != nil {
-			return session.Runtime{}, err
-		}
-		if updated {
-			runtime.Status = session.StatusFailed
-			runtime.ProcessID = 0
-			runtime.LastError = detail
-			return runtime, nil
-		}
-	}
-	return session.Runtime{}, fmt.Errorf("session %q runtime state changed repeatedly during recovery; retry the command", id)
-}
-
 // discoverCLISessionID is the foreground-CLI counterpart of the desktop
 // manager's discovery: it polls until the ID is recorded or stop closes, with
 // one last attempt after stop.
-func discoverCLISessionID(store *session.Store, adapter harness.Adapter, config session.Config, launchedAt time.Time, stop <-chan struct{}) {
+func discoverCLISessionID(store *session.Store, adapter harness.Adapter, config session.Config, launchedAt time.Time, existingIDs map[string]bool, launchToken string, stop <-chan struct{}) string {
+	lastNote := ""
 	attempt := func() bool {
 		ctx := context.Background()
-		taken, err := store.HarnessSessionIDs(ctx, config.Tool)
+		found, err := harness.DiscoverAndClaimSessionID(ctx, store, adapter, config.ID, config.WorkingDir, launchedAt, existingIDs, launchToken)
+		if errors.Is(err, harness.ErrAmbiguousSession) {
+			lastNote = "Resume ID unknown: several " + string(config.Tool) + " conversations in this folder match; use Start fresh."
+			return false
+		}
+		if errors.Is(err, session.ErrHarnessSessionIDClaimed) {
+			lastNote = "Resume ID unknown: the discovered conversation is already linked to another TauShell session."
+			return true
+		}
+		if errors.Is(err, session.ErrHarnessLaunchChanged) {
+			lastNote = "Resume ID discovery result discarded because this session has since started again."
+			return true
+		}
 		if err != nil {
+			lastNote = "Resume ID discovery failed: " + err.Error()
 			return false
 		}
-		found, err := adapter.DiscoverSessionID(config.WorkingDir, launchedAt, taken)
-		if err != nil || found == "" {
+		if found == "" {
 			return false
 		}
-		recorded, err := store.SetHarnessSessionID(ctx, config.ID, found)
-		return err == nil && recorded
+		lastNote = ""
+		return true
 	}
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
@@ -357,10 +343,10 @@ func discoverCLISessionID(store *session.Store, adapter harness.Adapter, config 
 		select {
 		case <-stop:
 			attempt()
-			return
+			return lastNote
 		case <-ticker.C:
 			if attempt() {
-				return
+				return lastNote
 			}
 		}
 	}

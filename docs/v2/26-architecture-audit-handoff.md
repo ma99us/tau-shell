@@ -12,9 +12,139 @@ locations and conclusions below describe the audit snapshot, not a guarantee
 about a later checkout. Follow the user's current instructions on what to
 implement.
 
+## A1 implementation update
+
+**Updated:** 2026-11-01. The store now assigns a fresh launch token whenever a
+session start is reserved. Discovered-ID claims run under SQLite
+`BEGIN IMMEDIATE`, require the matching harness and launch token, and refuse an
+ID already recorded by another session for that harness. The additive schema
+migration preserves existing IDs, including legacy duplicates; it does not
+rewrite or reject them. Desktop and CLI discovery both use the claim operation.
+Desktop records a resume note on a claim conflict; CLI reports ambiguity,
+conflict, or a stale launch after its foreground command exits. Codex and
+OpenCode snapshot same-folder conversation IDs before launch and exclude them
+during discovery. If enumeration fails, the process still launches but TauShell
+leaves the resume ID unknown.
+
+Focused tests cover concurrent claims through separate store handles,
+harness-scoped IDs, idempotent claims, stale-token rejection, and migration
+without changing legacy duplicates. Caller tests verify CLI ambiguity/conflict
+messages and desktop stale-launch rejection/conflict notes. Adapter tests
+verify a recently modified pre-existing Codex transcript stays excluded and
+only a post-snapshot OpenCode session is eligible. The focused command
+`go test ./internal/session ./internal/sessionhost ./cmd/taushell -count=1`
+passed. The store race test passed 25 repeated runs. This does not constitute a
+live race test with real harnesses. Discovery still correlates by working
+directory and launch time; ambiguous matches remain unclaimed. The Go race
+detector was unavailable because cgo is disabled and no GCC toolchain is
+installed.
+
+## A2 implementation update
+
+**Updated:** 2026-11-01. Missing skill-state files remain a normal first run;
+read failures, malformed JSON, and non-object state now fail library
+initialization without modifying the file. The desktop logs the cause, keeps
+sessions available, and exposes an unavailable Skills warning. `SetEnabled`
+and `Apply` persist candidate state before publishing it in memory. An Apply
+write failure keeps the prior snapshot active and reports the failure through
+status. Frontend toggles are single-flight, disabled while saving, and refresh
+from backend state after either success or failure rather than applying an
+inverse-value rollback.
+
+Tests cover malformed/unreadable startup state, preservation after failed
+preference/snapshot writes, successful retries, concurrent preference writes,
+and the host error view. Component-level frontend toggle ordering is not
+directly tested; build and the existing frontend unit suite are the current
+validation for that slice.
+
+## A3 implementation update
+
+**Updated:** 2026-11-01. TauShell config creation, updates, deletion staging,
+and recovery share a per-file cross-process lock; the updater rechecks bytes
+before replacement and reports an external-edit conflict rather than
+overwriting observed changes. Updating/removing YAML values preserves attached
+comments. Session deletion stages YAML as
+`.yaml.deleting`, then commits runtime/order removal, usage tombstoning, and a
+deletion journal in one SQLite transaction. Startup restores an uncommitted
+stage or finalizes a committed deletion. Active runtimes are rejected inside
+the deletion transaction; pending cleanup errors remain visible and retryable.
+If an external actor recreates the original YAML after commit, recovery removes
+only the old tombstone and preserves the new definition.
+
+Tests cover comments, external-edit conflict, concurrent field updates,
+transaction rollback at SQL failure points, active-session refusal, both
+deletion recovery branches, and preservation of a recreated definition. The
+external editor check is detect-before-replace, not an OS-level compare-and-swap;
+an unrelated editor can still race after the recheck.
+
+## A4 implementation update
+
+**Updated:** 2026-11-01. Session starts reserve one ID under `manager.mu` and
+perform config lookup, recovery, harness probing, skill preparation, and
+process startup without holding the global lock. Duplicate same-ID starts are
+rejected. Shutdown closes admission, waits for reserved starts using its
+context, then stops registered processes. Delete refuses an in-flight start.
+Channel-blocked tests prove another session can write, resize, and stop during
+a slow launch; tests also cover duplicate starts, delete/close races,
+process-start failure, and `MarkRunning` failure with restore retry.
+
+## A5 implementation update
+
+**Updated:** 2026-11-01. Runtime reconciliation is shared in
+`session.RecoverRuntime`; CLI and desktop use the same conditional policy.
+Harness candidate filtering and atomic ID claim are shared through
+`harness.DiscoverAndClaimSessionID`. CLI restore now calls the same adapter
+`CheckResume` policy as desktop. Presentation-specific messages remain at each
+entrypoint.
+
 The audit found targeted reliability and consistency improvements, not a need
 for a broad rewrite. Preserve existing behavior unless a change is explicitly
 agreed, and keep each pass small enough to test and review.
+
+## A6 implementation update
+
+**Updated:** 2026-11-01. V2 architecture, lifecycle, restoration, attention,
+and harness-authoring docs now match the shipped optional tool setup, local
+notifications, generic output-timing fallback, and opt-in startup auto-resume.
+The engineering handoff points to `sessionVisuals.tsx` and states the current
+frontend test coverage. Contributor guidance no longer recommends a reset-based
+checkout refresh. This was documentation-only; runtime behavior did not change.
+
+## A7 implementation update
+
+**Updated:** 2026-11-01. Clone now awaits the launch promise before clearing the
+busy state. Home and terminal polling retain last-good values, suppress repeat
+reports during one failure episode, reset suppression on recovery, and avoid
+overlapping requests. Periodic tool/skill status reads also surface failures
+once instead of swallowing them. Pure helper tests cover deferred clone launch,
+failure/retry, and poll-error deduplication. The frontend build, 11 unit tests,
+and token check pass. A live Wails GUI smoke was not run; the shared browser is
+the Vite preview and does not provide the native bridge.
+
+## A8 implementation update
+
+**Updated:** 2026-11-01. `fsutil.ReplaceFile` now claims only that it writes and
+syncs a neighboring temporary file before asking the OS to rename it; atomic
+replacement and crash durability depend on platform/filesystem. Short writes
+and cleanup failures are surfaced, and injected failures verify the original
+remains intact. Cookbook sync uses a text filename/extension allowlist with
+strict UTF-8 validation and LF normalization; non-text bytes are hashed and
+copied unchanged. A temporary Windows fixture covered CRLF/emoji, BOM/dotfile
+handling, NUL-free binary preservation, check-mode drift, and invalid UTF-8
+rejection. Publish stages beside the destination and retains the prior bundle
+for rollback during activation. The rollback branch itself has not been
+fault-injected; the fixture verifies successful replacement and validation
+failures before publication.
+
+## A9 implementation update
+
+**Updated:** 2026-11-01. The unused frontend `events` alias was removed.
+Codex resume eligibility scans after the metadata line with bounded buffering,
+including a multi-megabyte line regression test. Verified skill-directory
+routes are adapter metadata; the manager still probes the installed CLI, and
+unverified harness routes remain disabled. OpenCode usage remains a distinct
+database integration because it reads a different store format; no generic
+abstraction was added.
 
 ## Starting context and safeguards
 
@@ -67,16 +197,16 @@ items. Shared lifecycle refactoring should incorporate the identity fix rather
 than creating a second claim implementation.
 
 | ID | Open work | Impact / risk |
-|---|---|---|
-| A1 | Concurrent resume-ID claims and launch correlation | High / medium-high |
-| A2 | Skill preference load/save consistency | High / medium |
-| A3 | YAML edits and multi-store session deletion | High / medium |
-| A4 | Global manager lock during launch and probing | High / medium |
-| A5 | Duplicated and divergent CLI/desktop lifecycle policy | Medium / medium |
-| A6 | Documentation drift and unsafe checkout guidance | Medium / low |
-| A7 | Frontend clone lifecycle, error reporting, and coverage | Medium / low-medium |
-| A8 | Replacement guarantees and binary-safe LF synchronization | Medium / low-medium |
-| A9 | Smaller adapter and performance opportunities | Low / case-dependent |
+| --- | --- | --- |
+| A1 | Atomic claims and stale-launch protection implemented; real-harness correlation remains unverified | High / medium-high |
+| A2 | Candidate persistence, load-error handling, and serialized UI toggles implemented | High / medium |
+| A3 | YAML conflict detection, comments, and recoverable multi-store deletion implemented | High / medium |
+| A4 | Per-session start reservations and shutdown coordination implemented | High / medium |
+| A5 | Shared recovery/discovery policy and CLI resume checks implemented | Medium / medium |
+| A6 | V2 documentation and checkout guidance reconciled; verification limits retained | Medium / low |
+| A7 | Clone busy state and background polling errors fixed; live GUI smoke remains | Medium / low-medium |
+| A8 | Replacement guarantees corrected and cookbook sync made binary-safe; publish rollback fault injection remains | Medium / low-medium |
+| A9 | Unused alias removed, Codex check streamed, skill route metadata unified | Low / case-dependent |
 
 ## A1. Resume-ID claims and launch correlation
 

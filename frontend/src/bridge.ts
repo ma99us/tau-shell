@@ -210,4 +210,3 @@ declare global {
 }
 
 export const app = () => window.go.main.App;
-export const events = () => window.runtime;

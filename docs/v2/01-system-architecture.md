@@ -23,8 +23,9 @@ Each live session has an independent PowerShell/ConPTY process tree. xterm.js
 is mounted per open tab and receives ConPTY output as base64-encoded bytes;
 input (including binary terminal input) and measured resize are sent only to
 the session represented by that terminal. The app stores open tab IDs and
-selection in WebView local storage; it does not start sessions automatically
-on startup. Choosing to keep a live session in the background retains its
+selection in WebView local storage. The desktop opens Home by default; opt-in
+per-session/global settings can restore eligible sessions on startup. Choosing
+to keep a live session in the background retains its
 xterm instance in the current app process so it continues consuming output and
 can reopen the same screen. A browser-only mocked-bridge smoke exercised
 background output, split UTF-8/emoji, ANSI, alternate screen, terminal queries,
@@ -33,10 +34,12 @@ the production Wails/WebView2/ConPTY path, and output delivery under load still
 requires end-to-end testing.
 
 The desktop app checks the Evergreen WebView2 Runtime before creating its
-window and can direct the user to Microsoft's download page when the runtime
-is absent. Home displays detected PowerShell 7 and harness executable/version
-information. Automated setup, version support ranges, capability probes, and
-confirmed installation flows are not implemented yet.
+window and directs the user to Microsoft's official installer when it is
+absent. Home detects PowerShell 7, supported harnesses, Node.js/npm and Git,
+including versions and declared capability probes. Missing PowerShell has a
+confirmed setup flow; optional Node.js and Git have confirmed per-user
+installers and never gate Home. Harnesses with winget or npm install routes
+also require confirmation and are re-detected afterwards.
 
 ## Boundaries
 
@@ -54,5 +57,7 @@ confirmed installation flows are not implemented yet.
 - **Embedded terminal:** VT screen interpretation and display; not a chat
   transcript renderer or agent-message parser.
 
-Remote access, mobile UI, web dashboards/server mode, notifications, general
-third-party plugins, and distributed execution are outside Phase 1.
+Local taskbar-flash and Windows-toast attention notifications are in Phase 1;
+see [`22-local-attention-notifications.md`](22-local-attention-notifications.md).
+Remote access, mobile UI, web dashboards/server mode, general third-party
+plugins, and distributed execution are outside Phase 1.

@@ -1,16 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { app, CopilotQuota, InstallResult, Session, SkillsView, SystemStatus, ToolStatus } from "./bridge";
 import { UsageSummary, hasUsage, monthTooltip, usageText } from "./usage";
 import { GearIcon } from "./harnessIcons";
 import { harnesses, harnessIds, harnessShort, isHarness } from "./harnesses";
 import { ProjectIcon, statusLabel } from "./sessionVisuals";
+import { clearPollFailure, shouldReportPollFailure } from "./polling";
 
-export function Home({ sessions, loaded, autoResumeAll, onAutoResumeAll, onAutoResume, status, busy, tools, skills, onNew, onRefresh, onHome, onLaunch, onDelete, onDuplicate, dragProps, dropClass, dragId }: {
+export function Home({ sessions, loaded, autoResumeAll, onAutoResumeAll, onAutoResume, status, busy, tools, skills, onNew, onRefresh, onHome, onLaunch, onDelete, onDuplicate, onError, dragProps, dropClass, dragId }: {
   skills: SkillsActions;
   autoResumeAll: boolean;
   onAutoResumeAll: (enabled: boolean) => void;
   onAutoResume: (session: Session, enabled: boolean) => void;
   onDuplicate: (session: Session) => void;
+  onError: (source: string, error: unknown) => void;
   dragProps: (id: string) => object;
   dropClass: (id: string) => string;
   dragId: string;
@@ -27,9 +29,21 @@ export function Home({ sessions, loaded, autoResumeAll, onAutoResumeAll, onAutoR
 }) {
   const [freshSession, setFreshSession] = useState<Session | null>(null);
   const [summary, setSummary] = useState<UsageSummary | null>(null);
+  const pollFailures = useRef(new Set<string>());
   useEffect(() => {
     let cancelled = false;
-    const load = () => { void app().GetUsageSummary().then((value) => { if (!cancelled) setSummary(value); }).catch(() => { if (!cancelled) setSummary(null); }); };
+    let loading = false;
+    const load = () => {
+      if (loading) return;
+      loading = true;
+      void app().GetUsageSummary().then((value) => {
+        if (cancelled) return;
+        clearPollFailure(pollFailures.current, "usage-summary");
+        setSummary(value);
+      }).catch((error) => {
+        if (!cancelled && shouldReportPollFailure(pollFailures.current, "usage-summary")) onError("ui.poll-usage-summary", error);
+      }).finally(() => { loading = false; });
+    };
     load();
     const timer = window.setInterval(load, 15000);
     return () => { cancelled = true; window.clearInterval(timer); };
@@ -37,7 +51,18 @@ export function Home({ sessions, loaded, autoResumeAll, onAutoResumeAll, onAutoR
   const [quota, setQuota] = useState<CopilotQuota | null>(null);
   useEffect(() => {
     let cancelled = false;
-    const load = () => { void app().GetCopilotQuota(false).then((value) => { if (!cancelled) setQuota(value ?? null); }).catch(() => { if (!cancelled) setQuota(null); }); };
+    let loading = false;
+    const load = () => {
+      if (loading) return;
+      loading = true;
+      void app().GetCopilotQuota(false).then((value) => {
+        if (cancelled) return;
+        clearPollFailure(pollFailures.current, "copilot-quota");
+        setQuota(value ?? null);
+      }).catch((error) => {
+        if (!cancelled && shouldReportPollFailure(pollFailures.current, "copilot-quota")) onError("ui.poll-copilot-quota", error);
+      }).finally(() => { loading = false; });
+    };
     load();
     const timer = window.setInterval(load, 300000);
     return () => { cancelled = true; window.clearInterval(timer); };
@@ -47,8 +72,8 @@ export function Home({ sessions, loaded, autoResumeAll, onAutoResumeAll, onAutoR
   const [appUpdate, setAppUpdate] = useState<{ tag: string; url: string } | null>(null);
   useEffect(() => {
     let cancelled = false;
-    void app().GetAppVersion().then((value) => { if (!cancelled) setAppVersion(value); }).catch(() => undefined);
-    void app().CheckAppUpdate().then((value) => { if (!cancelled) setAppUpdate(value); }).catch(() => undefined);
+    void app().GetAppVersion().then((value) => { if (!cancelled) { clearPollFailure(pollFailures.current, "app-version"); setAppVersion(value); } }).catch((error) => { if (!cancelled && shouldReportPollFailure(pollFailures.current, "app-version")) onError("ui.poll-app-version", error); });
+    void app().CheckAppUpdate().then((value) => { if (!cancelled) { clearPollFailure(pollFailures.current, "app-update"); setAppUpdate(value); } }).catch((error) => { if (!cancelled && shouldReportPollFailure(pollFailures.current, "app-update")) onError("ui.poll-app-update", error); });
     return () => { cancelled = true; };
   }, []);
   const resumable = sessions.filter((session) => !session.runningHere && session.hasResumeId && !session.resumeNote);
@@ -116,6 +141,7 @@ export type SkillsActions = {
   view: SkillsView | null;
   refreshing: boolean;
   updating: boolean;
+  saving: boolean;
   onUpdate: () => void;
   onToggle: (name: string, enabled: boolean) => void;
 };
@@ -124,25 +150,25 @@ const toolLabel = harnessShort;
 
 function SkillsPanel({ skills, unsupportedNote }: { skills: SkillsActions; unsupportedNote?: string[] }) {
   const view = skills.view;
-  if (view && !view.status.enabled) return null;
+  if (view && !view.status.enabled && !view.status.message) return null;
   const status = view?.status;
-  const origin = status ? (status.source === "cookbook" ? `ai-cookbook @${status.applied}` : `bundled @${status.applied || "snapshot"}`) : "";
+  const origin = status?.enabled ? (status.source === "cookbook" ? `ai-cookbook @${status.applied}` : `bundled @${status.applied || "snapshot"}`) : "";
   return <div className="tools-panel skills-panel">
     <div className="tools-header">
-      <div><h2>Skills</h2><p className="muted">{view ? `${origin}. Applies to new or resumed sessions.` : "Loading skills..."}</p></div>
+      <div><h2>Skills</h2><p className="muted">{!view ? "Loading skills..." : status?.enabled ? `${origin}. Applies to new or resumed sessions.` : "Skills are unavailable."}</p></div>
       <div className="refresh-group">
-        {(skills.updating || !view) && <span className="spinner" role="status" aria-label="Updating skills" />}
-        {status?.updateAvailable && <button className="secondary-button" disabled={skills.updating || skills.refreshing} title={`Download and use ai-cookbook commit ${status.latest}`} onClick={skills.onUpdate}>Update skills ({status.latest})</button>}
+        {(skills.updating || skills.saving || !view) && <span className="spinner" role="status" aria-label={skills.saving ? "Saving skill preferences" : "Updating skills"} />}
+        {status?.updateAvailable && <button className="secondary-button" disabled={skills.updating || skills.refreshing || skills.saving} title={`Download and use ai-cookbook commit ${status.latest}`} onClick={skills.onUpdate}>Update skills ({status.latest})</button>}
       </div>
     </div>
     <div className="skill-list">
       {view?.skills.map((skill) => <label className="skill-row" key={skill.name} title={skill.description}>
-        <input type="checkbox" checked={skill.enabled} onChange={(event) => skills.onToggle(skill.name, event.target.checked)} />
+        <input type="checkbox" checked={skill.enabled} disabled={skills.saving} onChange={(event) => skills.onToggle(skill.name, event.target.checked)} />
         <strong>{skill.name}</strong>
         <span className="skill-source">{skill.personal?.length ? `${skill.personal.map(toolLabel).join(", ")}: your copy is used` : skill.source}</span>
       </label>)}
     </div>
-    {status?.message && <p className="muted skill-note">{status.message}</p>}
+    {status?.message && <p className={status.enabled ? "muted skill-note" : "skill-note skill-warn"}>{status.message}</p>}
     {unsupportedNote?.length ? <p className="skill-note skill-warn">Skills are not supported by the installed {unsupportedNote.map(toolLabel).join(", ")} version.</p> : null}
     {status?.warnings?.map((warning) => <p className="skill-note skill-warn" key={warning}>{warning}</p>)}
   </div>;

@@ -8,7 +8,7 @@ session and never starts a process by itself.
 ## Phase 1 runtime states
 
 | State | Meaning |
-|---|---|
+| --- | --- |
 | `never-started` | No harness conversation has been created for this session. |
 | `starting` | TauShell has persisted the launch intent and is creating PowerShell/ConPTY and starting the harness. |
 | `running` | The TauShell-managed PowerShell process is alive. This does not claim that the harness is generating a response. |
@@ -40,7 +40,10 @@ visible and must not be reported as successful recovery.
 
 Restore starts a new PowerShell/ConPTY process. It does not recreate the prior
 PowerShell process, its environment mutations, or its terminal buffer.
-Automatic harness restore on application startup is not supported.
+Startup auto-resume is opt-in: TauShell restores sessions whose `auto_resume`
+flag is true, or all eligible sessions when the global `auto_resume_all`
+setting is enabled. Only stopped sessions with a saved ID and no resume warning
+are eligible; otherwise the app opens Home without launching sessions.
 
 ## Runtime recovery
 

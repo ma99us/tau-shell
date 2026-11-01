@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
 )
@@ -126,6 +127,104 @@ func TestLibraryPrepareSkipsPersonalAndDisabled(t *testing.T) {
 		if entry.Name == "windows-screenshot" && entry.Enabled {
 			t.Fatal("disabled state must persist")
 		}
+	}
+}
+
+func TestNewLibraryRejectsInvalidStateWithoutOverwritingIt(t *testing.T) {
+	config := DefaultConfig()
+	config.Repo = ""
+
+	t.Run("malformed JSON", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "skills-state.json")
+		original := []byte(`{"disabled":["windows-screenshot"],`)
+		if err := os.WriteFile(path, original, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := NewLibrary(dir, config, nil); err == nil {
+			t.Fatal("malformed state must fail library initialization")
+		}
+		if got, err := os.ReadFile(path); err != nil || !bytes.Equal(got, original) {
+			t.Fatalf("malformed state changed: %q, %v", got, err)
+		}
+	})
+
+	t.Run("unreadable path", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.Mkdir(filepath.Join(dir, "skills-state.json"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := NewLibrary(dir, config, nil); err == nil {
+			t.Fatal("a directory at the state path must not be treated as first run")
+		}
+	})
+}
+
+func TestSetEnabledKeepsMemoryAndPersistedStateWhenSaveFails(t *testing.T) {
+	config := DefaultConfig()
+	config.Repo = ""
+	dir := filepath.Join(t.TempDir(), "tau")
+	library, err := NewLibrary(dir, config, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	blocker := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(blocker, []byte("block"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	library.dir = filepath.Join(blocker, "tau")
+	if err := library.SetEnabled("windows-screenshot", false); err == nil {
+		t.Fatal("expected preference persistence to fail")
+	}
+	assertSkillEnabled(t, library, "windows-screenshot", true)
+	library.dir = dir
+	if err := library.SetEnabled("windows-screenshot", false); err != nil {
+		t.Fatalf("retry preference persistence: %v", err)
+	}
+
+	reopened, err := NewLibrary(dir, config, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertSkillEnabled(t, reopened, "windows-screenshot", false)
+}
+
+func TestConcurrentSetEnabledPersistsBothChanges(t *testing.T) {
+	config := DefaultConfig()
+	config.Repo = ""
+	dir := filepath.Join(t.TempDir(), "tau")
+	library, err := NewLibrary(dir, config, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := make(chan struct{})
+	errorsFound := make(chan error, 2)
+	var group sync.WaitGroup
+	for _, name := range []string{"windows-screenshot", "repository-cleanup"} {
+		group.Add(1)
+		go func(name string) {
+			defer group.Done()
+			<-start
+			errorsFound <- library.SetEnabled(name, false)
+		}(name)
+	}
+	close(start)
+	group.Wait()
+	close(errorsFound)
+	for err := range errorsFound {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, name := range []string{"windows-screenshot", "repository-cleanup"} {
+		assertSkillEnabled(t, library, name, false)
+	}
+	reopened, err := NewLibrary(dir, config, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"windows-screenshot", "repository-cleanup"} {
+		assertSkillEnabled(t, reopened, name, false)
 	}
 }
 
@@ -284,4 +383,57 @@ func TestLibraryCheckApplyAndFallback(t *testing.T) {
 	if status := library.Status(); status.Source != SourceCookbook || status.Message == "" {
 		t.Fatalf("offline must keep applied snapshot and say why: %+v", status)
 	}
+}
+
+func TestApplyKeepsPreviousSnapshotWhenStateSaveFails(t *testing.T) {
+	archive := tarball(t, []tar.Header{
+		{Name: "r-sha/tau-shell.yaml", Typeflag: tar.TypeReg},
+		{Name: "r-sha/skills/alpha/SKILL.md", Typeflag: tar.TypeReg},
+	}, []string{"version: 1\nskills: [alpha]\n", goodSkill})
+	remote, _ := fakeGitHub(t, testSHA, archive)
+	library, err := NewLibrary(t.TempDir(), DefaultConfig(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	library.remote = remote
+	if err := library.Check(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(library.statePath(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := library.Apply(context.Background()); err == nil {
+		t.Fatal("expected applied-state persistence to fail")
+	}
+	status := library.Status()
+	if status.Source != SourceBundled || status.Applied != short(library.bundledSHA()) || status.Message == "" {
+		t.Fatalf("failed apply changed active snapshot or hid its error: %+v", status)
+	}
+	for _, entry := range library.List("claude-code") {
+		if entry.Name == "alpha" && entry.Source == SourceCookbook {
+			t.Fatal("failed apply made the downloaded cookbook snapshot active")
+		}
+	}
+	if err := os.Remove(library.statePath()); err != nil {
+		t.Fatal(err)
+	}
+	if err := library.Apply(context.Background()); err != nil {
+		t.Fatalf("retry apply: %v", err)
+	}
+	if status := library.Status(); status.Source != SourceCookbook || status.Message != "" {
+		t.Fatalf("retry did not activate and persist the snapshot: %+v", status)
+	}
+}
+
+func assertSkillEnabled(t *testing.T, library *Library, name string, enabled bool) {
+	t.Helper()
+	for _, entry := range library.List("claude-code") {
+		if entry.Name == name {
+			if entry.Enabled != enabled {
+				t.Fatalf("skill %q enabled = %t, want %t", name, entry.Enabled, enabled)
+			}
+			return
+		}
+	}
+	t.Fatalf("skill %q not found", name)
 }

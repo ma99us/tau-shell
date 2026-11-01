@@ -41,11 +41,13 @@ func personalSkillDirs() map[string][]string {
 func (application *App) initSkills(manager *sessionhost.Manager) {
 	settings, err := appconfig.Load(application.settingsPath())
 	if err != nil {
+		application.skillsInitError = "Skills are unavailable: " + err.Error()
 		diagnostics.Error("load settings for skills failed; skills are off", err)
 		return
 	}
 	library, err := skills.NewLibrary(filepath.Dir(application.configDirectory), settings.Skills.Resolve(), personalSkillDirs())
 	if err != nil {
+		application.skillsInitError = "Skills are unavailable: " + err.Error()
 		diagnostics.Error("open skill library failed; skills are off", err)
 		return
 	}
@@ -102,7 +104,10 @@ type SkillsView struct {
 
 func (application *App) skillsView(ctx context.Context) SkillsView {
 	if application.skills == nil {
-		return SkillsView{Skills: []SkillRow{}}
+		return SkillsView{
+			Status: skills.Status{Enabled: false, Message: application.skillsInitError},
+			Skills: []SkillRow{},
+		}
 	}
 	view := SkillsView{Status: application.skills.Status(), Skills: []SkillRow{}}
 	index := map[string]int{}

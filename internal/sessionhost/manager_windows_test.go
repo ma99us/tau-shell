@@ -124,6 +124,117 @@ func TestManagerKeepsConcurrentSessionIOIndependent(t *testing.T) {
 	}
 }
 
+func TestSlowStartDoesNotBlockOtherSessionIOOrStop(t *testing.T) {
+	previousGracefulWait := gracefulExitWait
+	gracefulExitWait = 10 * time.Millisecond
+	t.Cleanup(func() { gracefulExitWait = previousGracefulWait })
+	manager, _, _ := newLifecycleTestManager(t, "slow", "active")
+	ctx := context.Background()
+	if _, err := manager.Start(ctx, "active", false, 80, 24); err != nil {
+		t.Fatal(err)
+	}
+	startEntered := make(chan struct{})
+	releaseStart := make(chan struct{})
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(releaseStart) }) }
+	t.Cleanup(release)
+	originalStart := manager.startProcess
+	manager.startProcess = func(columns, rows int, executable, directory string, env []string, args ...string) (sessionProcess, error) {
+		if filepath.Base(directory) == "slow" {
+			close(startEntered)
+			<-releaseStart
+		}
+		return originalStart(columns, rows, executable, directory, env, args...)
+	}
+	startResult := make(chan error, 1)
+	go func() {
+		_, err := manager.Start(ctx, "slow", false, 80, 24)
+		startResult <- err
+	}()
+	select {
+	case <-startEntered:
+	case <-time.After(3 * time.Second):
+		release()
+		t.Fatal("slow launch did not reach the blocked process factory")
+	}
+	if _, err := manager.Start(ctx, "slow", false, 80, 24); err == nil || !strings.Contains(err.Error(), "already starting") {
+		release()
+		t.Fatalf("duplicate start error = %v", err)
+	}
+	if err := manager.Delete(ctx, "slow"); err == nil || !strings.Contains(err.Error(), "is starting") {
+		release()
+		t.Fatalf("delete during start error = %v", err)
+	}
+	otherOperations := make(chan error, 1)
+	go func() {
+		if err := manager.Write("active", []byte("input")); err != nil {
+			otherOperations <- err
+			return
+		}
+		if err := manager.Resize("active", 100, 30); err != nil {
+			otherOperations <- err
+			return
+		}
+		otherOperations <- manager.Stop(ctx, "active")
+	}()
+	select {
+	case err := <-otherOperations:
+		if err != nil {
+			release()
+			t.Fatalf("other session operation while launch blocked: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		release()
+		t.Fatal("other session I/O/stop blocked behind slow launch")
+	}
+	release()
+	if err := <-startResult; err != nil {
+		t.Fatalf("slow session start: %v", err)
+	}
+}
+
+func TestStopAllWaitsForInFlightStartAndHonorsContext(t *testing.T) {
+	manager, _, _ := newLifecycleTestManager(t, "slow-close")
+	startEntered := make(chan struct{})
+	releaseStart := make(chan struct{})
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(releaseStart) }) }
+	t.Cleanup(release)
+	originalStart := manager.startProcess
+	manager.startProcess = func(columns, rows int, executable, directory string, env []string, args ...string) (sessionProcess, error) {
+		if filepath.Base(directory) == "slow-close" {
+			close(startEntered)
+			<-releaseStart
+		}
+		return originalStart(columns, rows, executable, directory, env, args...)
+	}
+	startResult := make(chan error, 1)
+	go func() {
+		_, err := manager.Start(context.Background(), "slow-close", false, 80, 24)
+		startResult <- err
+	}()
+	select {
+	case <-startEntered:
+	case <-time.After(3 * time.Second):
+		release()
+		t.Fatal("launch did not block at the process factory")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	err := manager.StopAll(ctx)
+	cancel()
+	if !errors.Is(err, context.DeadlineExceeded) {
+		release()
+		t.Fatalf("StopAll error = %v, want context deadline", err)
+	}
+	release()
+	if err := <-startResult; err != nil {
+		t.Fatalf("in-flight start after canceled shutdown = %v", err)
+	}
+	if err := manager.Close(context.Background()); err != nil {
+		t.Fatalf("Close after start completion: %v", err)
+	}
+}
+
 func TestManagerReportsForcedTermination(t *testing.T) {
 	manager, factory, _ := newLifecycleTestManager(t, "forced")
 	if _, err := manager.Start(context.Background(), "forced", false, 80, 24); err != nil {
@@ -442,7 +553,7 @@ func TestManagerReconcilesAbandonedStartingState(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, updateErr := database.ExecContext(ctx, `UPDATE session_runtime SET updated_at = ? WHERE session_id = ?`,
-		time.Now().Add(-startupRecoveryDelay-time.Second).UTC().Format(time.RFC3339Nano), "abandoned")
+		time.Now().Add(-session.StartupRecoveryDelay-time.Second).UTC().Format(time.RFC3339Nano), "abandoned")
 	closeErr := database.Close()
 	if updateErr != nil || closeErr != nil {
 		t.Fatalf("age abandoned starting state: %v", errors.Join(updateErr, closeErr))
@@ -497,6 +608,63 @@ func TestManagerRestoreFailurePreservesResumeID(t *testing.T) {
 	}
 	if runtime.HarnessSessionID != original.HarnessSessionID {
 		t.Errorf("failed restore changed resume ID: got %q, want %q", runtime.HarnessSessionID, original.HarnessSessionID)
+	}
+}
+
+func TestManagerStartFailureReleasesReservationForRetry(t *testing.T) {
+	manager, factory, _ := newLifecycleTestManager(t, "retry-start")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	factory.setStartError(errors.New("injected process start failure"))
+	if _, err := manager.Start(context.Background(), "retry-start", false, 80, 24); err == nil || !strings.Contains(err.Error(), "injected process start failure") {
+		t.Fatalf("first start error = %v", err)
+	}
+	snapshot, err := manager.Start(context.Background(), "retry-start", true, 80, 24)
+	if err != nil || !snapshot.RunningHere {
+		t.Fatalf("retry start = %+v, %v", snapshot, err)
+	}
+	if err := manager.Stop(context.Background(), "retry-start"); err != nil {
+		t.Fatalf("stop retry: %v", err)
+	}
+}
+
+func TestManagerMarkRunningFailureClosesChildAndReleasesReservation(t *testing.T) {
+	manager, factory, _ := newLifecycleTestManager(t, "persist-start")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	databasePath := filepath.Join(filepath.Dir(manager.configDirectory), "state.db")
+	database, err := sql.Open("sqlite", databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`CREATE TRIGGER fail_mark_running BEFORE UPDATE OF status ON session_runtime WHEN NEW.status = 'running' BEGIN SELECT RAISE(FAIL, 'injected mark-running failure'); END`); err != nil {
+		database.Close()
+		t.Fatal(err)
+	}
+	if err := database.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Start(context.Background(), "persist-start", false, 80, 24); err == nil || !strings.Contains(err.Error(), "injected mark-running failure") {
+		t.Fatalf("start error = %v", err)
+	}
+	if process := factory.process("persist-start"); !process.isClosed() {
+		t.Fatal("child process was not closed after MarkRunning failure")
+	}
+	database, err = sql.Open("sqlite", databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`DROP TRIGGER fail_mark_running`); err != nil {
+		database.Close()
+		t.Fatal(err)
+	}
+	if err := database.Close(); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := manager.Start(context.Background(), "persist-start", true, 80, 24)
+	if err != nil || !snapshot.RunningHere {
+		t.Fatalf("retry after MarkRunning failure = %+v, %v", snapshot, err)
+	}
+	if err := manager.Stop(context.Background(), "persist-start"); err != nil {
+		t.Fatalf("stop retry: %v", err)
 	}
 }
 
@@ -557,6 +725,63 @@ func TestManagerDeleteRemovesConfigAndRuntime(t *testing.T) {
 	}
 }
 
+func TestManagerDeleteRestoresConfigWhenUsageTombstoneFails(t *testing.T) {
+	root := t.TempDir()
+	configDirectory := filepath.Join(root, "sessions")
+	workingDirectory := filepath.Join(root, "project")
+	if err := os.MkdirAll(workingDirectory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	config := session.Config{ID: "delete-failure", Name: "Delete failure", Tool: session.ClaudeCode, WorkingDir: workingDirectory}
+	configPath, err := session.SaveConfig(configDirectory, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	databasePath := filepath.Join(root, "state.db")
+	manager, err := New(configDirectory, databasePath, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := manager.Close(context.Background()); err != nil {
+			t.Errorf("close manager: %v", err)
+		}
+	}()
+
+	db, err := sql.Open("sqlite", databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`
+		CREATE TRIGGER fail_usage_delete BEFORE DELETE ON usage_files BEGIN SELECT RAISE(FAIL, 'injected usage failure'); END;
+		INSERT INTO usage_files (path, session_id, harness_session_id, offset, carry)
+		VALUES ('fixture.log', 'delete-failure', 'fixture-conversation', 0, '');
+	`); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := manager.Delete(context.Background(), config.ID); err == nil {
+		t.Fatal("expected usage tombstone failure")
+	}
+	if _, err := session.FindConfig(configDirectory, config.ID); err != nil {
+		t.Fatalf("session config was not restored: %v", err)
+	}
+	runtime, err := manager.store.Runtime(context.Background(), config.ID)
+	if err != nil || runtime.Status != session.StatusNeverStarted {
+		t.Fatalf("runtime changed despite delete rollback: %+v, %v", runtime, err)
+	}
+	if pending, err := manager.store.PendingDeletions(context.Background()); err != nil || len(pending) != 0 {
+		t.Fatalf("pending delete journal after rollback = %v, %v", pending, err)
+	}
+	if _, err := os.Stat(configPath); err != nil {
+		t.Fatalf("original config path missing: %v", err)
+	}
+}
+
 func TestManagerDeleteRefusesRunningSession(t *testing.T) {
 	manager, _, _ := newLifecycleTestManager(t, "live")
 	ctx := context.Background()
@@ -578,7 +803,7 @@ func useCopilotSession(t *testing.T, manager *Manager, id string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := session.DeleteConfig(manager.configDirectory, id); err != nil {
+	if err := os.Remove(filepath.Join(manager.configDirectory, id+".yaml")); err != nil {
 		t.Fatal(err)
 	}
 	config.Tool = session.CopilotCLI

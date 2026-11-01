@@ -60,6 +60,7 @@ type App struct {
 	updatesMu              sync.Mutex
 	toolUpdates            map[string]string
 	skills                 *skills.Library
+	skillsInitError        string
 	toolInstaller          *tools.Installer
 	openURL                func(context.Context, string)
 	openFile               func(string) error

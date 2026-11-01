@@ -1,9 +1,12 @@
 package harness
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -121,14 +124,50 @@ func checkCodexResumeIn(root, harnessSessionID string) error {
 	if path == "" {
 		return errors.New("Codex has no recorded conversation for this session; use Start fresh")
 	}
-	data, err := os.ReadFile(path)
+	file, err := os.Open(path)
 	if err != nil {
 		return nil
 	}
-	if bytes.Count(bytes.TrimSpace(data), []byte("\n")) < 1 {
+	defer file.Close()
+	hasConversation, err := codexHasConversation(bufio.NewReaderSize(file, 32<<10))
+	if err != nil {
+		return nil
+	}
+	if !hasConversation {
 		return errors.New("Codex has no recorded conversation for this session yet; use Start fresh")
 	}
 	return nil
+}
+
+func codexHasConversation(reader *bufio.Reader) (bool, error) {
+	metadataLineComplete := false
+	for {
+		fragment, err := reader.ReadSlice('\n')
+		if metadataLineComplete && hasJSONContent(fragment) {
+			return true, nil
+		}
+		if !metadataLineComplete && err == nil {
+			metadataLineComplete = true
+		}
+		if err == nil || errors.Is(err, bufio.ErrBufferFull) {
+			continue
+		}
+		if errors.Is(err, io.EOF) {
+			return false, nil
+		}
+		return false, err
+	}
+}
+
+func hasJSONContent(data []byte) bool {
+	for _, value := range data {
+		switch value {
+		case ' ', '\t', '\r', '\n':
+		default:
+			return true
+		}
+	}
+	return false
 }
 
 type codexMeta struct {
@@ -140,23 +179,48 @@ type codexMeta struct {
 	} `json:"payload"`
 }
 
-func readFirstLine(path string) []byte {
+func readFirstLine(path string) ([]byte, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	defer file.Close()
-	buffer := make([]byte, 64<<10)
-	count, _ := file.Read(buffer)
-	buffer = buffer[:count]
-	if end := bytes.IndexByte(buffer, '\n'); end >= 0 {
-		buffer = buffer[:end]
+	buffer, err := bufio.NewReader(io.LimitReader(file, 64<<10)).ReadBytes('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, err
 	}
-	return bytes.TrimSpace(buffer)
+	return bytes.TrimSpace(buffer), nil
 }
 
 func discoverCodexSession(workingDir string, since time.Time, taken map[string]bool) (string, error) {
 	return discoverCodexSessionIn(codexSessionsRoot(), workingDir, since, taken)
+}
+
+func existingCodexSessionIDs(workingDir string) (map[string]bool, error) {
+	return existingCodexSessionIDsIn(codexSessionsRoot(), workingDir)
+}
+
+func existingCodexSessionIDsIn(root, workingDir string) (map[string]bool, error) {
+	files, err := filepath.Glob(filepath.Join(root, "*", "*", "*", "rollout-*.jsonl"))
+	if err != nil {
+		return nil, fmt.Errorf("list Codex sessions: %w", err)
+	}
+	ids := make(map[string]bool)
+	for _, path := range files {
+		line, err := readFirstLine(path)
+		if err != nil {
+			return nil, fmt.Errorf("read Codex session metadata: %w", err)
+		}
+		var meta codexMeta
+		if json.Unmarshal(line, &meta) != nil || meta.Type != "session_meta" || meta.Payload.ID == "" || !samePath(meta.Payload.CWD, workingDir) {
+			continue
+		}
+		if _, nested := meta.Payload.Source.(map[string]any); nested {
+			continue
+		}
+		ids[meta.Payload.ID] = true
+	}
+	return ids, nil
 }
 
 func discoverCodexSessionIn(root, workingDir string, since time.Time, taken map[string]bool) (string, error) {
@@ -168,7 +232,8 @@ func discoverCodexSessionIn(root, workingDir string, since time.Time, taken map[
 			continue
 		}
 		var meta codexMeta
-		if json.Unmarshal(readFirstLine(path), &meta) != nil || meta.Type != "session_meta" {
+		line, err := readFirstLine(path)
+		if err != nil || json.Unmarshal(line, &meta) != nil || meta.Type != "session_meta" {
 			continue
 		}
 		if meta.Payload.ID == "" || taken[meta.Payload.ID] || !samePath(meta.Payload.CWD, workingDir) {

@@ -85,8 +85,10 @@ Go extension (Delve) is required.
 - Text files use LF line endings everywhere, including Windows working trees:
   `.gitattributes` (`* text=auto eol=lf`) overrides `core.autocrlf`, and
   `.editorconfig` tells editors. Scripts that write repository or release text
-  files must write `\n` explicitly (for example
-  `[IO.File]::WriteAllText(path, text)` with `` `n ``), not `Set-Content` or
-  `Out-File`, which use CRLF on Windows. After pulling the `.gitattributes`
-  change into an old CRLF checkout, refresh it once:
-  `git rm --cached -r -q . && git reset --hard` (only with no local changes).
+  files must write LF explicitly (for example via `WriteAllText` with a `` `n
+  `` newline), not `Set-Content` or `Out-File`, which use CRLF on Windows.
+  After pulling `.gitattributes` into an
+  older checkout, do not reset or discard the worktree. Check `git status`,
+  preserve local changes, and use a separate clean clone when you need to
+  verify normalized line endings. Git applies the repository policy as files
+  are checked out or rewritten.

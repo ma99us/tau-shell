@@ -22,7 +22,7 @@ launch_args:
   - sonnet
 ```
 
-`id` is TauShell's stable session identifier. The desktop app names new sessions after the project (manifest name, otherwise folder name) and renames or recolors them from the session context menu; those edits rewrite only `name` and `color` in place, preserving other keys and comments, and never change `id` or the file name. Supported 	ool values: claude-code, copilot-cli, gsd, codex, opencode. Default launch arguments: Claude --dangerously-skip-permissions, Copilot --yolo, Codex --dangerously-bypass-approvals-and-sandbox, OpenCode --auto, GSD none. The harness session UUID is generated and persisted separately before first launch so TauShell can resume the intended conversation by ID (GSD: a TauShell-named session file; Codex and OpenCode: the ID the harness chooses, discovered after launch). Do not add a `--continue`/“most recent” restore command to YAML.
+`id` is TauShell's stable session identifier. The desktop app names new sessions after the project (manifest name, otherwise folder name) and renames or recolors them from the session context menu; those edits rewrite only `name` and `color` in place, preserving other keys and comments, and never change `id` or the file name. TauShell serializes config writers per path and checks that the file has not changed before replacement; an observed external edit returns a conflict to reload and retry. Non-cooperating external editors cannot be locked out, and a change after the recheck can still race. Supported tool values: claude-code, copilot-cli, gsd, codex, opencode. Default launch arguments: Claude --dangerously-skip-permissions, Copilot --yolo, Codex --dangerously-bypass-approvals-and-sandbox, OpenCode --auto, GSD none. The harness session UUID is generated and persisted separately before first launch so TauShell can resume the intended conversation by ID (GSD: a TauShell-named session file; Codex and OpenCode: the ID the harness chooses, discovered after launch). Do not add a `--continue`/“most recent” restore command to YAML.
 
 The current implementation rejects unknown fields and validates the required
 values, supported tool identifiers, working-directory existence, environment
@@ -80,7 +80,7 @@ The isolated [`spikes/session-config/`](../../spikes/session-config/) prototype 
 
 "Clone" copies every definition field (harness, working directory, launch
 arguments, environment, PowerShell options, presets, color) into a new file
-named "<name> (n)" with a unique id. The copy is written by TauShell, so YAML
+named "name (n)" with a unique id. The copy is written by TauShell, so YAML
 comments in the source are not carried over. Runtime state is never copied.
 
 ## App settings (`~/.tau_shell/config.yaml`)

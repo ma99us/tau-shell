@@ -1,6 +1,6 @@
 # Engineering Handoff
 
-**Updated:** 2026-10-31
+**Updated:** 2026-11-01
 **Project state:** Phase 1 desktop migration in progress; not release-ready.
 
 This is the implementation handoff for the next engineering session. The
@@ -43,6 +43,9 @@ regression-test plans, see the
 - The desktop app is the only interactive TauShell interface. Bubble Tea has
   been removed. `list`, `start <session-id>`, and `restore <session-id>` remain
   standalone commands.
+- The desktop opens Home by default. Per-session `auto_resume` and global
+  `auto_resume_all` are opt-in and restore only stopped sessions with a saved
+  harness ID and no resume warning.
 - Windows 10 terminal encoding, Unicode/emoji bytes, ANSI output, and
   provider-preserving output remain requirements. TauShell must not rewrite
   harness output.
@@ -67,7 +70,7 @@ regression-test plans, see the
   confirmation warning): `DeleteSession` removes the YAML and the runtime row,
   refuses running/starting sessions, and never touches the harness's own data
   or the working directory.
-  Sidebar rows and tabs show a state icon (`StateIcon` in `main.tsx`): spinner
+  Sidebar rows and tabs show a state icon (`StateIcon` in `sessionVisuals.tsx`): spinner
   = output in the last 2.5 s ("working"), solid green = output stopped
   ("quiet"), grey = not running, red = failed. A quiet session that was not
   selected+focused glows amber ("unseen") until selected or typed in. Signals
@@ -87,9 +90,12 @@ regression-test plans, see the
   (output within 400 ms of a keystroke is ignored as echo). "Quiet" is not
   proof the harness awaits input. Copilot
   sends only topic titles, no BEL/OSC 9/777/133.
+  Eight frontend unit tests cover pure attention helpers; React component and
+  widget lifecycle behavior does not yet have direct component tests.
   The session name is optional: when blank, `CreateSession` uses the project
   name from `package.json`, `go.mod`, `Cargo.toml`, or `pyproject.toml` in the
-  folder, else the folder name, adding ` (2)`, ` (3)` on collisions.
+  folder, else the folder name, adding suffixes such as (2) and (3) on
+  collisions.
   Session creation returns its never-started snapshot from the
   validated configuration after saving, without rereading the full session
   list; an unrelated listing failure can no longer make a successful save look

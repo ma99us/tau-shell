@@ -2,6 +2,7 @@ package session
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"unicode"
 
 	"gopkg.in/yaml.v3"
@@ -43,6 +45,7 @@ var (
 	idPattern          = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
 	environmentPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 	colorPattern       = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+	ErrConfigChanged   = errors.New("session config changed outside TauShell; reload and retry")
 )
 
 const maxNameLength = 80
@@ -223,6 +226,11 @@ func SaveConfig(directory string, config Config) (string, error) {
 		return "", fmt.Errorf("create session config directory: %w", err)
 	}
 	path := filepath.Join(directory, config.ID+".yaml")
+	unlock, err := lockConfigPath(path)
+	if err != nil {
+		return "", fmt.Errorf("lock session config %q: %w", path, err)
+	}
+	defer unlock()
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return "", fmt.Errorf("create session config %q: %w", path, err)
@@ -248,9 +256,10 @@ func SaveConfig(directory string, config Config) (string, error) {
 }
 
 // UpdateConfigField rewrites one top-level field ("name", "color" or
-// "auto_resume") of an
-// existing session YAML in place, preserving the user's other keys and
-// comments. An empty color or auto_resume removes the key. The ID and filename never change.
+// "auto_resume") of an existing session YAML, preserving other keys and
+// comments. TauShell writers are serialized across processes; an external edit
+// observed before replacement returns ErrConfigChanged. An empty color or
+// auto_resume removes the key. The ID and filename never change.
 func UpdateConfigField(directory, id, key, value string) (Config, error) {
 	if !idPattern.MatchString(id) {
 		return Config{}, fmt.Errorf("invalid session id %q", id)
@@ -276,6 +285,11 @@ func UpdateConfigField(directory, id, key, value string) (Config, error) {
 		return Config{}, fmt.Errorf("unsupported session field %q", key)
 	}
 	path := filepath.Join(directory, id+".yaml")
+	unlock, err := lockConfigPath(path)
+	if err != nil {
+		return Config{}, fmt.Errorf("lock session config %q: %w", path, err)
+	}
+	defer unlock()
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return Config{}, fmt.Errorf("read session config %q: %w", path, err)
@@ -301,7 +315,21 @@ func UpdateConfigField(directory, id, key, value string) (Config, error) {
 	if updated.ID != id {
 		return Config{}, fmt.Errorf("session config filename %q does not match declared id %q", id, updated.ID)
 	}
-	return updated, replaceFile(path, encoded.Bytes())
+	if err := replaceConfigIfUnchanged(path, data, encoded.Bytes()); err != nil {
+		return Config{}, err
+	}
+	return updated, nil
+}
+
+func replaceConfigIfUnchanged(path string, original, replacement []byte) error {
+	current, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("recheck session config %q before replace: %w", path, err)
+	}
+	if !bytes.Equal(current, original) {
+		return fmt.Errorf("%w: %s", ErrConfigChanged, path)
+	}
+	return replaceFile(path, replacement)
 }
 
 func setMappingString(mapping *yaml.Node, key, value string) {
@@ -310,16 +338,57 @@ func setMappingString(mapping *yaml.Node, key, value string) {
 			continue
 		}
 		if value == "" {
+			preserveRemovedMappingComments(mapping, index)
 			mapping.Content = append(mapping.Content[:index], mapping.Content[index+2:]...)
 			return
 		}
-		mapping.Content[index+1] = stringNode(key, value)
+		previous := mapping.Content[index+1]
+		replacement := stringNode(key, value)
+		replacement.HeadComment = previous.HeadComment
+		replacement.LineComment = previous.LineComment
+		replacement.FootComment = previous.FootComment
+		mapping.Content[index+1] = replacement
 		return
 	}
 	if value == "" {
 		return
 	}
 	mapping.Content = append(mapping.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}, stringNode(key, value))
+}
+
+func preserveRemovedMappingComments(mapping *yaml.Node, keyIndex int) {
+	key, value := mapping.Content[keyIndex], mapping.Content[keyIndex+1]
+	var comments []string
+	for _, comment := range []string{key.HeadComment, key.LineComment, key.FootComment, value.HeadComment, value.LineComment, value.FootComment} {
+		if comment != "" {
+			comments = append(comments, comment)
+		}
+	}
+	if len(comments) == 0 {
+		return
+	}
+	comment := strings.Join(comments, "\n")
+	if keyIndex+2 < len(mapping.Content) {
+		next := mapping.Content[keyIndex+2]
+		next.HeadComment = joinYAMLComment(comment, next.HeadComment)
+		return
+	}
+	if keyIndex > 0 {
+		previous := mapping.Content[keyIndex-1]
+		previous.FootComment = joinYAMLComment(previous.FootComment, comment)
+		return
+	}
+	mapping.FootComment = joinYAMLComment(mapping.FootComment, comment)
+}
+
+func joinYAMLComment(first, second string) string {
+	if first == "" {
+		return second
+	}
+	if second == "" {
+		return first
+	}
+	return first + "\n" + second
 }
 
 func stringNode(key, value string) *yaml.Node {
@@ -333,8 +402,7 @@ func stringNode(key, value string) *yaml.Node {
 	return node
 }
 
-// replaceFile writes data beside path and renames it over path so a crash
-// cannot leave a truncated session definition.
+// replaceFile delegates to the shared temporary-file replacement helper.
 func replaceFile(path string, data []byte) error {
 	if err := fsutil.ReplaceFile(path, data); err != nil {
 		return fmt.Errorf("replace session config %q: %w", path, err)
@@ -356,12 +424,146 @@ func FindConfig(directory, id string) (Config, error) {
 	return config, nil
 }
 
-func DeleteConfig(directory, id string) error {
+type ConfigDeletion struct {
+	original  string
+	tombstone string
+	unlock    func()
+	once      sync.Once
+}
+
+func (deletion *ConfigDeletion) release() {
+	deletion.once.Do(func() {
+		if deletion.unlock != nil {
+			deletion.unlock()
+		}
+	})
+}
+
+// StageConfigDeletion moves a session definition out of the active YAML set
+// while retaining it for rollback or startup recovery.
+func StageConfigDeletion(directory, id string) (*ConfigDeletion, error) {
 	if !idPattern.MatchString(id) {
-		return fmt.Errorf("invalid session id %q", id)
+		return nil, fmt.Errorf("invalid session id %q", id)
 	}
-	if err := os.Remove(filepath.Join(directory, id+".yaml")); err != nil {
-		return fmt.Errorf("delete session config %q: %w", id, err)
+	original := filepath.Join(directory, id+".yaml")
+	unlock, err := lockConfigPath(original)
+	if err != nil {
+		return nil, fmt.Errorf("lock session config %q: %w", original, err)
+	}
+	tombstone := original + ".deleting"
+	if _, err := os.Lstat(tombstone); err == nil {
+		unlock()
+		return nil, fmt.Errorf("session %q already has a pending deletion", id)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		unlock()
+		return nil, fmt.Errorf("inspect pending session deletion %q: %w", id, err)
+	}
+	if err := os.Rename(original, tombstone); err != nil {
+		unlock()
+		return nil, fmt.Errorf("stage session config deletion %q: %w", id, err)
+	}
+	return &ConfigDeletion{original: original, tombstone: tombstone, unlock: unlock}, nil
+}
+
+func (deletion *ConfigDeletion) Restore() error {
+	defer deletion.release()
+	if _, err := os.Lstat(deletion.tombstone); errors.Is(err, os.ErrNotExist) {
+		if _, originalErr := os.Lstat(deletion.original); originalErr == nil {
+			return nil
+		} else if errors.Is(originalErr, os.ErrNotExist) {
+			return fmt.Errorf("cannot restore session config: both %q and %q are missing", deletion.original, deletion.tombstone)
+		} else {
+			return fmt.Errorf("inspect original session config %q: %w", deletion.original, originalErr)
+		}
+	} else if err != nil {
+		return fmt.Errorf("inspect staged session config: %w", err)
+	}
+	if _, err := os.Lstat(deletion.original); err == nil {
+		return fmt.Errorf("cannot restore staged session config %q because the original path exists", deletion.original)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("inspect original session config %q: %w", deletion.original, err)
+	}
+	if err := os.Rename(deletion.tombstone, deletion.original); err != nil {
+		return fmt.Errorf("restore staged session config %q: %w", deletion.original, err)
+	}
+	return nil
+}
+
+func (deletion *ConfigDeletion) Finalize() error {
+	defer deletion.release()
+	if _, err := os.Lstat(deletion.tombstone); errors.Is(err, os.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("inspect staged session config %q: %w", deletion.tombstone, err)
+	}
+	if err := os.Remove(deletion.tombstone); err != nil {
+		return fmt.Errorf("remove staged session config %q: %w", deletion.original, err)
+	}
+	return nil
+}
+
+// RecoverPendingConfigDeletions resolves staged YAML files against the
+// database journal: committed deletions are finalized; uncommitted stages are
+// restored. It never overwrites an active YAML file.
+func RecoverPendingConfigDeletions(directory string, store *Store) error {
+	ctx := context.Background()
+	pendingIDs, err := store.PendingDeletions(ctx)
+	if err != nil {
+		return err
+	}
+	pending := make(map[string]bool, len(pendingIDs))
+	for _, id := range pendingIDs {
+		if !idPattern.MatchString(id) {
+			return fmt.Errorf("invalid session ID %q in deletion journal", id)
+		}
+		pending[id] = true
+	}
+	entries, err := os.ReadDir(directory)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("read session directory for deletion recovery: %w", err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yaml.deleting") {
+			continue
+		}
+		id := strings.TrimSuffix(entry.Name(), ".yaml.deleting")
+		if !idPattern.MatchString(id) {
+			return fmt.Errorf("invalid staged session deletion filename %q", entry.Name())
+		}
+		if pending[id] {
+			continue
+		}
+		original := filepath.Join(directory, id+".yaml")
+		unlock, err := lockConfigPath(original)
+		if err != nil {
+			return fmt.Errorf("lock session config %q: %w", original, err)
+		}
+		deletion := &ConfigDeletion{
+			original:  original,
+			tombstone: filepath.Join(directory, entry.Name()),
+			unlock:    unlock,
+		}
+		if err := deletion.Restore(); err != nil {
+			return err
+		}
+	}
+	for _, id := range pendingIDs {
+		original := filepath.Join(directory, id+".yaml")
+		unlock, err := lockConfigPath(original)
+		if err != nil {
+			return fmt.Errorf("lock session config %q: %w", original, err)
+		}
+		deletion := &ConfigDeletion{
+			original:  original,
+			tombstone: filepath.Join(directory, id+".yaml.deleting"),
+			unlock:    unlock,
+		}
+		if err := deletion.Finalize(); err != nil {
+			return err
+		}
+		if err := store.CompleteDeletion(ctx, id); err != nil {
+			return err
+		}
 	}
 	return nil
 }

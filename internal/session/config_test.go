@@ -1,9 +1,12 @@
 package session
 
 import (
+	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -134,7 +137,7 @@ func TestValidateLaunchArgsStandaloneMatchesConfigValidate(t *testing.T) {
 
 func TestUpdateConfigFieldPreservesCommentsAndValidates(t *testing.T) {
 	directory := t.TempDir()
-	original := "# my notes\nid: keep-id\nname: Old Name\ntool: claude-code\nworking_dir: " + filepath.ToSlash(t.TempDir()) + "\n"
+	original := "# my notes\nid: keep-id\nname: Old Name # name inline\n# color description\ncolor: \"#4f8cff\" # color inline\ntool: claude-code\nworking_dir: " + filepath.ToSlash(t.TempDir()) + "\n"
 	path := filepath.Join(directory, "keep-id.yaml")
 	if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
 		t.Fatal(err)
@@ -159,6 +162,15 @@ func TestUpdateConfigFieldPreservesCommentsAndValidates(t *testing.T) {
 	if config, err = UpdateConfigField(directory, "keep-id", "color", ""); err != nil || config.Color != "" {
 		t.Fatalf("clearing color: %+v, %v", config, err)
 	}
+	data, err = os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, comment := range []string{"# my notes", "# name inline", "# color description", "# color inline"} {
+		if !bytes.Contains(data, []byte(comment)) {
+			t.Errorf("comment %q was lost after update/removal:\n%s", comment, data)
+		}
+	}
 	if config, err = UpdateConfigField(directory, "keep-id", "auto_resume", "true"); err != nil || !config.AutoResume {
 		t.Fatalf("setting auto_resume: %+v, %v", config, err)
 	}
@@ -175,6 +187,58 @@ func TestUpdateConfigFieldPreservesCommentsAndValidates(t *testing.T) {
 	}
 	if entries, _ := os.ReadDir(directory); len(entries) != 1 {
 		t.Fatalf("unexpected leftover files: %v", entries)
+	}
+}
+
+func TestReplaceConfigIfUnchangedRejectsExternalEdit(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.yaml")
+	original := []byte("name: original\n")
+	external := []byte("name: external\n")
+	if err := os.WriteFile(path, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, external, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := replaceConfigIfUnchanged(path, original, []byte("name: TauShell\n")); !errors.Is(err, ErrConfigChanged) {
+		t.Fatalf("external edit error = %v, want ErrConfigChanged", err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(got, external) {
+		t.Fatalf("external file was overwritten: %q, %v", got, err)
+	}
+}
+
+func TestConcurrentConfigFieldUpdatesPreserveBothChanges(t *testing.T) {
+	directory := t.TempDir()
+	config := Config{ID: "concurrent", Name: "Before", Tool: ClaudeCode, WorkingDir: t.TempDir()}
+	path, err := SaveConfig(directory, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := make(chan struct{})
+	errorsFound := make(chan error, 2)
+	var group sync.WaitGroup
+	for _, update := range [][2]string{{"name", "After"}, {"auto_resume", "true"}} {
+		group.Add(1)
+		go func(key, value string) {
+			defer group.Done()
+			<-start
+			_, err := UpdateConfigField(directory, config.ID, key, value)
+			errorsFound <- err
+		}(update[0], update[1])
+	}
+	close(start)
+	group.Wait()
+	close(errorsFound)
+	for err := range errorsFound {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	updated, err := LoadConfig(path)
+	if err != nil || updated.Name != "After" || !updated.AutoResume {
+		t.Fatalf("concurrent updates = %+v, %v", updated, err)
 	}
 }
 

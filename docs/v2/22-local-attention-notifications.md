@@ -11,8 +11,8 @@ Remote push (ntfy, Pushover, Web Push) remains out of scope. See also
 
 ## Behavior
 
-- Triggers (frontend edge detector in `frontend/src/attention.ts`, fed by the
-  harness cues already used for the state icons; no PTY-silence heuristic):
+- Triggers (frontend edge detector in `frontend/src/attention.ts`, fed by
+  harness cues when available and generic output timing when no cue exists):
   1. the harness starts **waiting for an answer** (`input`);
   2. the harness **finishes** (working to not-working, after at least 3 s of
      work, and not into an input prompt).
@@ -32,8 +32,9 @@ Remote push (ntfy, Pushover, Web Push) remains out of scope. See also
 
 ## Decisions (answers to the original open questions)
 
-1. First signal: harness cues (`input` / working-to-idle), not output silence;
-   3 s minimum work for "finished".
+1. Prefer harness cues (`input` / working-to-idle); when no cue exists, recent
+  output timing is the generic working/quiet fallback. Do not infer input
+  from silence. Require 3 s minimum work for "finished".
 2. Flash **and** toast.
 3. On by default; disable in the settings file.
 4. Session ended/failed does not alert.

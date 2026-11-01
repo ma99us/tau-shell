@@ -86,6 +86,40 @@ func discoverOpenCodeSession(workingDir string, since time.Time, taken map[strin
 	return discoverOpenCodeIn(db, workingDir, since, taken)
 }
 
+func existingOpenCodeSessionIDs(workingDir string) (map[string]bool, error) {
+	db, err := openOpenCodeDatabase(openCodeDatabasePath())
+	if errors.Is(err, errNoOpenCodeDatabase) {
+		return map[string]bool{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	return existingOpenCodeSessionIDsIn(db, workingDir)
+}
+
+func existingOpenCodeSessionIDsIn(db *sql.DB, workingDir string) (map[string]bool, error) {
+	rows, err := db.Query(`SELECT id, directory FROM session WHERE parent_id IS NULL`)
+	if err != nil {
+		return nil, fmt.Errorf("snapshot OpenCode sessions: %w", err)
+	}
+	defer rows.Close()
+	ids := make(map[string]bool)
+	for rows.Next() {
+		var id, directory string
+		if err := rows.Scan(&id, &directory); err != nil {
+			return nil, fmt.Errorf("snapshot OpenCode sessions: %w", err)
+		}
+		if id != "" && samePath(directory, workingDir) {
+			ids[id] = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("snapshot OpenCode sessions: %w", err)
+	}
+	return ids, nil
+}
+
 func discoverOpenCodeIn(db *sql.DB, workingDir string, since time.Time, taken map[string]bool) (string, error) {
 	rows, err := db.Query(`SELECT id, directory FROM session WHERE parent_id IS NULL AND time_created >= ? ORDER BY time_created`,
 		since.Add(-2*time.Second).UnixMilli())

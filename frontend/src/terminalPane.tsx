@@ -8,6 +8,7 @@ import { SessionUsage, formatTokens, formatUSD, hasUsage, usageTooltip } from ".
 import { HarnessToolbar, planSend, sendNotice } from "./harnessActions";
 import { reportFrontendFailure, isStoppedSessionError } from "./errors";
 import { Sep, statusLabel } from "./sessionVisuals";
+import { clearPollFailure, shouldReportPollFailure } from "./polling";
 
 export const terminalInstances = new Map<string, Terminal>();
 export const lastInputAt = new Map<string, number>();
@@ -127,16 +128,45 @@ export function TerminalPane({ session, visible, busy, harness, onSend, onInterr
   const [branch, setBranch] = useState("");
   const [model, setModel] = useState("");
   const [usage, setUsage] = useState<SessionUsage | null>(null);
+  const pollFailures = useRef(new Set<string>());
   const sessionId = session?.id;
   useEffect(() => {
     if (!sessionId || !visible) return;
     let cancelled = false;
-    const load = () => {
-      void app().GetGitBranch(sessionId).then((name) => { if (!cancelled) setBranch(name); }).catch(() => { if (!cancelled) setBranch(""); });
-      void app().GetSessionModel(sessionId).then((name) => { if (!cancelled) setModel(name); }).catch(() => { if (!cancelled) setModel(""); });
-      void app().GetSessionUsage(sessionId).then((value) => { if (!cancelled) setUsage(value); }).catch(() => { if (!cancelled) setUsage(null); });
+    let loading = false;
+    const load = async () => {
+      if (loading) return;
+      loading = true;
+      const requests = await Promise.allSettled([
+        app().GetGitBranch(sessionId),
+        app().GetSessionModel(sessionId),
+        app().GetSessionUsage(sessionId),
+      ]);
+      if (!cancelled) {
+        const [branchResult, modelResult, usageResult] = requests;
+        const pollKey = (field: string) => `${sessionId}:${field}`;
+        if (branchResult.status === "fulfilled") {
+          clearPollFailure(pollFailures.current, pollKey("branch"));
+          setBranch(branchResult.value);
+        } else if (shouldReportPollFailure(pollFailures.current, pollKey("branch"))) {
+          onError(new Error(`Branch refresh failed: ${String(branchResult.reason)}`, { cause: branchResult.reason }));
+        }
+        if (modelResult.status === "fulfilled") {
+          clearPollFailure(pollFailures.current, pollKey("model"));
+          setModel(modelResult.value);
+        } else if (shouldReportPollFailure(pollFailures.current, pollKey("model"))) {
+          onError(new Error(`Model refresh failed: ${String(modelResult.reason)}`, { cause: modelResult.reason }));
+        }
+        if (usageResult.status === "fulfilled") {
+          clearPollFailure(pollFailures.current, pollKey("usage"));
+          setUsage(usageResult.value);
+        } else if (shouldReportPollFailure(pollFailures.current, pollKey("usage"))) {
+          onError(new Error(`Usage refresh failed: ${String(usageResult.reason)}`, { cause: usageResult.reason }));
+        }
+      }
+      loading = false;
     };
-    load();
+    void load();
     const timer = window.setInterval(load, 5000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [sessionId, visible]);

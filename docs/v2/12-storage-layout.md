@@ -1,7 +1,5 @@
 # Storage Layout
 
-# Storage Layout
-
 Configuration is human-edited YAML; mutable runtime/session state is stored separately.
 
 ## Phase 1 subset
@@ -10,11 +8,12 @@ Configuration is human-edited YAML; mutable runtime/session state is stored sepa
 ~/.tau_shell/
 ├─ sessions/
 │  └─ <session-id>.yaml
+│     (temporary <session-id>.yaml.deleting during recoverable deletion)
 ├─ prompts.yaml          (optional, hand-edited prompt presets)
 ├─ config.yaml           (optional, hand-edited app settings: notifications, usage)
 ├─ prices.json           (cached Claude prices fetched from the web; safe to delete)
 ├─ logs/
-└─ state.db              (runtime state, shared session display order, usage ledger)
+└─ state.db              (runtime state, order, usage ledger and deletion journal)
 ```
 
 ## Token and cost usage
@@ -34,7 +33,7 @@ USD is a list-price estimate computed at read time from the price table, so a
 price update restates history. Records with no known price are marked
 unpriced and shown with a trailing `+`. No prompt text is stored.
 
-The YAML file is the source of intended session configuration. The initial implementation in `internal/session/` stores TauShell-managed runtime metadata in SQLite, including the harness session UUID generated before first launch and the outcomes of launch/restore attempts. Session start uses an immediate SQLite write transaction to prevent two TauShell processes from launching the same session concurrently. Do not write runtime IDs back into hand-edited YAML.
+The YAML file is the source of intended session configuration. `internal/session/` stores TauShell-managed runtime metadata in SQLite, including the harness session UUID generated before first launch and launch/restore outcomes. Session start and discovered-ID claims use immediate SQLite transactions across TauShell processes. Session deletion renames YAML to a same-directory `.deleting` tombstone, then removes runtime/order state, detaches usage history, and records a journal row in one transaction. Startup restores a staged file without a journal or finalizes a journaled deletion. TauShell config creation/updates/deletion use a per-file Windows mutex; updates also recheck file bytes before replacement and return a conflict if an external edit was observed. This is not a cross-process compare-and-swap against editors that do not honor TauShell's mutex. Do not write runtime IDs back into hand-edited YAML.
 
 Secret vault, workspace/project registry, plugin packages, and terminal snapshots remain later-scope storage until their behavior is specified.
 

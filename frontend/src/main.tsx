@@ -16,6 +16,8 @@ import { ProjectIcon, sessionColorStyle, SessionMenu, statusLabel, StateIcon } f
 import { Home, SkillsActions, toolUsable, Setup } from "./home";
 import { terminalInstances, lastInputAt, terminalTitles, echoWindowMs, fitInstances, waitForTerminal, sendToSession, interruptSession, TerminalPane } from "./terminalPane";
 import { CreateSession } from "./createSession";
+import { duplicateAndLaunch } from "./sessionActions";
+import { clearPollFailure, shouldReportPollFailure } from "./polling";
 
 type Tab = { id: string; name: string };
 const savedTabsKey = "taushell.tabs.v1";
@@ -148,6 +150,9 @@ function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [skillsView, setSkillsView] = useState<SkillsView | null>(null);
   const [skillsUpdating, setSkillsUpdating] = useState(false);
+  const [skillsSaving, setSkillsSaving] = useState(false);
+  const skillsToggleInProgress = useRef(false);
+  const backgroundPollFailures = useRef(new Set<string>());
   const [setupDismissed, setSetupDismissed] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [autoResumeAll, setAutoResumeAll] = useState(false);
@@ -417,9 +422,11 @@ function App() {
   const duplicateSession = async (session: Session) => {
     setBusy(true);
     try {
-      const copy = await app().DuplicateSession(session.id);
-      await refresh();
-      void launch(copy, "start");
+      await duplicateAndLaunch(
+        () => app().DuplicateSession(session.id),
+        refresh,
+        (copy) => launch(copy, "start"),
+      );
     } catch (err) {
       showError("ui.duplicate-session", err);
     } finally {
@@ -553,14 +560,14 @@ function App() {
   };
   useEffect(() => {
     let cancelled = false;
-    const load = () => { void app().GetToolUpdates().then((value) => { if (!cancelled) setToolUpdates(value ?? {}); }).catch(() => undefined); };
+    const load = () => { void app().GetToolUpdates().then((value) => { if (!cancelled) { clearPollFailure(backgroundPollFailures.current, "tool-updates"); setToolUpdates(value ?? {}); } }).catch((err) => { if (!cancelled && shouldReportPollFailure(backgroundPollFailures.current, "tool-updates")) showError("ui.poll-tool-updates", err); }); };
     load();
     const timer = window.setInterval(load, 10 * 60 * 1000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, []);
   useEffect(() => {
     let cancelled = false;
-    const load = () => { void app().GetSkills().then((value) => { if (!cancelled) setSkillsView(value); }).catch(() => undefined); };
+    const load = () => { void app().GetSkills().then((value) => { if (!cancelled) { clearPollFailure(backgroundPollFailures.current, "skills"); setSkillsView(value); } }).catch((err) => { if (!cancelled && shouldReportPollFailure(backgroundPollFailures.current, "skills")) showError("ui.poll-skills", err); }); };
     load();
     const timer = window.setInterval(load, 10 * 60 * 1000);
     return () => { cancelled = true; window.clearInterval(timer); };
@@ -575,14 +582,27 @@ function App() {
       setSkillsUpdating(false);
     }
   };
-  const toggleSkill = (name: string, enabled: boolean) => {
-    setSkillsView((view) => view && { ...view, skills: view.skills.map((skill) => skill.name === name ? { ...skill, enabled } : skill) });
-    app().SetSkillEnabled(name, enabled).catch((err) => {
-      setSkillsView((view) => view && { ...view, skills: view.skills.map((skill) => skill.name === name ? { ...skill, enabled: !enabled } : skill) });
-      showError("ui.set-skill-enabled", err);
-    });
+  const toggleSkill = async (name: string, enabled: boolean) => {
+    if (skillsToggleInProgress.current) return;
+    skillsToggleInProgress.current = true;
+    setSkillsSaving(true);
+    try {
+      try {
+        await app().SetSkillEnabled(name, enabled);
+      } catch (err) {
+        showError("ui.set-skill-enabled", err);
+      }
+      try {
+        setSkillsView(await app().GetSkills());
+      } catch (err) {
+        showError("ui.refresh-skills", err);
+      }
+    } finally {
+      skillsToggleInProgress.current = false;
+      setSkillsSaving(false);
+    }
   };
-  const skillActions: SkillsActions = { view: skillsView, refreshing, updating: skillsUpdating, onUpdate: () => void updateSkills(), onToggle: toggleSkill };
+  const skillActions: SkillsActions = { view: skillsView, refreshing, updating: skillsUpdating, saving: skillsSaving, onUpdate: () => void updateSkills(), onToggle: toggleSkill };
   const refreshAll = async () => {
     if (refreshing) return;
     setRefreshing(true);
@@ -665,7 +685,7 @@ function App() {
           <section className="main-content">
             <div id="panel-home" className={`home-container ${selected ? "hidden" : ""}`} role="tabpanel" aria-labelledby="tab-home" tabIndex={0}>
               {showSetup && powershell ? <Setup powershell={powershell} actions={toolActions} onRecheck={() => void refresh(true)} onContinue={() => setSetupDismissed(true)} /> :
-                <Home sessions={sessions} loaded={loaded} autoResumeAll={autoResumeAll} onAutoResumeAll={(enabled) => { setAutoResumeAll(enabled); void app().SetAutoResumeAll(enabled).catch((err) => { setAutoResumeAll(!enabled); showError("ui.auto-resume-all", err); }); }} onAutoResume={(session, enabled) => void updateSession("ui.auto-resume", () => app().SetSessionAutoResume(session.id, enabled))} status={status} busy={busy} tools={toolActions} skills={skillActions} onNew={() => setDialogOpen(true)} onRefresh={() => void refreshAll()} onHome={() => setSelected("")} onLaunch={launch} onDelete={setDeleteRequest} onDuplicate={duplicateSession} dragProps={dragProps} dropClass={dropClass} dragId={dragId} />}
+                <Home sessions={sessions} loaded={loaded} autoResumeAll={autoResumeAll} onAutoResumeAll={(enabled) => { setAutoResumeAll(enabled); void app().SetAutoResumeAll(enabled).catch((err) => { setAutoResumeAll(!enabled); showError("ui.auto-resume-all", err); }); }} onAutoResume={(session, enabled) => void updateSession("ui.auto-resume", () => app().SetSessionAutoResume(session.id, enabled))} status={status} busy={busy} tools={toolActions} skills={skillActions} onNew={() => setDialogOpen(true)} onRefresh={() => void refreshAll()} onHome={() => setSelected("")} onLaunch={launch} onDelete={setDeleteRequest} onDuplicate={duplicateSession} onError={showError} dragProps={dragProps} dropClass={dropClass} dragId={dragId} />}
             </div>
             {terminalIds.map((id) => {
               const tab = tabs.find((current) => current.id === id);

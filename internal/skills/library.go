@@ -81,21 +81,40 @@ func NewLibrary(dir string, config Config, personal map[string][]string) (*Libra
 		}
 		library.remote = remote
 	}
-	library.loadState()
+	if err := library.loadState(); err != nil {
+		return nil, err
+	}
 	return library, nil
 }
 
 func (l *Library) statePath() string { return filepath.Join(l.dir, "skills-state.json") }
 
-func (l *Library) loadState() {
-	data, err := os.ReadFile(l.statePath())
-	if err == nil {
-		_ = json.Unmarshal(data, &l.state)
+func (l *Library) loadState() error {
+	path := l.statePath()
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
 	}
+	if err != nil {
+		return fmt.Errorf("read skill state %q: %w", path, err)
+	}
+	var decoded map[string]json.RawMessage
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return fmt.Errorf("decode skill state %q: %w", path, err)
+	}
+	if decoded == nil {
+		return fmt.Errorf("decode skill state %q: expected a JSON object", path)
+	}
+	var loaded state
+	if err := json.Unmarshal(data, &loaded); err != nil {
+		return fmt.Errorf("decode skill state %q: %w", path, err)
+	}
+	l.state = loaded
+	return nil
 }
 
-func (l *Library) saveStateLocked() error {
-	data, err := json.Marshal(l.state)
+func (l *Library) saveStateLocked(next state) error {
+	data, err := json.Marshal(next)
 	if err != nil {
 		return err
 	}
@@ -251,12 +270,18 @@ func (l *Library) SetEnabled(name string, enabled bool) error {
 	} else {
 		set[name] = true
 	}
-	l.state.Disabled = l.state.Disabled[:0]
+	var disabled []string
 	for item := range set {
-		l.state.Disabled = append(l.state.Disabled, item)
+		disabled = append(disabled, item)
 	}
-	sort.Strings(l.state.Disabled)
-	return l.saveStateLocked()
+	sort.Strings(disabled)
+	next := l.state
+	next.Disabled = disabled
+	if err := l.saveStateLocked(next); err != nil {
+		return fmt.Errorf("save skill preferences: %w", err)
+	}
+	l.state = next
+	return nil
 }
 
 // Available returns the skill names a session on this harness can use: the
@@ -373,8 +398,15 @@ func (l *Library) Apply(ctx context.Context) error {
 		}
 	}
 	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.state.Applied = sha
+	next := l.state
+	next.Applied = sha
+	if err := l.saveStateLocked(next); err != nil {
+		l.lastErr = "Cookbook update failed: " + err.Error()
+		l.mu.Unlock()
+		return fmt.Errorf("save applied cookbook state: %w", err)
+	}
+	l.state = next
 	l.lastErr = ""
-	return l.saveStateLocked()
+	l.mu.Unlock()
+	return nil
 }

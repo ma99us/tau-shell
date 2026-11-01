@@ -24,10 +24,9 @@ import (
 )
 
 const (
-	startupRecoveryDelay = time.Minute
-	interruptWait        = 3 * time.Second
-	terminateWait        = 5 * time.Second
-	outputCloseGrace     = 3 * time.Second
+	interruptWait    = 3 * time.Second
+	terminateWait    = 5 * time.Second
+	outputCloseGrace = 3 * time.Second
 )
 
 // gracefulExitWait is how long a harness gets to quit after its exit input.
@@ -98,6 +97,7 @@ type Manager struct {
 	mu              sync.Mutex
 	shutdownMu      sync.Mutex
 	sessions        map[string]*managedSession
+	starting        map[string]chan struct{}
 	closed          bool
 	storeClosed     bool
 	ledger          *usage.Ledger
@@ -123,21 +123,23 @@ func (manager *Manager) SetSkills(provider SkillProvider) {
 
 // skillArgs returns the --plugin-dir arguments for one launch, or nil when
 // skills are off, unsupported, or unavailable. Problems are logged, never
-// fatal. The caller holds manager.mu.
-func (manager *Manager) skillArgs(ctx context.Context, config session.Config, executable string) []string {
-	if manager.skills == nil || !config.SkillsEnabled() {
+// fatal. Skill-provider access is copied under manager.mu; probing and
+// preparation deliberately run without the global manager lock.
+func (manager *Manager) skillArgs(ctx context.Context, adapter harness.Adapter, config session.Config, executable string) []string {
+	manager.mu.Lock()
+	provider := manager.skills
+	manager.mu.Unlock()
+	if provider == nil || !config.SkillsEnabled() {
 		return nil
 	}
-	if config.Tool != session.ClaudeCode && config.Tool != session.CopilotCLI {
-		// TauShell skills are only attached through --plugin-dir; no verified
-		// per-launch route exists for the other harnesses yet.
+	if !adapter.HasSkillDirectoryRoute() {
 		return nil
 	}
 	if !harness.SupportsPluginDir(ctx, executable) {
 		diagnostics.Warn("harness does not support --plugin-dir; launching without TauShell skills", errors.New("unsupported flag"), "tool", config.Tool)
 		return nil
 	}
-	dir, names, warnings, err := manager.skills.Prepare(string(config.Tool))
+	dir, names, warnings, err := provider.Prepare(string(config.Tool))
 	if err != nil {
 		diagnostics.Warn("prepare TauShell skills failed; launching without them", err, "tool", config.Tool)
 		return nil
@@ -177,8 +179,16 @@ func New(configDirectory, databasePath string, emit func(Event)) (*Manager, erro
 			return process, nil
 		},
 		sessions: make(map[string]*managedSession),
+		starting: make(map[string]chan struct{}),
 	}
 	manager.openUsage(databasePath)
+	if err := session.RecoverPendingConfigDeletions(configDirectory, store); err != nil {
+		if manager.ledger != nil {
+			_ = manager.ledger.Close()
+		}
+		_ = store.Close()
+		return nil, fmt.Errorf("recover pending session deletions: %w", err)
+	}
 	return manager, nil
 }
 
@@ -203,7 +213,7 @@ func (manager *Manager) List(ctx context.Context) ([]Snapshot, error) {
 	}
 	result := make([]Snapshot, 0, len(configs))
 	for _, config := range configs {
-		runtime, err := manager.recoverRuntime(ctx, config.ID)
+		runtime, err := session.RecoverRuntime(ctx, manager.store, config.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -355,15 +365,29 @@ func (manager *Manager) StartFresh(ctx context.Context, id string, columns, rows
 
 func (manager *Manager) start(ctx context.Context, id string, restoring, fresh bool, columns, rows int) (Snapshot, error) {
 	manager.mu.Lock()
-	defer manager.mu.Unlock()
 	if manager.closed {
+		manager.mu.Unlock()
 		return Snapshot{}, errors.New("session manager is shutting down")
 	}
 	if current := manager.sessions[id]; current != nil {
 		if current.isRunning() {
+			manager.mu.Unlock()
 			return current.snapshot(), nil
 		}
 	}
+	if _, exists := manager.starting[id]; exists {
+		manager.mu.Unlock()
+		return Snapshot{}, fmt.Errorf("session %q is already starting in this TauShell window", id)
+	}
+	startDone := make(chan struct{})
+	manager.starting[id] = startDone
+	manager.mu.Unlock()
+	defer func() {
+		manager.mu.Lock()
+		delete(manager.starting, id)
+		close(startDone)
+		manager.mu.Unlock()
+	}()
 
 	config, err := session.FindConfig(manager.configDirectory, id)
 	if err != nil {
@@ -381,7 +405,7 @@ func (manager *Manager) start(ctx context.Context, id string, restoring, fresh b
 	if err != nil {
 		return Snapshot{}, fmt.Errorf("PowerShell 7 (pwsh.exe) is required and must be on PATH: %w", err)
 	}
-	runtime, err := manager.recoverRuntime(ctx, id)
+	runtime, err := session.RecoverRuntime(ctx, manager.store, id)
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -407,12 +431,28 @@ func (manager *Manager) start(ctx context.Context, id string, restoring, fresh b
 	if err != nil {
 		return Snapshot{}, err
 	}
+	var existingSessionIDs map[string]bool
+	discoveryNote := ""
+	if adapter.DiscoversSessionID() && runtime.HarnessSessionID == "" {
+		existingSessionIDs, err = adapter.ExistingSessionIDs(config.WorkingDir)
+		if err != nil {
+			discoveryNote = "Resume ID unknown: existing " + string(config.Tool) + " conversations could not be enumerated; use Start fresh."
+			diagnostics.Warn("snapshot existing harness sessions failed", err, "session_id", id, "tool", config.Tool)
+		}
+	}
 	launchedAt := time.Now()
 	args := adapter.Argv(config.LaunchArgs, restoring, runtime.HarnessSessionID)
-	args = append(args, manager.skillArgs(ctx, config, harnessExecutable)...)
+	args = append(args, manager.skillArgs(ctx, adapter, config, harnessExecutable)...)
 	command := harness.PowerShellInvocation(harnessExecutable, args, config.UTF8Enabled())
 	if columns < 2 || rows < 2 {
 		columns, rows = 80, 24
+	}
+	manager.mu.Lock()
+	shuttingDown := manager.closed
+	manager.mu.Unlock()
+	if shuttingDown {
+		err := errors.New("session manager is shutting down")
+		return Snapshot{}, errors.Join(err, manager.store.Finish(ctx, id, session.StatusFailed, err.Error()))
 	}
 	process, err := manager.startProcess(columns, rows, powershell, config.WorkingDir, conpty.ChildEnvironment(config.Environment),
 		"-NoLogo", "-NoProfile", "-Command", command)
@@ -432,10 +472,13 @@ func (manager *Manager) start(ctx context.Context, id string, restoring, fresh b
 		done:        make(chan struct{}),
 		status:      session.StatusRunning,
 		hasResumeID: runtime.HarnessSessionID != "",
+		resumeNote:  discoveryNote,
 	}
+	manager.mu.Lock()
 	manager.sessions[id] = current
-	if adapter.DiscoversSessionID() && runtime.HarnessSessionID == "" {
-		go manager.discoverSessionID(current, adapter, launchedAt)
+	manager.mu.Unlock()
+	if adapter.DiscoversSessionID() && runtime.HarnessSessionID == "" && discoveryNote == "" {
+		go manager.discoverSessionID(current, adapter, launchedAt, existingSessionIDs, runtime.LaunchToken)
 	}
 	manager.publish(Event{Kind: EventState, SessionID: id, Session: current.snapshot()})
 	diagnostics.Info("session process started",
@@ -487,13 +530,16 @@ func (manager *Manager) Delete(ctx context.Context, id string) error {
 	if manager.closed {
 		return errors.New("session manager is shutting down")
 	}
+	if _, starting := manager.starting[id]; starting {
+		return fmt.Errorf("session %q is starting; wait for launch to finish before deleting", id)
+	}
 	if current := manager.sessions[id]; current != nil && current.isRunning() {
 		return fmt.Errorf("session %q is running; stop it before deleting", id)
 	}
 	if _, err := session.FindConfig(manager.configDirectory, id); err != nil {
 		return err
 	}
-	runtime, err := manager.recoverRuntime(ctx, id)
+	runtime, err := session.RecoverRuntime(ctx, manager.store, id)
 	if err != nil {
 		return err
 	}
@@ -501,18 +547,22 @@ func (manager *Manager) Delete(ctx context.Context, id string) error {
 		return fmt.Errorf("session %q is active in another TauShell process", id)
 	}
 	manager.ingestSession(ctx, id, true)
-	if err := session.DeleteConfig(manager.configDirectory, id); err != nil {
+	if manager.ledger == nil {
+		return errors.New("usage history is unavailable; session deletion was not performed")
+	}
+	deletion, err := session.StageConfigDeletion(manager.configDirectory, id)
+	if err != nil {
 		return err
+	}
+	if err := manager.ledger.TombstoneWithStore(ctx, manager.store, id, time.Now()); err != nil {
+		return errors.Join(err, deletion.Restore())
 	}
 	delete(manager.sessions, id)
-	if err := manager.store.Delete(ctx, id); err != nil {
-		return err
+	if err := deletion.Finalize(); err != nil {
+		return fmt.Errorf("session %q was deleted but config cleanup remains pending: %w", id, err)
 	}
-	if manager.ledger != nil {
-		// Deleted sessions keep counting toward monthly totals.
-		if err := manager.ledger.Tombstone(id, time.Now()); err != nil {
-			diagnostics.Warn("usage tombstone failed", err, "session_id", id)
-		}
+	if err := manager.store.CompleteDeletion(ctx, id); err != nil {
+		return fmt.Errorf("session %q was deleted but journal cleanup remains pending: %w", id, err)
 	}
 	return nil
 }
@@ -530,6 +580,22 @@ func (manager *Manager) StopAll(ctx context.Context) error {
 	defer manager.shutdownMu.Unlock()
 	manager.mu.Lock()
 	manager.closed = true
+	starts := make([]chan struct{}, 0, len(manager.starting))
+	for _, done := range manager.starting {
+		starts = append(starts, done)
+	}
+	manager.mu.Unlock()
+	for _, done := range starts {
+		select {
+		case <-done:
+		case <-ctx.Done():
+			manager.mu.Lock()
+			manager.closed = false
+			manager.mu.Unlock()
+			return ctx.Err()
+		}
+	}
+	manager.mu.Lock()
 	sessions := make([]*managedSession, 0, len(manager.sessions))
 	for _, current := range manager.sessions {
 		if current.isRunning() {
@@ -822,46 +888,6 @@ func (writer sessionOutputWriter) Write(data []byte) (int, error) {
 		DataBase64: base64.StdEncoding.EncodeToString(data),
 	})
 	return len(data), nil
-}
-
-func (manager *Manager) recoverRuntime(ctx context.Context, id string) (session.Runtime, error) {
-	for attempt := 0; attempt < 3; attempt++ {
-		runtime, err := manager.store.Runtime(ctx, id)
-		if err != nil {
-			return session.Runtime{}, err
-		}
-		switch runtime.Status {
-		case session.StatusStarting:
-			if time.Since(runtime.UpdatedAt) < startupRecoveryDelay {
-				return runtime, nil
-			}
-		case session.StatusRunning:
-			alive, err := session.RuntimeProcessAlive(runtime)
-			if err != nil {
-				return session.Runtime{}, err
-			}
-			if alive {
-				return runtime, nil
-			}
-		default:
-			return runtime, nil
-		}
-		detail := "TauShell exited unexpectedly; use restore to resume the saved harness session."
-		if runtime.Status == session.StatusStarting {
-			detail = "TauShell stopped while starting the session; use start or restore to retry."
-		}
-		updated, err := manager.store.FailIfCurrent(ctx, runtime, detail)
-		if err != nil {
-			return session.Runtime{}, err
-		}
-		if updated {
-			runtime.Status = session.StatusFailed
-			runtime.ProcessID = 0
-			runtime.LastError = detail
-			return runtime, nil
-		}
-	}
-	return session.Runtime{}, fmt.Errorf("session %q runtime state changed repeatedly during recovery; retry the command", id)
 }
 
 func (manager *Manager) get(id string) *managedSession {

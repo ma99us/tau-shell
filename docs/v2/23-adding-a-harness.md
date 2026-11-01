@@ -24,12 +24,13 @@ Throughout, `<id>` is the new harness ID (kebab-case, for example
 Run the real CLI and record, before writing code:
 
 | Question | Used by |
-|---|---|
+| --- | --- |
 | Executable name on PATH, and `--version` output format | tool spec, version parse |
 | Whether the vendor distributes the CLI as an npm package and its Node.js minimum | install source; npm installs require a usable Node.js/npm companion |
 | Help command (`--help`) and whether it lists the options below | capability probes |
 | How to start a conversation with an ID TauShell chooses (Claude/Copilot: `--session-id <uuid>`) | `StartArgs` |
 | How to resume by that ID (Claude/Copilot: `--resume <uuid>`) | `ResumeArgs` |
+| Whether the harness chooses its own ID and how its store identifies new conversations | `DiscoversSessionID`, pre-launch snapshot and `DiscoverSessionID` |
 | Optional model option (`--model <name>`) | optional capability |
 | Safe default args that avoid prompts blocking an unattended session (Claude: `--dangerously-skip-permissions`; Copilot: `--yolo`) | `DefaultLaunchArgs` |
 | A clean quit input sequence that flushes state (Copilot: Ctrl+C then `/exit` Enter) | `GracefulExit` |
@@ -37,9 +38,12 @@ Run the real CLI and record, before writing code:
 | Terminal title or status-row cues for working vs idle | frontend signal reader |
 | winget package ID and official vendor install page | install source |
 
-If the harness cannot start or resume with a caller-chosen ID, stop and
-raise it: the current adapter shape (`StartArgs`/`ResumeArgs` keyed by a
-TauShell-owned ID) assumes it can. Do not bend the core to fit one tool.
+Prefer a TauShell-chosen ID when the harness supports it. Codex and OpenCode
+choose their own IDs, so their adapters snapshot existing same-folder
+conversations before launch and discover a new ID afterwards. If discovery is
+ambiguous or the existing conversations cannot be enumerated, leave the ID
+unclaimed and surface the limitation; never guess or choose the most recent
+conversation.
 
 For an npm-distributed harness, TauShell first verifies Node.js and npm as a
 pair. When they are unusable or missing, installation offers a separately
@@ -129,11 +133,11 @@ Files: `frontend/src/bridge.ts`, `frontend/src/main.tsx`,
 
 1. `bridge.ts`: add the ID to the three unions (`Session["tool"]`,
    `ToolStatus["id"]`, `SessionTemplate["tool"]`).
-2. `main.tsx`: add the display name where it is hard-coded (sidebar subtitle,
-   Home card icon letter, the "AI harness" `<select>`, the empty-state text).
-   Prefer replacing the ternaries with a small `harnessLabels` lookup when you
-   touch them. The launch preview is capability-driven and need no change; a
-   future model widget will be gated on the available `--model` capability.
+2. `harnesses.ts`: add the ID, display and short labels to the shared harness
+  registry. Components use this registry for menus and labels; avoid adding
+  parallel harness-name ternaries to the launcher. The launch preview is
+  capability-driven and needs no change; a future model widget is gated on
+  the available `--model` capability.
 3. `attention.ts`: add a branch in `readHarnessSignal(tool, terminal, title)`
    returning `"working"` or `"idle"` from tool-specific cues:
    - Claude Code reads the terminal title (spinner glyph vs idle glyph).
@@ -162,7 +166,7 @@ to "feature absent", never to an error or a guess. Decide per hook and record
 the decision (done / not supported / unverified) in the handoff.
 
 | Hook | What it gives users | Where | Notes / how to degrade |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Widgets | Interrupt, Compact, Clear, Model quick actions, slash commands | `tools.Spec.Widgets` (`Commands`, `Models`, `InterruptKeys`, `CompactText`, `ClearText`) | Leave `Widgets` nil: terminal has no widgets. Model menu also needs an optional `--model` capability. Clear always asks for confirmation. Text is typed in, never confirmed by the harness. |
 | Prompt injection | Prompt presets and widget text typed into the live session | frontend only (generic) | Needs no code. Harness must accept pasted text at its prompt; verify existing-text and `". "` separation still behaves. |
 | Attention and state | Working/idle spinner, unseen glow, toast and taskbar flash | `frontend/src/attention.ts` `readHarnessSignal` | Return `undefined` without a verified cue; generic output-silence timing applies. |
@@ -227,7 +231,7 @@ no adapter, widgets, usage or skills.
 ## Touch-point checklist
 
 | Area | File |
-|---|---|
+| --- | --- |
 | Harness ID, validation, reserved args | `internal/session/config.go` |
 | Tool spec: version range, capabilities, install | `internal/tools/tools.go` |
 | Adapter: executable, defaults, resume check, graceful exit | `internal/harness/adapter.go` |

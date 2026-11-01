@@ -25,6 +25,9 @@ type Adapter interface {
 	// CheckResume reports why the harness cannot resume harnessSessionID, or
 	// nil when it can or when that cannot be determined.
 	CheckResume(harnessSessionID string) error
+	// HasSkillDirectoryRoute reports whether this adapter has a verified
+	// per-launch route for TauShell's skill directory.
+	HasSkillDirectoryRoute() bool
 	// DefaultLaunchArgs returns the recommended editable launch_args preset
 	// for a new session with this harness. These are user-editable template
 	// defaults, not TauShell-managed identity arguments.
@@ -36,6 +39,9 @@ type Adapter interface {
 	// DiscoversSessionID reports whether the harness picks its own conversation
 	// ID, which TauShell can only learn after launch via DiscoverSessionID.
 	DiscoversSessionID() bool
+	// ExistingSessionIDs snapshots conversations in workingDir before launch,
+	// so a recently modified external conversation is not mistaken for this run.
+	ExistingSessionIDs(workingDir string) (map[string]bool, error)
 	// DiscoverSessionID looks for the conversation a launch in workingDir at or
 	// after since created, ignoring IDs in taken. It returns "" while none
 	// exists yet and ErrAmbiguousSession when several candidates remain.
@@ -45,6 +51,19 @@ type Adapter interface {
 // ErrAmbiguousSession means several unclaimed harness conversations match a
 // launch, so none can be safely attributed to it.
 var ErrAmbiguousSession = errors.New("several harness conversations match this launch")
+
+// CombineSessionIDs returns IDs already claimed by TauShell or present before
+// launch without mutating either input map.
+func CombineSessionIDs(claimed, existing map[string]bool) map[string]bool {
+	combined := make(map[string]bool, len(claimed)+len(existing))
+	for id := range claimed {
+		combined[id] = true
+	}
+	for id := range existing {
+		combined[id] = true
+	}
+	return combined
+}
 
 // ExitStep is one terminal input write followed by a pause.
 type ExitStep struct {
@@ -64,18 +83,20 @@ type cliAdapter struct {
 	// harnesses whose resume is a subcommand.
 	resumeFirst bool
 	discover    func(workingDir string, since time.Time, taken map[string]bool) (string, error)
+	existingIDs func(workingDir string) (map[string]bool, error)
+	skillDir    bool
 }
 
 func For(id session.Harness) (Adapter, error) {
 	switch id {
 	case session.ClaudeCode:
-		return cliAdapter{id: id, executable: "claude", defaultArgs: []string{"--dangerously-skip-permissions"}, resumeCheck: checkClaudeResume, gracefulExit: []ExitStep{
+		return cliAdapter{id: id, executable: "claude", defaultArgs: []string{"--dangerously-skip-permissions"}, resumeCheck: checkClaudeResume, skillDir: true, gracefulExit: []ExitStep{
 			{Input: "\x03", Pause: 400 * time.Millisecond},
 			{Input: "/exit", Pause: 400 * time.Millisecond},
 			{Input: "\r"},
 		}}, nil
 	case session.CopilotCLI:
-		return cliAdapter{id: id, executable: "copilot", defaultArgs: []string{"--yolo"}, resumeCheck: checkCopilotResume, gracefulExit: []ExitStep{
+		return cliAdapter{id: id, executable: "copilot", defaultArgs: []string{"--yolo"}, resumeCheck: checkCopilotResume, skillDir: true, gracefulExit: []ExitStep{
 			{Input: "\x03", Pause: 400 * time.Millisecond},
 			{Input: "/exit", Pause: 200 * time.Millisecond},
 			{Input: "\r"},
@@ -91,7 +112,7 @@ func For(id session.Harness) (Adapter, error) {
 	case session.Codex:
 		return cliAdapter{id: id, executable: "codex", defaultArgs: []string{"--dangerously-bypass-approvals-and-sandbox"}, resumeCheck: checkCodexResume,
 			resumeArgs: func(id string) []string { return []string{"resume", id} }, resumeFirst: true,
-			discover: discoverCodexSession,
+			discover: discoverCodexSession, existingIDs: existingCodexSessionIDs,
 			gracefulExit: []ExitStep{
 				{Input: "\x1b", Pause: 400 * time.Millisecond},
 				{Input: "/exit", Pause: 300 * time.Millisecond},
@@ -100,7 +121,7 @@ func For(id session.Harness) (Adapter, error) {
 	case session.OpenCode:
 		return cliAdapter{id: id, executable: "opencode", defaultArgs: []string{"--auto"}, resumeCheck: checkOpenCodeResume,
 			resumeArgs: func(id string) []string { return []string{"--session", id} },
-			discover:   discoverOpenCodeSession,
+			discover:   discoverOpenCodeSession, existingIDs: existingOpenCodeSessionIDs,
 			gracefulExit: []ExitStep{
 				{Input: "\x1b", Pause: 300 * time.Millisecond},
 				{Input: "\x1b", Pause: 400 * time.Millisecond},
@@ -169,6 +190,10 @@ func (adapter cliAdapter) CheckResume(harnessSessionID string) error {
 	return adapter.resumeCheck(harnessSessionID)
 }
 
+func (adapter cliAdapter) HasSkillDirectoryRoute() bool {
+	return adapter.skillDir
+}
+
 func (adapter cliAdapter) ID() session.Harness {
 	return adapter.id
 }
@@ -212,6 +237,16 @@ func (adapter cliAdapter) Argv(launchArgs []string, resuming bool, harnessSessio
 
 func (adapter cliAdapter) DiscoversSessionID() bool {
 	return adapter.discover != nil
+}
+
+func (adapter cliAdapter) ExistingSessionIDs(workingDir string) (map[string]bool, error) {
+	if adapter.discover == nil {
+		return nil, nil
+	}
+	if adapter.existingIDs == nil {
+		return nil, fmt.Errorf("%s session discovery cannot snapshot existing conversations", adapter.id)
+	}
+	return adapter.existingIDs(workingDir)
 }
 
 func (adapter cliAdapter) DiscoverSessionID(workingDir string, since time.Time, taken map[string]bool) (string, error) {

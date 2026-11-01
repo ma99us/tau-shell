@@ -3,6 +3,7 @@ package usage
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -266,6 +267,24 @@ func (ledger *Ledger) Tombstone(sessionID string, now time.Time) error {
 		return fmt.Errorf("detach usage of %q: %w", sessionID, err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := tombstoneInTransaction(tx, sessionID, now); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// TombstoneWithStore atomically detaches usage and deletes session runtime and
+// order state. The ledger lock is acquired first, matching IngestFile's lock
+// order before the shared SQLite transaction begins.
+func (ledger *Ledger) TombstoneWithStore(ctx context.Context, store *session.Store, sessionID string, now time.Time) error {
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+	return store.DeleteWith(ctx, sessionID, func(tx *sql.Tx) error {
+		return tombstoneInTransaction(tx, sessionID, now)
+	})
+}
+
+func tombstoneInTransaction(tx *sql.Tx, sessionID string, now time.Time) error {
 	if _, err := tx.Exec(`UPDATE usage_ledger SET session_id = ? WHERE session_id = ?`,
 		deletedPrefix+sessionID+":"+strconv.FormatInt(now.UnixNano(), 10), sessionID); err != nil {
 		return fmt.Errorf("detach usage of %q: %w", sessionID, err)
@@ -273,5 +292,5 @@ func (ledger *Ledger) Tombstone(sessionID string, now time.Time) error {
 	if _, err := tx.Exec(`DELETE FROM usage_files WHERE session_id = ?`, sessionID); err != nil {
 		return fmt.Errorf("detach usage of %q: %w", sessionID, err)
 	}
-	return tx.Commit()
+	return nil
 }
