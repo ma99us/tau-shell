@@ -176,18 +176,21 @@ type sessionEntry struct {
 }
 
 func loadSessionEntries(configDirectory, databasePath string) ([]sessionEntry, error) {
-	configs, err := session.ListConfigs(configDirectory)
-	if err != nil {
-		return nil, err
-	}
-	if len(configs) == 0 {
-		return nil, nil
-	}
-	sort.Slice(configs, func(i, j int) bool { return configs[i].ID < configs[j].ID })
 	store, err := openStore(databasePath)
 	if err != nil {
 		return nil, err
 	}
+	if err := session.RecoverPendingConfigDeletions(configDirectory, store); err != nil {
+		return nil, errors.Join(err, store.Close())
+	}
+	configs, err := session.ListConfigs(configDirectory)
+	if err != nil {
+		return nil, errors.Join(err, store.Close())
+	}
+	if len(configs) == 0 {
+		return nil, store.Close()
+	}
+	sort.Slice(configs, func(i, j int) bool { return configs[i].ID < configs[j].ID })
 	entries := make([]sessionEntry, 0, len(configs))
 	for _, config := range configs {
 		runtime, err := session.RecoverRuntime(context.Background(), store, config.ID)
@@ -207,6 +210,21 @@ func runSession(id string, restoring bool) (returnErr error) {
 	if err != nil {
 		return err
 	}
+	store, err := openStore(databasePath)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		returnErr = errors.Join(returnErr, store.Close())
+	}()
+	if err := session.RecoverPendingConfigDeletions(configDirectory, store); err != nil {
+		return err
+	}
+	unlockConfig, err := session.LockConfig(configDirectory, id)
+	if err != nil {
+		return fmt.Errorf("lock session config %q: %w", id, err)
+	}
+	defer unlockConfig()
 	config, err := session.FindConfig(configDirectory, id)
 	if err != nil {
 		return err
@@ -223,13 +241,6 @@ func runSession(id string, restoring bool) (returnErr error) {
 	if err != nil {
 		return fmt.Errorf("PowerShell 7 (pwsh.exe) is required and must be on PATH: %w", err)
 	}
-	store, err := openStore(databasePath)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		returnErr = errors.Join(returnErr, store.Close())
-	}()
 	runtime, err := session.RecoverRuntime(context.Background(), store, id)
 	if err != nil {
 		return err
@@ -250,6 +261,7 @@ func runSession(id string, restoring bool) (returnErr error) {
 	if err != nil {
 		return err
 	}
+	unlockConfig()
 	var existingSessionIDs map[string]bool
 	discoveryNote := ""
 	if adapter.DiscoversSessionID() && runtime.HarnessSessionID == "" {

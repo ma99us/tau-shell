@@ -172,6 +172,15 @@ func (config Config) Validate() error {
 	return nil
 }
 
+// LockConfig serializes a session's configuration read and runtime reservation
+// with updates and staged deletion across TauShell processes on Windows.
+func LockConfig(directory, id string) (func(), error) {
+	if !idPattern.MatchString(id) {
+		return nil, fmt.Errorf("invalid session id %q", id)
+	}
+	return lockConfigPath(filepath.Join(directory, id+".yaml"))
+}
+
 // ValidateLaunchArgs rejects user-configured launch arguments that would
 // override a TauShell-managed session/resume identity argument for tool.
 // Exported so callers (such as a launch-command preview) can reuse the same

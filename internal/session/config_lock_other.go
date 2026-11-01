@@ -18,5 +18,6 @@ func lockConfigPath(path string) (func(), error) {
 	lock, _ := configLocks.LoadOrStore(strings.ToLower(filepath.Clean(absolute)), &sync.Mutex{})
 	mutex := lock.(*sync.Mutex)
 	mutex.Lock()
-	return mutex.Unlock, nil
+	var once sync.Once
+	return func() { once.Do(mutex.Unlock) }, nil
 }

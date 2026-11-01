@@ -74,8 +74,11 @@ only the old tombstone and preserves the new definition.
 Tests cover comments, external-edit conflict, concurrent field updates,
 transaction rollback at SQL failure points, active-session refusal, both
 deletion recovery branches, and preservation of a recreated definition. The
-external editor check is detect-before-replace, not an OS-level compare-and-swap;
-an unrelated editor can still race after the recheck.
+CLI list/start also run deletion recovery. CLI and desktop starts hold the same
+per-config lock from YAML read through runtime reservation, so a deletion
+cannot commit between those operations. The external editor check is
+detect-before-replace, not an OS-level compare-and-swap; an unrelated editor
+can still race after the recheck.
 
 ## A4 implementation update
 
@@ -104,7 +107,8 @@ agreed, and keep each pass small enough to test and review.
 ## A6 implementation update
 
 **Updated:** 2026-11-01. V2 architecture, lifecycle, restoration, attention,
-and harness-authoring docs now match the shipped optional tool setup, local
+plugin-system and harness-authoring docs now match the five shipped adapters,
+implemented `launch_args`, optional tool setup, local
 notifications, generic output-timing fallback, and opt-in startup auto-resume.
 The engineering handoff points to `sessionVisuals.tsx` and states the current
 frontend test coverage. Contributor guidance no longer recommends a reset-based

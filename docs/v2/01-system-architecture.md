@@ -4,7 +4,7 @@
 
 ```text
 Windows desktop host (Go + WebView2)
-  -> local UI (React candidate)
+  -> local UI (React)
   -> narrow validated UI bridge
   -> session manager and built-in harness adapters
   -> ConPTY -> PowerShell 7 -> AI harness CLI
@@ -15,9 +15,10 @@ been removed. `list`, `start`, and `restore` remain available as standalone
 CLI operations. The current Windows host uses Wails v2 with bundled React and
 xterm.js assets. The UI host, session manager, and harness adapters are
 distinct: the renderer does not own process lifecycle or construct
-provider-specific commands. The host and terminal stack are implemented but
-remain provisional until the Windows 10 feasibility gate passes with both
-supported harnesses.
+provider-specific commands. The renderer calls local typed Wails bindings and
+subscribes to Wails runtime events; Phase 1 has no REST server or WebSocket
+listener. The host and terminal stack remain provisional until the Windows 10
+feasibility gate passes with supported harnesses.
 
 Each live session has an independent PowerShell/ConPTY process tree. xterm.js
 is mounted per open tab and receives ConPTY output as base64-encoded bytes;

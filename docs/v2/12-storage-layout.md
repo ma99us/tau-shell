@@ -44,8 +44,9 @@ disabled skill names; JSON rather than `app_settings`), `sources/<owner>-<repo>/
 (downloaded snapshots), and `plugins/<harness>/<hash>/` (immutable plugin
 folders passed to `--plugin-dir`; old ones are garbage-collected).
 
-The tab manager currently keeps its open tabs and selected tab in memory for
-the duration of the process. Open tabs are not persisted across restarts.
+The UI persists open tab IDs/order/selection in WebView `localStorage`; live
+xterm buffers and terminal state are process-local and are not persisted across
+restarts. Presentation state does not start or restore a session by itself.
 The desktop frame defaults to a normal 1280x920 window. Its normal bounds and
 maximized state are saved on confirmed close in `window-placement.json` under
 the TauShell data directory, separately from YAML and harness runtime fields.
@@ -53,9 +54,9 @@ Minimized windows reopen in their previous normal or maximized state. Native
 Windows placement restoration adjusts an off-screen window when monitors change.
 Missing or invalid placement falls back to the default window.
 
-The planned desktop GUI will open to Home and may make the previous tab layout
-available without relaunching sessions. Persisted tab IDs/order/selection, if
-implemented, remain presentation state separate from YAML and harness runtime
-metadata. See [`docs/v1/08-UI-Design.md`](../v1/08-UI-Design.md).
+The desktop opens Home by default; opted-in auto-resume settings may restore
+eligible sessions. Persisted tab IDs/order/selection remain presentation state
+separate from YAML and harness runtime metadata. See
+[`docs/v1/08-UI-Design.md`](../v1/08-UI-Design.md).
 
 The isolated [`spikes/session-config/`](../../spikes/session-config/) prototype verified strict YAML parsing, runtime UUID persistence across database reopen, and that runtime-state operations leave the original YAML file unchanged. The application now implements this separation; the schema and driver remain subject to Phase 1 validation.

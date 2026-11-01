@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestLoadConfigAndFilenameIdentity(t *testing.T) {
@@ -239,6 +240,47 @@ func TestConcurrentConfigFieldUpdatesPreserveBothChanges(t *testing.T) {
 	updated, err := LoadConfig(path)
 	if err != nil || updated.Name != "After" || !updated.AutoResume {
 		t.Fatalf("concurrent updates = %+v, %v", updated, err)
+	}
+}
+
+func TestConfigLockSerializesUpdateWithDeletionStage(t *testing.T) {
+	directory := t.TempDir()
+	config := Config{ID: "locked", Name: "Before", Tool: ClaudeCode, WorkingDir: t.TempDir()}
+	if _, err := SaveConfig(directory, config); err != nil {
+		t.Fatal(err)
+	}
+	unlock, err := LockConfig(directory, config.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	started := make(chan struct{})
+	result := make(chan error, 1)
+	go func() {
+		close(started)
+		deletion, err := StageConfigDeletion(directory, config.ID)
+		if err == nil {
+			err = deletion.Restore()
+		}
+		result <- err
+	}()
+	<-started
+	select {
+	case err := <-result:
+		unlock()
+		t.Fatalf("deletion stage passed the held config lock: %v", err)
+	case <-time.After(25 * time.Millisecond):
+	}
+	unlock()
+	select {
+	case err := <-result:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("deletion did not continue after config lock release")
+	}
+	if _, err := FindConfig(directory, config.ID); err != nil {
+		t.Fatalf("config missing after restored stage: %v", err)
 	}
 }
 

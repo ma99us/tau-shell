@@ -389,6 +389,11 @@ func (manager *Manager) start(ctx context.Context, id string, restoring, fresh b
 		manager.mu.Unlock()
 	}()
 
+	unlockConfig, err := session.LockConfig(manager.configDirectory, id)
+	if err != nil {
+		return Snapshot{}, fmt.Errorf("lock session config %q: %w", id, err)
+	}
+	defer unlockConfig()
 	config, err := session.FindConfig(manager.configDirectory, id)
 	if err != nil {
 		return Snapshot{}, err
@@ -431,6 +436,7 @@ func (manager *Manager) start(ctx context.Context, id string, restoring, fresh b
 	if err != nil {
 		return Snapshot{}, err
 	}
+	unlockConfig()
 	var existingSessionIDs map[string]bool
 	discoveryNote := ""
 	if adapter.DiscoversSessionID() && runtime.HarnessSessionID == "" {

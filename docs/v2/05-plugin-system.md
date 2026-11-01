@@ -2,7 +2,10 @@
 
 ## Phase 1
 
-Use two small built-in harness adapters for Claude Code and GitHub Copilot CLI. Keep this interface internal; a general plugin manager, third-party plugin loading, UI actions, and plugin SDK are later work.
+Use built-in adapters for the supported CLI harnesses: Claude Code, GitHub
+Copilot CLI, GSD, OpenAI Codex CLI, and OpenCode. Keep the interface internal;
+a general plugin manager, third-party plugin loading, UI actions, and plugin
+SDK are later work.
 
 Each adapter should provide:
 
@@ -14,16 +17,24 @@ Each adapter should provide:
   intends to use.
 - A clear error when the executable is absent or the CLI does not support the required option.
 
-The common session manager owns persistence, process/ConPTY lifecycle, configuration, and runtime state. Adapters only translate TauShell launch/resume intent into harness-specific CLI arguments.
+The session manager owns persistence, process/ConPTY lifecycle, configuration,
+and runtime state. Adapters provide harness-specific argv, resume checks,
+discovery and optional capability metadata. Shared discovery policy filters
+pre-launch IDs and atomically claims only an unambiguous candidate; adapters
+own the harness-specific store enumeration and parsing. A harness with a
+TauShell-chosen ID uses `StartArgs`/`ResumeArgs`; Codex/OpenCode instead expose
+pre-launch `ExistingSessionIDs` and post-launch `DiscoverSessionID`. Discovery
+still correlates by working directory and launch time; an external conversation
+created after the baseline can remain indistinguishable and must not be claimed
+when multiple candidates match.
 
-Session YAML is planned to support one ordered `launch_args` list of
-user-configured harness options, applied to both fresh start and restore.
+Session YAML supports one ordered `launch_args` list of user-configured
+harness options, applied to both fresh start and restore.
 These are discrete process arguments, not a shell command string. The adapter
 remains responsible for the mode-specific TauShell-managed session/resume
 identifier and must prevent a configured argument from overriding that
-identity. Generated session templates may provide editable defaults for each
-harness. This schema extension is planned and is not part of the current
-strict parser until implemented.
+identity. Generated session templates provide editable defaults for supported
+harnesses.
 
 ### Version support and tool setup
 
@@ -84,7 +95,8 @@ left out so the personal copy wins.
 At launch and resume the session manager asks the library for a content-hashed
 plugin folder (`.claude-plugin/plugin.json`, `plugin.json`, `skills/<name>`) and
 appends `--plugin-dir <dir>` after the adapter's own arguments. It is skipped
-when the session sets `skills: false`, when `--help` does not list
+when the session sets `skills: false`, when the adapter has no verified skill
+directory route, when `--help` does not list
 `--plugin-dir`, or when preparing fails; each case is logged and never blocks
 launch. Tested: Copilot CLI 1.0.105 lists the skills; Claude Code 2.1.312
 validates the manifest only. `--resume` combined with `--plugin-dir` and

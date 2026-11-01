@@ -81,6 +81,48 @@ func TestListShowsConfiguredSessionsAndRuntimeStatus(t *testing.T) {
 	}
 }
 
+func TestCLIListRecoversPendingConfigDeletions(t *testing.T) {
+	configDirectory := t.TempDir()
+	databasePath := filepath.Join(t.TempDir(), "state.db")
+	for _, id := range []string{"restore-stage", "finalize-stage"} {
+		if _, err := session.SaveConfig(configDirectory, session.Config{
+			ID: id, Name: id, Tool: session.ClaudeCode, WorkingDir: t.TempDir(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	store, err := session.OpenStore(databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"restore-stage", "finalize-stage"} {
+		path := filepath.Join(configDirectory, id+".yaml")
+		if err := os.Rename(path, path+".deleting"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := store.DeleteWith(context.Background(), "finalize-stage", nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	var output bytes.Buffer
+	if err := listSessionsAt(configDirectory, databasePath, &output); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output.String(), "restore-stage") || strings.Contains(output.String(), "finalize-stage") {
+		t.Fatalf("CLI list after deletion recovery = %q", output.String())
+	}
+	if _, err := session.FindConfig(configDirectory, "restore-stage"); err != nil {
+		t.Fatalf("uncommitted staged definition was not restored: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(configDirectory, "finalize-stage.yaml.deleting")); err == nil {
+		t.Fatal("committed tombstone was not finalized")
+	}
+}
+
 func TestRecoveryMarksExitedProcessAsFailed(t *testing.T) {
 	store, err := session.OpenStore(filepath.Join(t.TempDir(), "state.db"))
 	if err != nil {
