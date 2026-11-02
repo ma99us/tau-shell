@@ -27,8 +27,12 @@ keystore in the git-ignored `keystore.properties` (`storeFile`, `storePassword`,
 
 ## Install and pair
 
-1. Copy the APK to the phone and allow installing from that source. Compare its
-   SHA-256 with the one you built (`Get-FileHash app-debug.apk`).
+1. Copy the APK to the phone and allow installing from that source (Settings >
+   Apps > the file manager or browser > Install unknown apps), or install over USB
+   with `adb install -r app-debug.apk` (USB debugging on). Compare its SHA-256 with
+   the one you built: `Get-FileHash app-debug.apk -Algorithm SHA256`. There is no
+   published checksum because every build differs; the one that counts is the hash
+   of the APK you built yourself, before and after the copy.
 2. On the PC: Home > Phone, turn the phone server on, press Add phone.
 3. In the app scan the QR code (or paste the `taushell://pair?...` link), then
    approve the phone's name on the PC.

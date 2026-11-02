@@ -124,6 +124,21 @@ class ParseTest {
         assertEquals("Idle · done 1m 5s ago", StateClock.headline(item("idle"), 155_000))
         assertEquals("Idle", StateClock.headline(SessionItem("x", "n", "t", "running", true, "", "", Activity("idle", true, false), ""), 1))
     }
+    @Test
+    fun alertsFireOnlyForConfirmedInputAndFinishedTurns() {
+        fun item(state: String, confirmed: Boolean, running: Boolean = true) =
+            SessionItem("s", "n", "claude-code", "running", running, "", "", Activity(state, confirmed, false), "")
+        assertEquals("input", MonitorService.effectiveState(item("input", true), "working"))
+        assertEquals("working", MonitorService.effectiveState(item("idle", false), "working"))
+        assertEquals("other", MonitorService.effectiveState(item("input", true, running = false), "working"))
+        assertEquals("Needs an answer", MonitorService.alertFor("working", "input"))
+        assertEquals("Needs an answer", MonitorService.alertFor("idle", "input"))
+        assertEquals("Finished", MonitorService.alertFor("working", "idle"))
+        assertNull(MonitorService.alertFor("input", "input"))
+        assertNull(MonitorService.alertFor(null, "input"))
+        assertNull(MonitorService.alertFor("other", "idle"))
+        assertNull(MonitorService.alertFor("input", "working"))
+    }
 }
 
 /** Real TLS 1.3 handshakes against a local server built from the fixture keystores. */

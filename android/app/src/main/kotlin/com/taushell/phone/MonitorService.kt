@@ -80,16 +80,12 @@ class MonitorService : Service() {
                     // reading (idle is confirmed only after a short hold) keeps the last confirmed
                     // state, so working -> idle still fires once idle is confirmed.
                     val before = lastState[item.id]
-                    val state = when {
-                        !item.running -> "other"
-                        item.activity.confirmed -> item.activity.state
-                        else -> before ?: "other"
-                    }
+                    val state = effectiveState(item, before)
                     next[item.id] = state
-                    if (!first && before != null && before != state && item.id !in muted) {
-                        when {
-                            state == "input" -> manager.notify(item.id.hashCode(), notification(item.name, "Needs an answer", ongoing = false, channel = ALERT, session = item.id))
-                            state == "idle" && before == "working" -> manager.notify(item.id.hashCode(), notification(item.name, "Finished", ongoing = false, channel = ALERT, session = item.id))
+                    if (!first && item.id !in muted) {
+                        when (alertFor(before, state)) {
+                            "Needs an answer" -> manager.notify(item.id.hashCode(), notification(item.name, "Needs an answer", ongoing = false, channel = ALERT, session = item.id))
+                            "Finished" -> manager.notify(item.id.hashCode(), notification(item.name, "Finished", ongoing = false, channel = ALERT, session = item.id))
                         }
                     }
                 }
@@ -135,6 +131,21 @@ class MonitorService : Service() {
         private const val WATCH = "watch"
         private const val ALERT = "alert"
         const val EXTRA_SESSION = "session"
+
+        /** Only confirmed readings count, so a guess never pages anyone; an unconfirmed one keeps the last state. */
+        fun effectiveState(item: SessionItem, before: String?): String = when {
+            !item.running -> "other"
+            item.activity.confirmed -> item.activity.state
+            else -> before ?: "other"
+        }
+
+        /** The alert text for a state change, or null when nothing should fire. */
+        fun alertFor(before: String?, state: String): String? = when {
+            before == null || before == state -> null
+            state == "input" -> "Needs an answer"
+            state == "idle" && before == "working" -> "Finished"
+            else -> null
+        }
 
         fun start(context: Context) {
             context.startForegroundService(Intent(context, MonitorService::class.java))
