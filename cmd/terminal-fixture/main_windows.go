@@ -23,7 +23,12 @@ const (
 
 func main() {
 	if len(os.Args) == 2 && os.Args[1] == "--version" {
-		fmt.Println("TauShell terminal fixture 1.0")
+		fmt.Println("TauShell terminal fixture 1.0.103")
+		return
+	}
+	// Lets the fixture stand in for a harness whose capability probe reads --help.
+	if len(os.Args) == 2 && os.Args[1] == "--help" {
+		fmt.Println("Options: --session-id <id>, --resume <id>, --model <model>")
 		return
 	}
 	if err := run(); err != nil {

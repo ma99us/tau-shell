@@ -90,6 +90,7 @@ type desktopSessionManager interface {
 	SetAutoResumeAll(ctx context.Context, enabled bool) error
 	SetOrder(context.Context, []string) error
 	PlaceAfter(ctx context.Context, id, afterID string) error
+	PlaceLast(ctx context.Context, id string) error
 	StopAll(context.Context) error
 	Close(context.Context) error
 }
@@ -426,6 +427,7 @@ func (application *App) saveNewConfig(config session.Config) (sessionhost.Snapsh
 	if _, err := session.SaveConfig(application.configDirectory, config); err != nil {
 		return sessionhost.Snapshot{}, err
 	}
+	application.placeLast(config.ID)
 	return sessionhost.Snapshot{
 		ID:         config.ID,
 		Name:       config.Name,
@@ -433,6 +435,16 @@ func (application *App) saveNewConfig(config session.Config) (sessionhost.Snapsh
 		WorkingDir: config.WorkingDir,
 		Status:     session.StatusNeverStarted,
 	}, nil
+}
+
+// placeLast pins the saved display order with the new session at the end, so it
+// appears after the existing ones on Home, the sidebar and the tabs instead of
+// at its alphabetical file position. A failure only affects ordering, so it is
+// logged and the created session is still returned.
+func (application *App) placeLast(newID string) {
+	if err := application.manager.PlaceLast(context.Background(), newID); err != nil {
+		diagnostics.Error("place new session last failed", err, "session_id", newID)
+	}
 }
 
 func (application *App) CreateSession(name, toolName, workingDir string, launchArgs []string) (snapshot sessionhost.Snapshot, err error) {

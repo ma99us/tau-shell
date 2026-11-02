@@ -4,7 +4,7 @@ import "@xterm/xterm/css/xterm.css";
 import { app, DialogRequest, InstallResult, Session, SessionEvent, ShutdownProgress, SkillsView, SystemStatus, ToolStatus } from "./bridge";
 import "./theme/tokens.css";
 import "./style.css";
-import { Activity, AttentionKind, attentionEdge, nextActivity, readHarnessSignal } from "./attention";
+import { Activity, AttentionKind, attentionEdge, hasCueSignal, nextActivity, readHarnessSignal } from "./attention";
 import { moveId } from "./order";
 import { CommandPalette, PaletteItem } from "./harnessActions";
 import { GearIcon, HomeIcon } from "./harnessIcons";
@@ -18,10 +18,7 @@ import { terminalInstances, lastInputAt, terminalTitles, echoWindowMs, fitInstan
 import { CreateSession } from "./createSession";
 import { duplicateAndLaunch } from "./sessionActions";
 import { clearPollFailure, shouldReportPollFailure } from "./polling";
-
-type Tab = { id: string; name: string };
-const savedTabsKey = "taushell.tabs.v1";
-const recentFoldersKey = "taushell.recent-folders.v1";
+import { readRecentFolders, readTabs, recentFoldersKey, savedTabsKey, Tab, writeStored } from "./storage";
 
 window.addEventListener("error", (event) => {
   const details = errorDetails(event.error ?? event.message);
@@ -48,35 +45,11 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { failed: bool
   }
 }
 
-function readRecentFolders(): string[] {
-  try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(recentFoldersKey) ?? "[]");
-    return Array.isArray(parsed)
-      ? parsed.filter((folder): folder is string => typeof folder === "string" && folder.length > 0).slice(0, 5)
-      : [];
-  } catch (error) {
-    reportFrontendFailure("storage.recent-folders", error);
-    return [];
-  }
-}
-
-function readTabs(): Tab[] {
-  try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(savedTabsKey) ?? "[]");
-    return Array.isArray(parsed)
-      ? parsed.filter((tab): tab is Tab => typeof tab?.id === "string" && typeof tab?.name === "string")
-      : [];
-  } catch (error) {
-    reportFrontendFailure("storage.tabs", error);
-    return [];
-  }
-}
-
 function App() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [status, setStatus] = useState<SystemStatus | null>(null);
-  const [tabs, setTabs] = useState<Tab[]>(readTabs);
-  const [recentFolders, setRecentFolders] = useState<string[]>(readRecentFolders);
+  const [tabs, setTabs] = useState<Tab[]>(() => readTabs(reportFrontendFailure));
+  const [recentFolders, setRecentFolders] = useState<string[]>(() => readRecentFolders(reportFrontendFailure));
   const [backgroundTerminalIds, setBackgroundTerminalIds] = useState<string[]>([]);
   const [selected, setSelected] = useState("");
   const [activity, setActivity] = useState<Record<string, Activity>>({});
@@ -104,7 +77,7 @@ function App() {
         const signal = readHarnessSignal(session.tool, terminalInstances.get(id), terminalTitles.get(id) ?? "");
         if (signal === undefined && at === undefined) return;
         const old = previous[id] ?? { working: false, input: false, unseen: false };
-        const { working, input, unseen } = nextActivity(old, signal, at, now, selectedRef.current === id && watching);
+        const { working, input, unseen } = nextActivity(old, signal, at, now, selectedRef.current === id && watching, hasCueSignal(session.tool));
         if (working && !old.working) workingSince.current.set(id, now);
         const alert = attentionEdge(old, { working, input }, now - (workingSince.current.get(id) ?? now));
         if (alert) alerts.push({ id, kind: alert });
@@ -157,7 +130,11 @@ function App() {
   const [loaded, setLoaded] = useState(false);
   const [autoResumeAll, setAutoResumeAll] = useState(false);
   const autoResumeRan = useRef(false);
-  const showError = (source: string, failure: unknown) => setError(reportFrontendFailure(source, failure));
+  const showError = (source: string, failure: unknown) => {
+    const message = reportFrontendFailure(source, failure);
+    setError(message);
+    return message;
+  };
 
   // Once per app launch, resume the sessions flagged for it (or all, when the global flag is on).
   useEffect(() => {
@@ -225,7 +202,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(savedTabsKey, JSON.stringify(tabs));
+    writeStored(savedTabsKey, tabs, reportFrontendFailure);
   }, [tabs]);
 
   // Go-side confirmations (shutdown, installs) render here instead of as native message boxes.
@@ -251,7 +228,7 @@ function App() {
   };
 
   useEffect(() => {
-    localStorage.setItem(recentFoldersKey, JSON.stringify(recentFolders));
+    writeStored(recentFoldersKey, recentFolders, reportFrontendFailure);
   }, [recentFolders]);
 
   useEffect(() => {

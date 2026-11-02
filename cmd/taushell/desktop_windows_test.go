@@ -21,6 +21,7 @@ type closeTestManager struct {
 	list         func(context.Context) ([]sessionhost.Snapshot, error)
 	stopAll      func(context.Context) error
 	placed       [][2]string
+	placeLastIDs []string
 	listCalls    int
 	stopAllCalls int
 }
@@ -90,6 +91,11 @@ func (manager *closeTestManager) PlaceAfter(context.Context, string, string) err
 	return manager.placeAfter()
 }
 
+func (manager *closeTestManager) PlaceLast(_ context.Context, id string) error {
+	manager.placeLastIDs = append(manager.placeLastIDs, id)
+	return nil
+}
+
 func (manager *closeTestManager) StopAll(ctx context.Context) error {
 	manager.stopAllCalls++
 	return manager.stopAll(ctx)
@@ -143,6 +149,9 @@ func TestCreateSessionReturnsSavedSessionWithoutListing(t *testing.T) {
 	if manager.listCalls != 0 {
 		t.Fatalf("session manager List called %d times, want zero", manager.listCalls)
 	}
+	if len(manager.placeLastIDs) != 1 || manager.placeLastIDs[0] != "api-refactor" {
+		t.Fatalf("new session placed last = %v, want [api-refactor]", manager.placeLastIDs)
+	}
 	if snapshot.ID != "api-refactor" || snapshot.Name != "API refactor!" || snapshot.Tool != session.ClaudeCode ||
 		snapshot.WorkingDir != workingDirectory || snapshot.Status != session.StatusNeverStarted ||
 		snapshot.RunningHere || snapshot.HasResumeID {
@@ -158,7 +167,7 @@ func TestCreateSessionReturnsSavedSessionWithoutListing(t *testing.T) {
 }
 
 func TestCreateSessionDeducesUniqueNameFromProject(t *testing.T) {
-	application := &App{configDirectory: filepath.Join(t.TempDir(), "sessions")}
+	application := &App{manager: &closeTestManager{}, configDirectory: filepath.Join(t.TempDir(), "sessions")}
 	project := filepath.Join(t.TempDir(), "folder-name")
 	if err := os.Mkdir(project, 0o700); err != nil {
 		t.Fatal(err)
@@ -183,7 +192,7 @@ func TestCreateSessionDeducesUniqueNameFromProject(t *testing.T) {
 }
 
 func TestSessionYAMLPreviewAndCreateFromEditedYAML(t *testing.T) {
-	application := &App{configDirectory: filepath.Join(t.TempDir(), "sessions")}
+	application := &App{manager: &closeTestManager{}, configDirectory: filepath.Join(t.TempDir(), "sessions")}
 	project := t.TempDir()
 
 	text, err := application.PreviewSessionYAML("API refactor", string(session.ClaudeCode), project, []string{"--model", "sonnet"})
@@ -313,7 +322,7 @@ func TestCreateSessionRejectsDuplicateIDWithoutOverwriting(t *testing.T) {
 		t.Fatalf("read original config: %v", err)
 	}
 
-	application := &App{configDirectory: configDirectory}
+	application := &App{manager: &closeTestManager{}, configDirectory: configDirectory}
 	_, err = application.CreateSession("API refactor", string(session.CopilotCLI), workingDirectory, []string{"--agent", "new"})
 	if err == nil || !strings.Contains(err.Error(), "create session config") {
 		t.Fatalf("CreateSession error = %v, want duplicate session-file error", err)

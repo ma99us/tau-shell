@@ -33,7 +33,8 @@ Remote push (ntfy, Pushover, Web Push) remains out of scope. See also
 ## Decisions (answers to the original open questions)
 
 1. Prefer harness cues (`input` / working-to-idle); when no cue exists, recent
-  output timing is the generic working/quiet fallback. Do not infer input
+  output timing is the generic working/quiet fallback for tools without cues only
+  (Claude Code and Copilot CLI never use it). Do not infer input
   from silence. Require 3 s minimum work for "finished".
 2. Flash **and** toast.
 3. On by default; disable in the settings file.

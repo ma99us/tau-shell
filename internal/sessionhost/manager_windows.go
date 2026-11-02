@@ -325,6 +325,36 @@ func (manager *Manager) PlaceAfter(ctx context.Context, id, afterID string) erro
 
 const autoResumeAllSetting = "auto_resume_all"
 
+// PlaceLast saves the display order with id after every other session. It reads
+// only the session files and the saved order, so it stays cheap enough to run
+// when a session is created. Sessions without a saved position keep their
+// file order after the ordered ones, ahead of id.
+func (manager *Manager) PlaceLast(ctx context.Context, id string) error {
+	configs, err := session.ListConfigs(manager.configDirectory)
+	if err != nil {
+		return err
+	}
+	order, err := manager.store.SessionOrder(ctx)
+	if err != nil {
+		return err
+	}
+	others := make([]string, 0, len(configs))
+	for _, config := range configs {
+		if config.ID != id {
+			others = append(others, config.ID)
+		}
+	}
+	sort.SliceStable(others, func(i, j int) bool {
+		left, leftOK := order[others[i]]
+		right, rightOK := order[others[j]]
+		if leftOK != rightOK {
+			return leftOK
+		}
+		return leftOK && left < right
+	})
+	return manager.store.SetSessionOrder(ctx, append(others, id))
+}
+
 // AutoResumeAll reports the global "resume every session on startup" preference.
 func (manager *Manager) AutoResumeAll(ctx context.Context) (bool, error) {
 	value, err := manager.store.Setting(ctx, autoResumeAllSetting)

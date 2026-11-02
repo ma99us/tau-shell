@@ -18,9 +18,11 @@ export const staleWorkingMs = 15000;
 // One poll step for a running session. The harness cue wins; output timing is the
 // fallback when the harness gives none. lastOutputAt excludes keystroke echo.
 // "seen" means the session is selected and TauShell has focus.
-export function nextActivity(old: Activity, signal: HarnessSignal, lastOutputAt: number | undefined, now: number, seen: boolean): Activity {
+export function nextActivity(old: Activity, signal: HarnessSignal, lastOutputAt: number | undefined, now: number, seen: boolean, cueTool = false): Activity {
   const outputAge = lastOutputAt === undefined ? Infinity : now - lastOutputAt;
-  const working = signal === undefined ? outputAge < workingWindowMs : signal === "working" && outputAge <= staleWorkingMs;
+  // Tools with reliable cues never fall back to output timing: idle redraws
+  // (spinners, promos, clocks) would otherwise look like work and raise "done" alerts.
+  const working = signal === undefined ? !cueTool && outputAge < workingWindowMs : signal === "working" && outputAge <= staleWorkingMs;
   const input = signal === "input";
   const unseen = seen ? false : old.unseen || (old.working && !working) || (input && !old.input);
   return { working, input, unseen };
@@ -40,10 +42,15 @@ export function attentionEdge(
 }
 
 const brailleSpinner = /^[\u2800-\u28FF\u25D0-\u25D3]/;
-// Claude Code 2.1.311 animates the title prefix with U+25D0-25D3 (half circles)
-// while working and shows U+2733 when idle; the trust-folder prompt footer is
-// "Enter to confirm · Esc to cancel".
-const claudePromptFooter = /\bEnter to confirm\b.*\bEsc to cancel\b/i;
+// Claude Code 2.1.316 animates the title prefix with U+25D0-25D3 (half circles)
+// while working and shows U+2733 when idle (also while a permission prompt is
+// open, so the title cannot signal input). Prompt footers: the trust-folder
+// prompt shows "Enter to confirm · Esc to cancel"; shell-command and file-edit
+// permission prompts show "Esc to cancel · Tab to amend".
+// Question and plan-approval prompts (2.1.316) show "Enter to select · ↑/↓ to navigate ·
+// Esc to cancel" and "ctrl+g to edit in Notepad · <plan path> · /plan to preview".
+const claudePromptFooter =
+  /\bEnter to (?:confirm|select)\b.*\bEsc to cancel\b|\bEsc to cancel\b.*\bTab to amend\b|\bctrl\+g to edit\b.*\/plan to preview/i;
 const copilotWorkingStatus = /^\S{0,2}\s*Working\b.*\besc\b/i;
 const copilotIdleFooter = /\? help/;
 // Footer of Copilot CLI's selection prompts (permission requests, pickers),
@@ -57,6 +64,19 @@ function lastRows(terminal: Terminal, count: number): string[] {
   for (let index = end - 1; index >= end - count; index--) {
     const line = buffer.getLine(index);
     if (line) rows.push(line.translateToString(true).trim());
+  }
+  return rows;
+}
+
+// The last non-empty rows within the bottom six; Claude Code does not always draw
+// its footer on the very last screen row.
+function lastTextRows(terminal: Terminal, count: number): string[] {
+  const buffer = terminal.buffer.active;
+  const end = buffer.baseY + terminal.rows;
+  const rows: string[] = [];
+  for (let index = end - 1; index >= end - 6 && rows.length < count; index--) {
+    const text = buffer.getLine(index)?.translateToString(true).trim();
+    if (text) rows.push(text);
   }
   return rows;
 }
@@ -107,11 +127,13 @@ export function composeInjection(draft: string, text: string, submit: boolean): 
   return out;
 }
 
+export const hasCueSignal = (tool: string) => tool === "claude-code" || tool === "copilot-cli";
+
 // Harness-specific cues only: terminal title for Claude Code, the status/footer
 // row (last two rows, never the whole screen) for Copilot CLI.
 export function readHarnessSignal(tool: string, terminal: Terminal | undefined, title: string): HarnessSignal {
   if (tool === "claude-code") {
-    if (terminal && lastRows(terminal, 2).some((row) => claudePromptFooter.test(row))) return "input";
+    if (terminal && lastTextRows(terminal, 2).some((row) => claudePromptFooter.test(row))) return "input";
     if (brailleSpinner.test(title)) return "working";
     if (title.startsWith("\u2733")) return "idle";
     return undefined;

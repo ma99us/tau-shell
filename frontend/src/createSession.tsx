@@ -11,7 +11,8 @@ export function CreateSession({ recentFolders, onClose, onCreated, onError }: {
   recentFolders: string[];
   onClose: () => void;
   onCreated: (session: Session) => void;
-  onError: (error: unknown) => void;
+  // Returns the message to show inside the dialog; the page banner is hidden behind it.
+  onError: (error: unknown) => string;
 }) {
   const [tool, setTool] = useState<Session["tool"]>("copilot-cli");
   const [workingDir, setWorkingDir] = useState("");
@@ -20,12 +21,14 @@ export function CreateSession({ recentFolders, onClose, onCreated, onError }: {
   const [preview, setPreview] = useState<LaunchPreview | null>(null);
   const [previewError, setPreviewError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState("");
+  const fail = (err: unknown) => setFormError(onError(err));
   const [yamlOpen, setYamlOpen] = useState(false);
   const [yamlText, setYamlText] = useState("");
   const [yamlDirty, setYamlDirty] = useState(false);
   const [yamlError, setYamlError] = useState("");
   const chooseDirectory = async () => {
-    try { const path = await app().SelectWorkingDirectory(); if (path) setWorkingDir(path); } catch (err) { onError(err); }
+    try { const path = await app().SelectWorkingDirectory(); if (path) { setWorkingDir(path); setFormError(""); } } catch (err) { fail(err); }
   };
   // Prefill with the harness-specific template on first load and whenever
   // the user switches tool while the field still matches the prior
@@ -39,7 +42,7 @@ export function CreateSession({ recentFolders, onClose, onCreated, onError }: {
         const text = template.launchArgs.join("\n");
         setLaunchArgs((current) => (templateText === null || current === templateText ? text : current));
         setTemplateText(text);
-      } catch (err) { if (!cancelled) onError(err); }
+      } catch (err) { if (!cancelled) fail(err); }
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -80,18 +83,19 @@ export function CreateSession({ recentFolders, onClose, onCreated, onError }: {
   }, [yamlOpen, yamlDirty, tool, workingDir, launchArgs]);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    setFormError("");
     setSaving(true);
     try {
       const session = yamlOpen
         ? await app().CreateSessionFromYAML(yamlText)
         : await app().CreateSession("", tool, workingDir, parseLaunchArgs(launchArgs));
       onCreated(session);
-    } catch (err) { onError(err); } finally { setSaving(false); }
+    } catch (err) { fail(err); } finally { setSaving(false); }
   };
   return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="modal">
     <div className="modal-heading"><h2>Start new AI session</h2><button className="icon-button" onClick={onClose}>x</button></div>
     <form onSubmit={(event) => void submit(event)}>
-      <label>Project folder<div className="folder-row"><input autoFocus required list="recent-project-folders" value={workingDir} onChange={(event) => setWorkingDir(event.target.value)} placeholder="Choose a local project folder" /><datalist id="recent-project-folders">{recentFolders.map((folder) => <option key={folder} value={folder} />)}</datalist><button type="button" className="secondary-button" onClick={() => void chooseDirectory()}>Browse</button></div></label>
+      <label>Project folder<div className="folder-row"><input autoFocus required list="recent-project-folders" value={workingDir} onChange={(event) => { setWorkingDir(event.target.value); setFormError(""); }} placeholder="Choose a local project folder" /><datalist id="recent-project-folders">{recentFolders.map((folder) => <option key={folder} value={folder} />)}</datalist><button type="button" className="secondary-button" onClick={() => void chooseDirectory()}>Browse</button></div></label>
       <div className="harness-field"><span className="harness-label" id="harness-label">AI harness</span>
         <div className="harness-picker" role="radiogroup" aria-labelledby="harness-label">
           {harnesses.map(({ id, name }) =>
@@ -116,6 +120,7 @@ export function CreateSession({ recentFolders, onClose, onCreated, onError }: {
           <p className="form-note">{yamlDirty ? "Edited by hand: the form fields above no longer change this text. " : "Follows the form until you edit it. "}The definition is validated and saved in normal form.{yamlDirty && <> <button type="button" className="text-button" onClick={() => setYamlDirty(false)}>Reset from form</button></>}</p>
         </>}
       </div>
+      {formError && <p className="tool-warning" role="alert">{formError}</p>}
       <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button" disabled={saving}>{saving ? "Creating..." : "Start new AI session"}</button></div>
     </form>
   </div></div>;

@@ -169,6 +169,24 @@ replace quotas. Verified in the real window with live numbers.
 
 ## Later phases
 
+### Postponed: GSD, OpenCode and Codex verification gaps
+
+**Postponed by decision (2026-11-02); not being worked on now.** Launch, resume
+ID discovery, graceful stop and restore are verified live for GSD and OpenCode
+(see `21-engineering-handoff.md`). These items stay open and cannot be closed
+without model access or an account:
+
+| Gap | Applies to | Blocker |
+|---|---|---|
+| Model replies and usage/cost ingestion not proven live | GSD, OpenCode | The Copilot gateway rejected GSD's models and OpenCode's free model returned Forbidden from this network. Needs a working provider key. |
+| Everything live (launch, resume ID, stop, restore, rollout format, usage) | Codex | Not signed in; needs an OpenAI sign-in or API key. |
+| Attention cues (working / input / idle) | GSD, OpenCode, Codex | Cues must be captured while a model turn runs, so they need working model access. Until then they use output-timing fallback (`hasCueSignal` in `frontend/src/attention.ts` is false for them). |
+| Interrupt keys | GSD, OpenCode, Codex | Needs a running model turn to interrupt. |
+| Per-launch skills | GSD, OpenCode, Codex | No skill option appears in their `--help`, so no verified route exists to wire. |
+
+Pick these up together when provider access is available. Probe with
+`TAUSHELL_LIVE=gsd|opencode|codex go test ./internal/sessionhost -run TestLiveHarness -v`.
+
 ### Deferred alternative spike: direct ConPTY harness launch
 
 **Not Phase 1 scope or an approved implementation change.** Keep the current

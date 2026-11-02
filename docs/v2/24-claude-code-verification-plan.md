@@ -1,6 +1,7 @@
 # Claude Code Verification Plan
 
-Status: **partly run (2026-10-27, Claude Code 2.1.311 on the dev PC).**
+Status: **mostly run. Re-run 2026-11-02 with a working login (Claude Code 2.1.316, Foundry key); see section 5b. Open: tab-switch and focus checks in the app window. OAuth login is accepted as untested.**
+Earlier partial run (2026-10-27, Claude Code 2.1.311 on the dev PC):
 Everything that does not need a model reply was run headlessly through the real
 session manager; see the results table in section 5. The login on this PC is a
 Foundry key whose provider rejected every request ("User ... has been
@@ -251,3 +252,24 @@ exists.
 
 When all tests have a recorded result, replace the "postponed" notes in the
 handoff with the outcomes and remove this document's "open" status.
+
+### 5b. Re-run with a working login (2026-11-02, Claude Code 2.1.316, Windows 11)
+
+Driven headlessly through the real session manager and ConPTY (inbox backend),
+with a temporary probe test (removed afterwards) that recorded OSC titles and
+the ANSI-stripped screen. The login is the Foundry key in `settings.json`, not
+OAuth, so G1's OAuth-in-terminal is still unexercised. **Accepted by the owner:** this setup only allows the Foundry key and will not change, so OAuth login is not tested live. Claude Code owns that flow; TauShell only hosts the terminal.
+
+| Test | Result |
+|---|---|
+| T1 | **Pass** (key login). Trust prompt first (default "No, exit"; Down then Enter accepts); no bypass acceptance prompt (the user setting is on). A harmless prompt got a reply. |
+| T2 | **Pass.** After Stop and Restore the same conversation answered "pineapple". Restore after a busy stop also worked; the transcript shows "Interrupted". |
+| T4 | **Pass.** Idle `✳ Claude Code`, working `◐`/`◑`; after the first turn the title text becomes a conversation summary but the prefix cue is unchanged. |
+| T5 | **Pass, with a fix.** Permission prompts do not change the title (stays `✳`). Footers captured: shell command "Do you want to proceed?" and file edit "Do you want to create a.txt?" end with `Esc to cancel · Tab to amend`; the AskUserQuestion prompt ends with `Enter to select · ↑/↓ to navigate · Esc to cancel`; plan approval ("Would you like to proceed?") ends with `ctrl+g to edit in Notepad · <plan> · /plan to preview`. `attention.ts` now matches all of them in the last two non-empty rows (not only the last two rows) and has unit tests. |
+| T6 | **Pass.** Stop during a running turn: exit code 0 in about 0.9 s, no force notice (earlier failures were the failing provider). Idle Stop about 1 s. |
+| T7 | **Pass.** `--dangerously-skip-permissions` shows `bypass permissions on` and runs a shell command without a prompt; `--model opus` shows Opus 5.5 and the model persists after Restore (it is in `launch_args`). Without any flag 2.1.316 starts in auto mode; `--permission-mode default` gives the prompts above. |
+| T8 | **Pass for the flags.** 2.1.316 is in the tested range (below 2.2.0). Installed 2.1.133 (lower bound) and 2.1.100 (below range) into a temp prefix: both list `--session-id`, `--resume`, `--model` and `--dangerously-skip-permissions`. No build above 2.1.316 is published, so nothing newer was tested. Full restore and prompt behavior was run on 2.1.316 only. |
+| T9 | **Partial.** Mouse wheel in the real app window with Claude Code was checked by the owner (2026-11-02): scrolls smoothly. Tab switching mid-stream, focus return and scrollback beyond that were not re-checked. |
+
+Not run: a second prompt type for permission "always allow" choices, and any
+persistence of the choice made in a prompt.

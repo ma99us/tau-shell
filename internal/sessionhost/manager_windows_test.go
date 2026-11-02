@@ -1124,4 +1124,37 @@ func TestSetOrderAndPlaceAfter(t *testing.T) {
 	if got := ids(); got != "c,b,a" {
 		t.Fatalf("order = %s, want c,b,a", got)
 	}
+	if err := manager.PlaceLast(ctx, "a"); err != nil {
+		t.Fatal(err)
+	}
+	if got := ids(); got != "c,b,a" {
+		t.Fatalf("order after PlaceLast(a) = %s, want c,b,a", got)
+	}
+	if err := manager.PlaceLast(ctx, "c"); err != nil {
+		t.Fatal(err)
+	}
+	if got := ids(); got != "b,a,c" {
+		t.Fatalf("order after PlaceLast(c) = %s, want b,a,c", got)
+	}
+}
+
+// A session that was never reordered must still land after existing sessions
+// instead of at its alphabetical position.
+func TestPlaceLastKeepsNewSessionAfterUnorderedOnes(t *testing.T) {
+	manager, _, _ := newLifecycleTestManager(t, "b", "c", "a")
+	ctx := context.Background()
+	if err := manager.PlaceLast(ctx, "a"); err != nil {
+		t.Fatal(err)
+	}
+	list, err := manager.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, snapshot := range list {
+		out = append(out, snapshot.ID)
+	}
+	if got := strings.Join(out, ","); got != "b,c,a" {
+		t.Fatalf("order = %s, want b,c,a", got)
+	}
 }

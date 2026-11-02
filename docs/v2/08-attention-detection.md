@@ -25,7 +25,10 @@ treated as stale (not working), because a harness that is still working keeps
 redrawing its spinner or timer. The state rule is `nextActivity` in
 `frontend/src/attention.ts`, covered by `frontend/test/attention.test.ts`.
 This keeps provider output untouched and avoids false state changes from
-unrelated screen redraws.
+unrelated screen redraws. Tools with reliable cues (Claude Code, Copilot CLI)
+never use the output-timing fallback: when their cue is missing, the session
+counts as not working, so idle redraws (promos, loading animations) cannot raise
+repeated "done" alerts (`hasCueSignal`, `nextActivity`'s `cueTool` argument).
 
 ## User attention
 

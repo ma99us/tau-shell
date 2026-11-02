@@ -28,6 +28,9 @@ test("Claude cues come from the title, with the confirm footer meaning input", (
   assert.equal(readHarnessSignal("claude-code", plain, "\u25D1 Claude Code"), "working");
   assert.equal(readHarnessSignal("claude-code", plain, "\u2733 Claude Code"), "idle");
   assert.equal(readHarnessSignal("claude-code", fakeTerminal(["Enter to confirm · Esc to cancel", ""]), "\u2733 Claude Code"), "input");
+  assert.equal(readHarnessSignal("claude-code", fakeTerminal(["Do you want to proceed?", "Esc to cancel · Tab to amend", "", ""]), "\u2733 Claude Code"), "input");
+  assert.equal(readHarnessSignal("claude-code", fakeTerminal(["Enter to select · ↑/↓ to navigate · Esc to cancel", "", ""]), "\u2733 Claude Code"), "input");
+  assert.equal(readHarnessSignal("claude-code", fakeTerminal(["ctrl+g to edit in Notepad · ~\\.claude\\plans\\x.md  ⎿  /plan to preview"]), "\u2733 Claude Code"), "input");
   assert.equal(readHarnessSignal("unknown-tool", plain, "\u2810"), undefined);
 });
 
@@ -42,6 +45,12 @@ test("a working cue with no recent output is stale", () => {
   assert.equal(nextActivity(busy, "working", now - staleWorkingMs, now, false).working, true);
   assert.equal(nextActivity(busy, "working", now - staleWorkingMs - 1, now, false).working, false);
   assert.equal(nextActivity(idle, "working", undefined, now, false).working, false);
+});
+
+test("cue tools ignore output timing when the cue is missing", () => {
+  const now = 100_000;
+  assert.equal(nextActivity(idle, undefined, now - 10, now, false, true).working, false);
+  assert.equal(nextActivity(idle, undefined, now - 10, now, false, false).working, true);
 });
 
 test("without a cue, recent output means working", () => {

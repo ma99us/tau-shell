@@ -37,7 +37,9 @@ regression-test plans, see the
   OpenCode model returned Forbidden from this network), Codex entirely (not
   signed in), interrupt keys, Codex rollout format, and per-launch skills
   (not wired: no verified route). Attention cues (`readHarnessSignal`)
-  return no signal for them; generic silence timing applies.
+  return no signal for them; generic silence timing applies. These gaps are
+  postponed; see "Postponed: GSD, OpenCode and Codex verification gaps" in
+  `20-mvp-backlog.md`.
   Restore is explicit and must not be reported as successful unless the
   harness actually resumes.
 - The desktop app is the only interactive TauShell interface. Bubble Tea has
@@ -82,11 +84,14 @@ regression-test plans, see the
   `--yolo`; shown as an orange square, glowing until seen, cleared when the
   prompt is answered). Other Copilot pickers share that footer and are also
   treated as waiting for input. Claude Code = terminal title (braille
-  spinner = working, U+2733 = idle; verified live on 2.1.311: idle
-    `✳ Claude Code`, working animates U+25D0-25D3 as well as braille); its
-    "needs input" cue is the "Enter to confirm ... Esc to cancel" footer seen on
-    the trust-folder prompt; the tool-permission prompt itself is not yet
-    captured (provider returns 401). With no cue (unknown tool) it falls back to output timing
+  spinner = working, U+2733 = idle; verified live on 2.1.316 with a
+    working login: idle `✳ Claude Code`, working animates U+25D0-25D3 as well as
+    braille, and the title stays `✳` while a permission prompt is open, so it
+    cannot signal input). Its "needs input" cue is a footer in the last two
+    non-empty rows: "Enter to confirm ... Esc to cancel" (trust-folder),
+    "Esc to cancel · Tab to amend" (shell and file-edit permissions),
+    "Enter to select ... Esc to cancel" (questions) and "/plan to preview"
+    (plan approval); all captured live. With no cue, tools without cues (GSD, OpenCode, Codex) fall back to output timing; Claude Code and Copilot CLI count as not working instead, so idle redraws cannot repeat "done" alerts
   (output within 400 ms of a keystroke is ignored as echo). "Quiet" is not
   proof the harness awaits input. Copilot
   sends only topic titles, no BEL/OSC 9/777/133.
@@ -355,9 +360,12 @@ Known gaps and risks:
   than silently ignored. The close path also reports session-list failures
   without allowing the window to close; forced-stop notices remain pending and
   retry after a native-dialog failure.
-  A production-window smoke exercised both No and Yes with an inert fixture;
-  an automated Wails-host close integration test and forced-termination notice
-  verification remain open. Decision: a fully automated real-window
+  A production-window smoke exercised both No and Yes with an inert fixture.
+  Forced termination and graceful exit are covered against real ConPTY
+  sessions (`TestRealSessionStopReportsForcedTerminationWhenInterruptIgnored`,
+  `TestRealSessionGracefulExitIsNotReportedAsForced`) and the notice path by
+  `TestBeforeCloseStopsSessionsAndReportsForcedTermination`; only a scripted
+  real-window `OnBeforeClose` test is not automated. Decision: a fully automated real-window
   `OnBeforeClose` CI test is deemed infeasible without new Windows GUI test
   infrastructure (Wails does not expose a navigation/close-denied callback
   suitable for scripted assertions); this is treated as an accepted,
@@ -425,9 +433,28 @@ Known gaps and risks:
   reached each session's left-sidebar list entry, and pressing `Enter` on
   either entry switched the active top tab and rendered its content
   correctly in both directions (Home -> fixture tab and back) with zero
-  mouse clicks. Persisted presentation state
-  under different WebView profile conditions and the background terminal
-  path through the real Wails/ConPTY host also remain unverified.
+  mouse clicks.
+  Verified 2026-11-02 against the production-tagged window (isolated profile,
+  `terminal-fixture` as `copilot.exe`, driven over the Chrome DevTools
+  Protocol; the probe build appended `--remote-debugging-port` through a
+  temporary, reverted patch to the vendored Wails loader, so no debug hook
+  ships):
+  - Background terminal path: closing a running session's tab and choosing
+    "Keep running" keeps the session running with its xterm instance;
+    `WriteTerminal` input sent while hidden reaches the fixture; reopening the
+    session from the sidebar shows the output received while hidden, and later
+    input still routes to it.
+  - Persisted presentation state: tabs survive a restart (WebView local
+    storage). The WebView profile lives in
+    `%APPDATA%\<exe name>\EBWebView`, so renaming the executable starts with
+    empty tabs and recent folders (sessions themselves are unaffected).
+    Corrupt or wrong-shaped stored values fall back to defaults, are logged as
+    `storage.tabs` / `storage.recent-folders` failures, and are rewritten;
+    reads, writes and de-duplication are in `frontend/src/storage.ts`
+    (tests in `frontend/test/storage.test.ts`). A failing write is now
+    reported instead of throwing inside an effect.
+  - The fixture now answers `--help` and reports version 1.0.103 so the
+    capability probe accepts it as a Copilot stand-in.
 - Start Fresh is explicitly confirmed in the UI and rotates the persisted
   harness ID. A real, user-authorized provider-backed restore walkthrough was
   performed for both harnesses:
@@ -579,12 +606,14 @@ driving the packaged window.
    go test -v -run TestConPTYBackendSpike ./internal/conpty`.
 2. Done: real Claude Code and Copilot CLI walkthroughs (see Known gaps).
    Remaining manual checks: Copilot restore of a session with at least one
-   real turn hosted in the app. **Postponed by the owner (2026-10-24):** Claude
-   Code restore after a completed login, and the unverified Claude Code title
-   cue (braille spinner = working, U+2733 = idle) used by the state icons. Do
-   these when the owner logs in to Claude Code; they do not block later work.
-   The full list of Claude Code gaps (G1-G12) and the test plan (T1-T9, to be
-   run on another PC) is in
+   real turn hosted in the app. Claude Code restore after a completed login
+   and the title cue were re-run on 2026-11-02 with a working login (2.1.316):
+   recall after restore passes, see the results table in
+   [`24-claude-code-verification-plan.md`](24-claude-code-verification-plan.md).
+   Mouse wheel in the app window passed. Still open: tab switching and focus
+   checks. A real OAuth login is accepted as untested (the owner's setup only
+   allows a Foundry key); flags were probed on 2.1.100 and 2.1.133 too. The gaps
+   (G1-G12) and the test plan (T1-T9) are in
    [`24-claude-code-verification-plan.md`](24-claude-code-verification-plan.md).
    Test sessions `kbd-test-1` and `copilot-smoke-1` were removed from the dev
    profile with the new delete feature.
