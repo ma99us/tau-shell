@@ -76,10 +76,16 @@ class MonitorService : Service() {
                 val muted = Store(this).muted
                 val next = HashMap<String, String>()
                 outcome.value.forEach { item ->
-                    // Only confirmed readings count, so a guess never pages anyone.
-                    val state = if (item.running && item.activity.confirmed) item.activity.state else "other"
-                    next[item.id] = state
+                    // Only confirmed readings count, so a guess never pages anyone. An unconfirmed
+                    // reading (idle is confirmed only after a short hold) keeps the last confirmed
+                    // state, so working -> idle still fires once idle is confirmed.
                     val before = lastState[item.id]
+                    val state = when {
+                        !item.running -> "other"
+                        item.activity.confirmed -> item.activity.state
+                        else -> before ?: "other"
+                    }
+                    next[item.id] = state
                     if (!first && before != null && before != state && item.id !in muted) {
                         when {
                             state == "input" -> manager.notify(item.id.hashCode(), notification(item.name, "Needs an answer", ongoing = false, channel = ALERT, session = item.id))
