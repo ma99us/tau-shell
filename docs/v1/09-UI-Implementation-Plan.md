@@ -1,7 +1,9 @@
 # Phase 1 Desktop UI Implementation Plan
 
-**Status:** Phase 1 implemented and verified on the development Windows 10
-machine except for the items left unchecked in the completion checklist below.
+**Status:** Active Phase 1 implementation plan despite its location in the
+historical `v1/` folder. Phase 1 is implemented and verified on the development
+Windows 10 machine except for the items left unchecked in the completion
+checklist below.
 Implements
 [08-UI-Design.md](./08-UI-Design.md).
 

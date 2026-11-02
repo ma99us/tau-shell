@@ -1,6 +1,8 @@
 # TauShell Desktop UI
 
-**Status:** Agreed direction; the first desktop implementation is in progress and has not passed the Windows 10 feasibility gate.
+**Status:** Active Phase 1 UI specification despite its location in the
+historical `v1/` folder. The first desktop implementation is in progress and
+has not passed the Windows 10 feasibility gate.
 
 This document defines the intended Phase 1 user interface: a Windows desktop
 application for managing PowerShell-backed AI harness sessions. The active

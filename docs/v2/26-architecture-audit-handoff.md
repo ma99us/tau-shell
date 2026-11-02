@@ -1,10 +1,13 @@
 # Architecture audit handoff
 
-**Audit date:** 2026-10-31. **Status:** Open findings from a read-only
-architecture-cleanup dry run.
+**Document role:** Architecture audit handoff, not a current product or
+architecture specification.
+**Audit snapshot:** 2026-10-31. **Follow-up:** Implementation updates through
+2026-11-01 are recorded below; revalidate remaining findings against the
+current checkout before acting.
 
 This is the continuation handoff for
-[`architecture-cleanup-playbook.md`](../architecture-cleanup-playbook.md).
+[the read-only architecture audit](../../.github/skills/repository-governance/references/CODE-01-ARCHITECTURE-AUDIT.md).
 The audit did not implement its recommendations. This document and its link
 from the [engineering handoff](21-engineering-handoff.md) are documentation
 only. Recheck the current code, tests, and workspace before acting: file
