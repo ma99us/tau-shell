@@ -2,7 +2,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Terminal } from "@xterm/xterm";
-import { attentionEdge, composeInjection, controlSendPlan, nextActivity, readHarnessSignal, reportedState, staleWorkingMs, workingWindowMs } from "../src/attention.ts";
+import { answerPlan, attentionEdge, composeInjection, controlSendPlan, highlightedIsYes, nextActivity, readHarnessSignal, reportedState, staleWorkingMs, workingWindowMs } from "../src/attention.ts";
+
+test("Yes is sent only when the highlighted choice is Yes", () => {
+  assert.equal(highlightedIsYes(["Enter to confirm · Esc to cancel", "  Yes, I trust this folder", "❯ No, exit"]), false);
+  assert.equal(highlightedIsYes(["❯ 1. Yes", "  2. No"]), true);
+  assert.equal(highlightedIsYes(["  1. Yes", "  2. No"]), false);
+  assert.deepEqual(answerPlan("copilot-cli", undefined, "", "yes").keys, []);
+});
 
 test("reportedState marks only harness cues as cue and stale working as unknown", () => {
   const busy = { working: true, input: false, unseen: false };

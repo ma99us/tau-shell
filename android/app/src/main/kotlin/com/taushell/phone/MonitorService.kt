@@ -104,6 +104,12 @@ class MonitorService : Service() {
         manager.createNotificationChannel(NotificationChannel(ALERT, "Session alerts", NotificationManager.IMPORTANCE_HIGH))
     }
 
+    private fun appIcon(): android.graphics.Bitmap {
+        val size = (64 * resources.displayMetrics.density).toInt()
+        val source = android.graphics.BitmapFactory.decodeResource(resources, R.drawable.appicon)
+        return android.graphics.Bitmap.createScaledBitmap(source, size, size, true)
+    }
+
     private fun notification(title: String, body: String, ongoing: Boolean, channel: String, session: String? = null): Notification {
         val request = session?.hashCode() ?: 0
         val open = PendingIntent.getActivity(
@@ -111,8 +117,12 @@ class MonitorService : Service() {
             Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP).apply { session?.let { putExtra(EXTRA_SESSION, it) } },
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
+        // The status bar only draws the glyph's shape in white; the green colour and the full
+        // green-on-black app icon show in the notification shade.
         return Notification.Builder(this, channel)
             .setSmallIcon(R.drawable.ic_stat)
+            .setColor(0xFF78D49F.toInt())
+            .setLargeIcon(appIcon())
             .setContentTitle(title)
             .setContentText(body)
             .setContentIntent(open)

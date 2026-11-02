@@ -100,6 +100,8 @@ mobile:
   interface: ""        # the one local IP to listen on, required when enabled; never all interfaces
   port: 47821          # 1024-65535
   screen: true         # let paired phones read a running session's visible terminal text; false keeps it on the PC
+  presets:             # optional quick replies added to each phone's own replies
+    - Run the tests
 notifications:
   toast: true          # Windows toast while TauShell is in the background
   taskbar_flash: true  # flash the taskbar button; both default to true

@@ -184,6 +184,32 @@ func TestPairingSurvivesServerRestart(t *testing.T) {
 	}
 }
 
+func TestWritesAreRateLimitedPerDevice(t *testing.T) {
+	r := newRig(t)
+	device := r.pair(t)
+	name := DeviceName(device.DeviceID)
+	var last int
+	for attempt := 0; attempt < maxWrites+3; attempt++ {
+		last, _, _ = r.call(t, name, device.Fingerprint, "POST", "/v1/sessions/s1/send", device.Token, `{"text":"x","insertOnly":true}`)
+	}
+	if last != 429 {
+		t.Fatalf("writes past the limit must get 429, got %d", last)
+	}
+	if status, _, _ := r.call(t, name, device.Fingerprint, "GET", "/v1/sessions", device.Token, ""); status != 200 {
+		t.Fatalf("reads are not limited: %d", status)
+	}
+}
+
+func TestPresetsComeFromThePCAndSkipBlanks(t *testing.T) {
+	r := newRig(t)
+	r.server.Presets = func() []string { return []string{"Run the tests", "  ", " Commit it "} }
+	device := r.pair(t)
+	status, body, err := r.call(t, DeviceName(device.DeviceID), device.Fingerprint, "GET", "/v1/presets", device.Token, "")
+	if err != nil || status != 200 || !strings.Contains(body, `["Run the tests","Commit it"]`) {
+		t.Fatalf("presets: %d %v %s", status, err, body)
+	}
+}
+
 func TestPairThenListAndGuardedSend(t *testing.T) {
 	r := newRig(t)
 	device := r.pair(t)

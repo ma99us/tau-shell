@@ -110,6 +110,46 @@ func TestWaitMatchesOnlyConfirmedState(t *testing.T) {
 	}
 }
 
+func TestAnswerOnlyConfirmedClaudePrompts(t *testing.T) {
+	states := agentstate.NewRegistry()
+	var answered []string
+	tool := "claude-code"
+	sessions := Sessions{
+		List: func(context.Context) ([]SessionInfo, error) {
+			return []SessionInfo{{ID: "s1", Tool: tool, RunningHere: true}}, nil
+		},
+		States: states,
+		Answer: func(id, answer string) error { answered = append(answered, answer); return nil },
+	}
+	ask := func(answer string) Response {
+		raw, _ := json.Marshal(AnswerArgs{Session: "s1", Answer: answer})
+		return sessions.HandleAnswer(raw)
+	}
+	if r := ask("yes"); r.OK || r.Error.Code != CodeRefused {
+		t.Fatalf("no state yet must be refused: %+v", r)
+	}
+	states.Report("s1", agentstate.Working, agentstate.Cue, false)
+	if r := ask("yes"); r.OK {
+		t.Fatal("a working session must refuse an answer")
+	}
+	states.Report("s1", agentstate.Input, agentstate.Heuristic, false)
+	if r := ask("yes"); r.OK {
+		t.Fatal("a heuristic input state must refuse an answer")
+	}
+	states.Report("s1", agentstate.Input, agentstate.Cue, false)
+	if r := ask("maybe"); r.OK || r.Error.Code != CodeBadRequest {
+		t.Fatalf("only yes or no: %+v", r)
+	}
+	tool = "copilot-cli"
+	if r := ask("yes"); r.OK {
+		t.Fatal("an unverified harness must refuse an answer")
+	}
+	tool = "claude-code"
+	if r := ask("no"); !r.OK || len(answered) != 1 || answered[0] != "no" {
+		t.Fatalf("a confirmed Claude prompt takes an answer: %+v %v", r, answered)
+	}
+}
+
 func TestStartLaunchesOnlyStoppedSessions(t *testing.T) {
 	for _, running := range []bool{false, true} {
 		sessions, _, _ := sessionsWith(running)

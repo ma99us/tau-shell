@@ -161,3 +161,57 @@ object Labels {
         }
     }
 }
+
+/** Remembers when each session entered its state, so the phone can say how long it has been thinking. */
+object StateClock {
+    private val seen = HashMap<String, Pair<String, Long>>()
+    private val finished = HashMap<String, Long>()
+
+    private fun key(item: SessionItem) = if (item.running) item.activity.state else "stopped"
+
+    fun observe(item: SessionItem, now: Long = System.currentTimeMillis()) {
+        val next = key(item)
+        val previous = seen[item.id]
+        if (previous?.first == next) return
+        if (previous?.first == "working" && next == "idle") finished[item.id] = now
+        seen[item.id] = next to now
+    }
+
+    fun elapsed(ms: Long): String {
+        val seconds = ms / 1000
+        return when {
+            seconds < 60 -> "${seconds}s"
+            seconds < 3600 -> "${seconds / 60}m ${seconds % 60}s"
+            else -> "${seconds / 3600}h ${seconds % 3600 / 60}m"
+        }
+    }
+
+    /** Text for the state pill and the session header. */
+    fun headline(item: SessionItem, now: Long = System.currentTimeMillis()): String {
+        val confirmed = item.running && item.activity.confirmed
+        val since = seen[item.id]?.second
+        return when {
+            confirmed && item.activity.state == "working" -> "Thinking…" + (since?.let { " ${elapsed(now - it)}" } ?: "")
+            confirmed && item.activity.state == "idle" -> finished[item.id]?.let { "Idle · done ${elapsed(now - it)} ago" } ?: "Idle"
+            else -> Labels.state(item)
+        }
+    }
+}
+
+/** Fades a view in and out while [on], e.g. the state dot of a working session. */
+fun View.pulse(on: Boolean) {
+    val running = getTag(R.id.pulse) as? android.animation.ObjectAnimator
+    if (on && running == null) {
+        val animator = android.animation.ObjectAnimator.ofFloat(this, View.ALPHA, 1f, 0.25f).apply {
+            duration = 800
+            repeatMode = android.animation.ValueAnimator.REVERSE
+            repeatCount = android.animation.ValueAnimator.INFINITE
+            start()
+        }
+        setTag(R.id.pulse, animator)
+    } else if (!on && running != null) {
+        running.cancel()
+        alpha = 1f
+        setTag(R.id.pulse, null)
+    }
+}

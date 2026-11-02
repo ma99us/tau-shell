@@ -8,7 +8,7 @@
 
     <application
         android:allowBackup="false"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@drawable/appicon"
         android:label="TauShell Phone"
         android:supportsRtl="true"
         android:theme="@style/Theme.TauShell">

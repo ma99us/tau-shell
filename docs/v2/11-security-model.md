@@ -197,12 +197,17 @@ running session's visible terminal text (`GET /v1/sessions/{id}/screen`, at most
 rows and 32 KB, no scrollback). The window answers each request on demand; Go does not
 store the text, and neither diagnostics nor the audit record it. The user can turn this
 off with `mobile.screen: false`; the phone then shows that it is off. Terminal text can
-contain secrets the harness printed, so only pair phones you trust. Revoking a
+contain secrets the harness printed, so only pair phones you trust. A phone may also
+answer a Claude Code trust or permission prompt with a fixed yes (Enter) or no (Esc)
+(`POST /v1/sessions/{id}/answer`). Go refuses unless the prompt is a confirmed cue
+state and the window re-checks the prompt footer; Yes is sent only when the
+highlighted choice is a Yes. The audit records `answer yes|no`
+and the outcome, never text. Verified live on Claude Code. Revoking a
 phone deletes its key and token; it must pair again, and pairing otherwise persists
 across TauShell and app restarts (one-year expiry). The Android app (`android/`,
 sideload APK) pins the certificate, keeps its token sealed with the Android Keystore
-and sends the SNI name itself over its own TLS socket. Not done yet: a per-device
-request limit and the relay. See
+and sends the SNI name itself over its own TLS socket. Each device may send, start
+or answer at most 20 times a minute (HTTP 429, audited as `rate-limited`). Not done yet: the relay. See
 [docs/v3/implementation/04-mobile-companion-plan.md](../v3/implementation/04-mobile-companion-plan.md).
 
 ## Diagnostic logging

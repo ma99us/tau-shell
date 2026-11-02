@@ -42,6 +42,9 @@ type Mobile struct {
 	// Screen lets paired phones read the visible terminal text of running
 	// sessions. On by default; set false to keep terminal text on the PC.
 	Screen *bool `yaml:"screen,omitempty"`
+	// Presets are quick replies offered on every paired phone, added to the ones
+	// the user keeps on the phone.
+	Presets []string `yaml:"presets,omitempty"`
 }
 
 func (m Mobile) ServerEnabled() bool { return m.Enabled != nil && *m.Enabled }

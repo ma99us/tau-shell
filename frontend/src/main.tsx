@@ -4,7 +4,7 @@ import "@xterm/xterm/css/xterm.css";
 import { app, DialogRequest, InstallResult, Session, SessionEvent, ShutdownProgress, SkillsView, SystemStatus, ToolStatus } from "./bridge";
 import "./theme/tokens.css";
 import "./style.css";
-import { Activity, AttentionKind, attentionEdge, hasCueSignal, nextActivity, readDraft, readHarnessSignal, readScreen, reportedState } from "./attention";
+import { Activity, AttentionKind, answerPlan, attentionEdge, hasCueSignal, nextActivity, readDraft, readHarnessSignal, readScreen, reportedState } from "./attention";
 import { moveId } from "./order";
 import { CommandPalette, PaletteItem } from "./harnessActions";
 import { GearIcon, HomeIcon } from "./harnessIcons";
@@ -236,9 +236,15 @@ function App() {
       const terminal = terminalInstances.get(request.id);
       app().ProvideScreen(request.request, terminal ? readScreen(terminal, request.rows) : []).catch((err) => showError("ui.screen", err));
     }, -1);
+    runtime.EventsOnMultiple("control-answer", (request: { id: string; answer: string }) => {
+      const target = sessionsRef.current.find((session) => session.id === request.id);
+      const plan = target?.runningHere ? answerPlan(target.tool, terminalInstances.get(target.id), terminalTitles.get(target.id) ?? "", request.answer) : { keys: [], reason: "the session is gone" };
+      if (plan.reason) showError("control.answer", new Error(`A phone answer was refused: ${plan.reason}.`));
+      else if (target) interruptSession(target, plan.keys);
+    }, -1);
     runtime.EventsOnMultiple("shutdown-progress", (progress: ShutdownProgress) => setShutdown(progress.phase === "done" ? null : progress), -1);
     app().DialogHostReady().then((pending) => pending.forEach(add)).catch((err) => showError("ui.dialog-host", err));
-    return () => { runtime.EventsOff("dialog-request"); runtime.EventsOff("focus-session"); runtime.EventsOff("settings-error"); runtime.EventsOff("control-send"); runtime.EventsOff("control-screen"); runtime.EventsOff("control-launch"); runtime.EventsOff("shutdown-progress"); };
+    return () => { runtime.EventsOff("dialog-request"); runtime.EventsOff("focus-session"); runtime.EventsOff("settings-error"); runtime.EventsOff("control-send"); runtime.EventsOff("control-answer"); runtime.EventsOff("control-screen"); runtime.EventsOff("control-launch"); runtime.EventsOff("shutdown-progress"); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

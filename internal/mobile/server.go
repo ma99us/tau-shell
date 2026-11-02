@@ -31,6 +31,9 @@ const (
 	maxBody      = 32 * 1024
 	// maxFailures per minute from one address before it is refused for a while.
 	maxFailures = 10
+	// maxWrites per minute from one device for send, start and answer, so a stolen
+	// token or a runaway app cannot flood a session with input.
+	maxWrites = 20
 )
 
 // DeviceName is the SNI name a phone uses for its device id.
@@ -52,6 +55,7 @@ type Backend interface {
 	HandleSend(json.RawMessage) control.Response
 	HandleStart(json.RawMessage) control.Response
 	HandleScreen(json.RawMessage) control.Response
+	HandleAnswer(json.RawMessage) control.Response
 }
 
 // Server serves phones over TLS 1.3 with per-device certificates.
@@ -61,6 +65,8 @@ type Server struct {
 	Backend  Backend
 	// Audit receives device id, operation, session id and outcome. Never text.
 	Audit func(device, op, session, outcome string)
+	// Presets returns the PC-configured quick replies; nil means none.
+	Presets func() []string
 	// Clock and PairWait are overridable for tests.
 	Clock    func() time.Time
 	PairWait time.Duration
@@ -68,6 +74,7 @@ type Server struct {
 	mu       sync.Mutex
 	pairing  *pairing.Credentials
 	failures map[string][]time.Time
+	writes   map[string][]time.Time
 }
 
 // SetPairingCredentials installs the certificate used on the pairing channel.
@@ -129,8 +136,23 @@ func (server *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/sessions/{id}/wait", server.device("wait", server.handleWait))
 	mux.HandleFunc("POST /v1/sessions/{id}/send", server.device("send", server.handleSend))
 	mux.HandleFunc("POST /v1/sessions/{id}/start", server.device("start", server.handleStart))
+	mux.HandleFunc("POST /v1/sessions/{id}/answer", server.device("answer", server.handleAnswer))
 	mux.HandleFunc("GET /v1/sessions/{id}/screen", server.device("screen", server.handleScreen))
+	mux.HandleFunc("GET /v1/presets", server.device("presets", server.handlePresets))
 	return mux
+}
+
+func (server *Server) handlePresets(writer http.ResponseWriter, _ *http.Request, _ pairing.Device) {
+	presets := []string{}
+	if server.Presets != nil {
+		for _, preset := range server.Presets() {
+			if preset = strings.TrimSpace(preset); preset != "" {
+				presets = append(presets, preset)
+			}
+		}
+	}
+	data, _ := json.Marshal(map[string][]string{"presets": presets})
+	writeResponse(writer, control.Response{OK: true, Data: data})
 }
 
 type deviceHandler func(writer http.ResponseWriter, request *http.Request, device pairing.Device)
@@ -155,9 +177,35 @@ func (server *Server) device(op string, next deviceHandler) http.HandlerFunc {
 			http.Error(writer, "unauthorized", http.StatusUnauthorized)
 			return
 		}
+		if (op == "send" || op == "start" || op == "answer") && !server.allowWrite(device.ID) {
+			server.audit(device.ID, op, "", "rate-limited")
+			http.Error(writer, "too many requests", http.StatusTooManyRequests)
+			return
+		}
 		request.Body = http.MaxBytesReader(writer, request.Body, maxBody)
 		next(writer, request, device)
 	}
+}
+
+func (server *Server) allowWrite(device string) bool {
+	server.mu.Lock()
+	defer server.mu.Unlock()
+	if server.writes == nil {
+		server.writes = map[string][]time.Time{}
+	}
+	now := server.now()
+	var kept []time.Time
+	for _, at := range server.writes[device] {
+		if at.After(now.Add(-time.Minute)) {
+			kept = append(kept, at)
+		}
+	}
+	if len(kept) >= maxWrites {
+		server.writes[device] = kept
+		return false
+	}
+	server.writes[device] = append(kept, now)
+	return true
 }
 
 func (server *Server) audit(device, op, session, outcome string) {
@@ -285,6 +333,22 @@ func (server *Server) handleScreen(writer http.ResponseWriter, request *http.Req
 	args, _ := json.Marshal(control.ScreenArgs{Session: session, Rows: rows})
 	response := server.Backend.HandleScreen(args)
 	server.audit(device.ID, "screen", session, outcome(response))
+	writeResponse(writer, response)
+}
+
+func (server *Server) handleAnswer(writer http.ResponseWriter, request *http.Request, device pairing.Device) {
+	session := request.PathValue("id")
+	var body struct {
+		Answer string `json:"answer"`
+	}
+	if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+		server.audit(device.ID, "answer", session, control.CodeBadRequest)
+		writeResponse(writer, control.Failure(control.CodeBadRequest, "answer needs a JSON body with answer"))
+		return
+	}
+	args, _ := json.Marshal(control.AnswerArgs{Session: session, Answer: body.Answer})
+	response := server.Backend.HandleAnswer(args)
+	server.audit(device.ID, "answer "+body.Answer, session, outcome(response))
 	writeResponse(writer, response)
 }
 

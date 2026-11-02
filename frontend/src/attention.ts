@@ -51,6 +51,29 @@ const brailleSpinner = /^[\u2800-\u28FF\u25D0-\u25D3]/;
 // Esc to cancel" and "ctrl+g to edit in Notepad · <plan path> · /plan to preview".
 const claudePromptFooter =
   /\bEnter to (?:confirm|select)\b.*\bEsc to cancel\b|\bEsc to cancel\b.*\bTab to amend\b|\bctrl\+g to edit\b.*\/plan to preview/i;
+// Answering a harness prompt from the phone is allowed only for Claude Code's trust
+// and permission prompts, where Enter takes the default "Yes" and Esc declines. Question
+// and plan-approval prompts are excluded: their first choice is not a plain yes.
+const claudePermissionFooter = /\bEnter to confirm\b.*\bEsc to cancel\b|\bEsc to cancel\b.*\bTab to amend\b/i;
+
+export type AnswerPlan = { keys: string[]; reason: "" } | { keys: []; reason: string };
+
+export function answerPlan(tool: string, terminal: Terminal | undefined, title: string, answer: string): AnswerPlan {
+  if (tool !== "claude-code") return { keys: [], reason: "answering from the phone is only verified for Claude Code" };
+  if (!terminal || readHarnessSignal(tool, terminal, title) !== "input") return { keys: [], reason: "the harness is not waiting for an answer" };
+  if (!lastTextRows(terminal, 2).some((row) => claudePermissionFooter.test(row))) return { keys: [], reason: "this prompt is a question or plan; answer it on the PC" };
+  if (answer !== "yes") return { keys: ["\u001b"], reason: "" };
+  if (!highlightedIsYes(lastRows(terminal, 14))) return { keys: [], reason: "the highlighted choice is not Yes; answer it on the PC" };
+  return { keys: ["\r"], reason: "" };
+}
+
+// Enter picks the highlighted option, and Claude's trust prompt highlights "No, exit"
+// by default, so Yes is sent only when the highlighted row is a Yes choice.
+export function highlightedIsYes(rows: string[]): boolean {
+  const marked = rows.find((row) => /^[❯>]\s*/.test(row));
+  return !!marked && /^[❯>]\s*(\d+\.\s*)?Yes\b/.test(marked);
+}
+
 const copilotWorkingStatus = /^\S{0,2}\s*Working\b.*\besc\b/i;
 const copilotIdleFooter = /\? help/;
 // Footer of Copilot CLI's selection prompts (permission requests, pickers),

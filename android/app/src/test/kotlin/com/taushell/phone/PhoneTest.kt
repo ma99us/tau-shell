@@ -106,6 +106,24 @@ class ParseTest {
         assertEquals(listOf("a", "  b", ""), rows)
         assertEquals("disabled", (Parse.screen("""{"ok":false,"error":{"code":"disabled","message":"off"}}""") as Result.Fail).code)
     }
+
+    @Test
+    fun parsesPcPresets() {
+        assertEquals(listOf("Run the tests"), (Parse.presets("""{"ok":true,"data":{"presets":["Run the tests"," "]}}""") as Result.Ok).value)
+        assertEquals(emptyList<String>(), (Parse.presets("""{"ok":true,"data":{"presets":[]}}""") as Result.Ok).value)
+    }
+
+    @Test
+    fun stateClockReportsThinkingTimeAndWhenItFinished() {
+        fun item(state: String) = SessionItem("s", "n", "claude-code", "running", true, "", "", Activity(state, true, false), "")
+        StateClock.observe(item("idle"), 0)
+        StateClock.observe(item("working"), 10_000)
+        StateClock.observe(item("working"), 20_000)
+        assertEquals("Thinking… 15s", StateClock.headline(item("working"), 25_000))
+        StateClock.observe(item("idle"), 90_000)
+        assertEquals("Idle · done 1m 5s ago", StateClock.headline(item("idle"), 155_000))
+        assertEquals("Idle", StateClock.headline(SessionItem("x", "n", "t", "running", true, "", "", Activity("idle", true, false), ""), 1))
+    }
 }
 
 /** Real TLS 1.3 handshakes against a local server built from the fixture keystores. */

@@ -17,20 +17,24 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
+import android.widget.Toast
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import java.util.concurrent.Executors
 
-class MainActivity : Activity(), SessionCard.Actions {
+class MainActivity : Activity(), SessionActions {
     private lateinit var store: Store
     private lateinit var root: FrameLayout
     private val io = Executors.newCachedThreadPool()
     private val ui = Handler(Looper.getMainLooper())
 
-    private enum class Screen { PAIR, HOME, SETTINGS }
+    private enum class Screen { PAIR, HOME, SESSION, SETTINGS }
 
     private var screen = Screen.PAIR
+    private var session: SessionScreen? = null
+    private var openId: String? = null
+    private var latest: List<SessionItem> = emptyList()
     private var pairing: Pairing? = null
     private val cards = LinkedHashMap<String, SessionCard>()
     private var list: LinearLayout? = null
@@ -43,6 +47,7 @@ class MainActivity : Activity(), SessionCard.Actions {
     private var nameField: android.widget.EditText? = null
     private var pendingLink: String? = null
     private var pendingOpen: String? = null
+    @Volatile private var pcPresets: List<String> = emptyList()
 
     private val poll = object : Runnable {
         override fun run() {
@@ -68,6 +73,8 @@ class MainActivity : Activity(), SessionCard.Actions {
         pendingLink = intent?.dataString
         pendingOpen = intent?.getStringExtra(MonitorService.EXTRA_SESSION)
         pairing = store.pairing()
+        // The service dies with an app update or a process kill, so reopening the app revives it.
+        if (pairing != null && store.alerts) MonitorService.start(this)
         if (pairing != null && pendingLink == null) showHome() else showPairing()
     }
 
@@ -75,7 +82,7 @@ class MainActivity : Activity(), SessionCard.Actions {
         super.onNewIntent(intent)
         intent.getStringExtra(MonitorService.EXTRA_SESSION)?.let {
             pendingOpen = it
-            if (screen == Screen.HOME) refresh() else if (pairing != null && intent.dataString == null) showHome()
+            if (screen == Screen.HOME || screen == Screen.SESSION) refresh() else if (pairing != null && intent.dataString == null) showHome()
         }
         intent.dataString?.let {
             pendingLink = it
@@ -85,7 +92,7 @@ class MainActivity : Activity(), SessionCard.Actions {
 
     override fun onResume() {
         super.onResume()
-        if (screen == Screen.HOME) {
+        if (screen == Screen.HOME || screen == Screen.SESSION) {
             ui.removeCallbacks(poll)
             ui.post(poll)
         }
@@ -98,7 +105,7 @@ class MainActivity : Activity(), SessionCard.Actions {
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        if (screen == Screen.SETTINGS) showHome() else @Suppress("DEPRECATION") super.onBackPressed()
+        if (screen == Screen.SETTINGS || screen == Screen.SESSION) showHome() else @Suppress("DEPRECATION") super.onBackPressed()
     }
 
     private fun scroll(content: View): ScrollView = ScrollView(this).apply {
@@ -217,22 +224,43 @@ class MainActivity : Activity(), SessionCard.Actions {
     private fun showHome() {
         val current = pairing ?: return showPairing()
         cards.clear()
-        val content = page()
+        session = null
+        openId = null
         val gear = button("Settings", false) { showSettings() }
-        content.addView(brand(gear))
-        content.addView(text("${current.host}:${current.port}", 12f, Theme.text10), lp().apply { topMargin = dp(6) })
-        val bannerView = text("", 13f, Theme.dangerText).apply {
-            background = shape(Theme.dangerBg, 8, Theme.failed)
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-            visibility = View.GONE
-        }.also { banner = it }
-        content.addView(bannerView, lp().apply { topMargin = dp(14) })
-        content.addView(eyebrow("Sessions"), lp().apply { topMargin = dp(20) })
+        val header = linear(this).apply {
+            setPadding(dp(18), dp(16), dp(18), dp(8))
+            addView(brand(gear))
+            addView(text("${current.host}:${current.port}", 12f, Theme.text10), lp().apply { topMargin = dp(6) })
+            val bannerView = text("", 13f, Theme.dangerText).apply {
+                background = shape(Theme.dangerBg, 8, Theme.failed)
+                setPadding(dp(12), dp(10), dp(12), dp(10))
+                visibility = View.GONE
+            }.also { banner = it }
+            addView(bannerView, lp().apply { topMargin = dp(14) })
+            addView(eyebrow("Sessions"), lp().apply { topMargin = dp(14) })
+        }
+        val content = linear(this).apply { setPadding(dp(18), dp(4), dp(18), dp(24)) }
         val container = linear(this).also { list = it }
-        content.addView(container, lp().apply { topMargin = dp(10) })
+        content.addView(container, lp())
         val emptyView = text("Loading sessions…", 14f, Theme.text10).also { empty = it }
         content.addView(emptyView, lp().apply { topMargin = dp(4) })
-        swap(scroll(content), Screen.HOME)
+        val page = linear(this).apply {
+            addView(header, lp())
+            addView(ScrollView(this@MainActivity).apply { addView(content) }, lp(height = 0, weight = 1f))
+        }
+        swap(page, Screen.HOME)
+        ui.removeCallbacks(poll)
+        ui.post(poll)
+    }
+
+    private fun showSession(item: SessionItem) {
+        cards.clear()
+        openId = item.id
+        pendingOpen = null
+        val view = SessionScreen(this, this) { showHome() }
+        session = view
+        view.bind(item)
+        swap(view, Screen.SESSION)
         ui.removeCallbacks(poll)
         ui.post(poll)
     }
@@ -243,10 +271,26 @@ class MainActivity : Activity(), SessionCard.Actions {
         refreshing = true
         io.execute {
             val outcome = current.client().sessions()
+            // An older PC without the route fails here; the phone's own replies still work.
+            if (outcome is Result.Ok) (current.client().presets() as? Result.Ok)?.let { pcPresets = it.value }
             ui.post {
                 refreshing = false
-                if (screen == Screen.HOME) apply(outcome)
+                if (screen == Screen.HOME) apply(outcome) else if (screen == Screen.SESSION) applyToSession(outcome)
             }
+        }
+    }
+
+    private fun applyToSession(outcome: Result<List<SessionItem>>) {
+        val open = session ?: return
+        if (outcome is Result.Ok) {
+            outcome.value.forEach { StateClock.observe(it) }
+            latest = outcome.value
+            val target = pendingOpen?.let { id -> outcome.value.firstOrNull { it.id == id } }
+            if (target != null && target.id != openId) return showSession(target)
+            pendingOpen = null
+            outcome.value.firstOrNull { it.id == openId }?.let { open.bind(it) } ?: showHome()
+        } else if (outcome is Result.Fail) {
+            Toast.makeText(this, outcome.message, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -260,11 +304,13 @@ class MainActivity : Activity(), SessionCard.Actions {
             is Result.Ok -> {
                 banner?.visibility = View.GONE
                 val items = outcome.value
+                items.forEach { StateClock.observe(it) }
+                latest = items
                 val container = list ?: return
                 (cards.keys - items.map { it.id }.toSet()).forEach { id -> cards.remove(id)?.let { container.removeView(it) } }
                 items.forEachIndexed { index, item ->
                     val card = cards.getOrPut(item.id) {
-                        SessionCard(this, this).also { container.addView(it, lp().apply { bottomMargin = dp(10) }) }
+                        SessionCard(this) { showSession(it) }.also { container.addView(it, lp().apply { bottomMargin = dp(10) }) }
                     }
                     card.bind(item)
                     if (container.getChildAt(index) !== card) {
@@ -272,7 +318,7 @@ class MainActivity : Activity(), SessionCard.Actions {
                         container.addView(card, index, lp().apply { bottomMargin = dp(10) })
                     }
                 }
-                pendingOpen?.let { id -> cards[id]?.let { it.open(); pendingOpen = null } }
+                pendingOpen?.let { id -> items.firstOrNull { it.id == id }?.let { showSession(it); return } }
                 empty?.text = if (items.isEmpty()) "No sessions on this PC yet." else ""
                 empty?.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
             }
@@ -306,12 +352,23 @@ class MainActivity : Activity(), SessionCard.Actions {
     override fun screen(item: SessionItem, done: (Result<List<String>>) -> Unit) {
         val current = pairing ?: return
         io.execute {
-            val outcome = current.client().screen(item.id, 40)
+            val outcome = current.client().screen(item.id, 120)
             ui.post { done(outcome) }
         }
     }
 
-    override fun presets(): List<String> = store.presets
+    override fun answer(item: SessionItem, answer: String, done: (Result<Unit>) -> Unit) {
+        val current = pairing ?: return
+        io.execute {
+            val outcome = current.client().answer(item.id, answer)
+            ui.post {
+                done(outcome)
+                refresh()
+            }
+        }
+    }
+
+    override fun presets(): List<String> = (store.presets + pcPresets).distinct()
 
     override fun muted(id: String) = id in store.muted
 

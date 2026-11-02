@@ -42,6 +42,12 @@ type StartArgs struct {
 // MaxWait bounds one wait request; clients repeat it until their own deadline.
 const MaxWait = 8 * time.Second
 
+// AnswerArgs are the arguments of the phone-only answer operation. Answer is "yes" or "no".
+type AnswerArgs struct {
+	Session string `json:"session"`
+	Answer  string `json:"answer"`
+}
+
 // MaxSendBytes bounds the text of one send.
 const MaxSendBytes = 16 * 1024
 

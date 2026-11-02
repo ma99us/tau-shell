@@ -65,6 +65,13 @@ object Parse {
         return Result.Ok((0 until rows.length()).map { rows.optString(it) })
     }
 
+    fun presets(json: String): Result<List<String>> {
+        val root = JSONObject(json)
+        if (!root.optBoolean("ok")) return failure(root)
+        val items = root.optJSONObject("data")?.optJSONArray("presets") ?: return Result.Ok(emptyList())
+        return Result.Ok((0 until items.length()).map { items.optString(it) }.filter { it.isNotBlank() })
+    }
+
     fun ack(json: String): Result<Unit> {
         val root = JSONObject(json)
         return if (root.optBoolean("ok")) Result.Ok(Unit) else failure(root)
@@ -150,6 +157,14 @@ class PcClient(
     /** Read-only tail of the session's visible terminal text. */
     fun screen(session: String, rows: Int): Result<List<String>> =
         parsed(call("GET", "/v1/sessions/${enc(session)}/screen?rows=$rows", null, 15_000), Parse::screen)
+
+    fun presets(): Result<List<String>> = parsed(call("GET", "/v1/presets", null, 15_000), Parse::presets)
+
+    /** Answers a permission prompt with a fixed yes or no; the PC re-checks the prompt. */
+    fun answer(session: String, answer: String): Result<Unit> {
+        val body = JSONObject().put("answer", answer).toString()
+        return parsed(call("POST", "/v1/sessions/${enc(session)}/answer", body, 15_000), Parse::ack)
+    }
 
     fun start(session: String, mode: String): Result<Unit> {
         val body = JSONObject().put("mode", mode).toString()

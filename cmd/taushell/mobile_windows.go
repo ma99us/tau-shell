@@ -162,6 +162,13 @@ func (application *App) applyMobile(enabled bool) error {
 		Registry: registry,
 		Window:   pairing.NewWindow(registry, []string{host}, pairedDeviceTTL, nil),
 		Backend:  application.controlSessions(),
+		Presets: func() []string {
+			current, err := appconfig.Load(application.settingsPath())
+			if err != nil {
+				return nil
+			}
+			return current.Mobile.Presets
+		},
 		Audit: func(device, op, session, outcome string) {
 			audit.Add(control.AuditEntry{Time: time.Now(), Image: "phone " + device, Op: op, Session: session, Outcome: outcome})
 		},

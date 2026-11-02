@@ -131,6 +131,10 @@ func (application *App) controlSessions() control.Sessions {
 			return nil
 		},
 		Screen: application.requestScreen,
+		Answer: func(id, answer string) error {
+			application.emit("control-answer", map[string]any{"id": id, "answer": answer})
+			return nil
+		},
 		Deliver: func(id, text string, submit bool) error {
 			// The window types through xterm so input accounting matches real typing.
 			application.emit("control-send", map[string]any{"id": id, "text": text, "submit": submit})

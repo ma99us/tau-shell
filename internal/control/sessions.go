@@ -24,6 +24,9 @@ type Sessions struct {
 	// Screen returns the last rows of a running session's terminal text from
 	// the window. Nil or an error means it is not available.
 	Screen func(sessionID string, rows int) ([]string, error)
+	// Answer asks the window to press the key for a yes or no on a waiting prompt;
+	// the window re-checks the prompt before pressing anything.
+	Answer func(sessionID, answer string) error
 	// Poll is how often Wait re-reads the state; tests shorten it.
 	Poll time.Duration
 }
@@ -118,6 +121,43 @@ func (sessions Sessions) HandleSend(raw json.RawMessage) Response {
 		return Failure(CodeInternal, "the window could not accept the text")
 	}
 	return OK(nil)
+}
+
+// HandleAnswer answers a harness permission prompt with a fixed yes or no. It is
+// the opposite gate of send: only a confirmed cue-based input state, only for Claude
+// Code (the one harness whose keys are verified), and never free text.
+func (sessions Sessions) HandleAnswer(raw json.RawMessage) Response {
+	var args AnswerArgs
+	if err := json.Unmarshal(raw, &args); err != nil || args.Session == "" || (args.Answer != "yes" && args.Answer != "no") {
+		return Failure(CodeBadRequest, "answer needs a session and yes or no")
+	}
+	item, failure := sessions.find(args.Session)
+	if failure != nil {
+		return Response{Error: failure}
+	}
+	if reason := AnswerRefusal(item); reason != "" {
+		return Failure(CodeRefused, reason)
+	}
+	if sessions.Answer == nil {
+		return Failure(CodeDisabled, "answering is not available")
+	}
+	if err := sessions.Answer(item.ID, args.Answer); err != nil {
+		return Failure(CodeInternal, "the window could not accept the answer")
+	}
+	return OK(nil)
+}
+
+// AnswerRefusal returns why a prompt must not be answered remotely, or "".
+func AnswerRefusal(item SessionInfo) string {
+	switch {
+	case !item.RunningHere:
+		return "the session is not running"
+	case item.Tool != "claude-code":
+		return "answering from the phone is only verified for Claude Code"
+	case item.Activity.State != agentstate.Input || !item.Activity.Confirmed || item.Activity.Source != agentstate.Cue:
+		return "the harness is not confirmed to be waiting for an answer"
+	}
+	return ""
 }
 
 // HandleStart hands a stopped session to the window, which launches it the same
