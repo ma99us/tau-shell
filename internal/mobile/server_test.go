@@ -30,15 +30,19 @@ type rig struct {
 	mu       sync.Mutex
 	audit    []string
 	deliverd []string
+
+	registryPath string
+	listener     net.Listener
 }
 
 func newRig(t *testing.T) *rig {
 	t.Helper()
-	registry, err := pairing.OpenRegistry(t.TempDir()+"\\devices.json", plainSealer{}, nil)
+	registryPath := t.TempDir() + "\\devices.json"
+	registry, err := pairing.OpenRegistry(registryPath, plainSealer{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	state := &rig{states: agentstate.NewRegistry()}
+	state := &rig{states: agentstate.NewRegistry(), registryPath: registryPath}
 	sessions := control.Sessions{
 		List: func(context.Context) ([]control.SessionInfo, error) {
 			return []control.SessionInfo{{ID: "s1", Name: "demo", RunningHere: true}}, nil
@@ -51,6 +55,7 @@ func newRig(t *testing.T) *rig {
 			return nil
 		},
 		Launch: func(string, string) error { return nil },
+		Screen: func(string, int) ([]string, error) { return []string{"hello", "", "world", "  "}, nil },
 	}
 	state.server = &Server{
 		Registry: registry,
@@ -67,6 +72,7 @@ func newRig(t *testing.T) *rig {
 	if err != nil {
 		t.Fatal(err)
 	}
+	state.listener = listener
 	go state.server.Serve(listener)
 	t.Cleanup(func() { listener.Close() })
 	state.address = listener.Addr().String()
@@ -132,6 +138,52 @@ func (r *rig) pair(t *testing.T) PairResult {
 	return paired
 }
 
+func TestScreenReturnsRowsAndAuditHoldsNoText(t *testing.T) {
+	r := newRig(t)
+	device := r.pair(t)
+	name := DeviceName(device.DeviceID)
+	status, body, err := r.call(t, name, device.Fingerprint, "GET", "/v1/sessions/s1/screen?rows=10", device.Token, "")
+	if err != nil || status != 200 || !strings.Contains(body, `["hello","","world"]`) {
+		t.Fatalf("screen: %d %v %s", status, err, body)
+	}
+	if status, _, _ = r.call(t, name, device.Fingerprint, "GET", "/v1/sessions/nope/screen", device.Token, ""); status != 404 {
+		t.Fatalf("unknown session: %d", status)
+	}
+	if status, _, _ = r.call(t, name, device.Fingerprint, "GET", "/v1/sessions/s1/screen", "wrong", ""); status != 401 {
+		t.Fatalf("screen needs the token: %d", status)
+	}
+	for _, line := range r.audit {
+		if strings.Contains(line, "hello") || strings.Contains(line, "world") {
+			t.Fatalf("audit must never hold terminal text: %q", line)
+		}
+	}
+}
+
+func TestPairingSurvivesServerRestart(t *testing.T) {
+	r := newRig(t)
+	device := r.pair(t)
+	name := DeviceName(device.DeviceID)
+	path := r.registryPath
+	r.listener.Close()
+
+	registry, err := pairing.OpenRegistry(path, plainSealer{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.server.Registry = registry
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	go r.server.Serve(listener)
+	r.address = listener.Addr().String()
+	status, body, err := r.call(t, name, device.Fingerprint, "GET", "/v1/sessions", device.Token, "")
+	if err != nil || status != 200 {
+		t.Fatalf("a paired phone must work after a restart: %d %v %s", status, err, body)
+	}
+}
+
 func TestPairThenListAndGuardedSend(t *testing.T) {
 	r := newRig(t)
 	device := r.pair(t)
@@ -179,7 +231,7 @@ func TestAuthMatrixAndRevocation(t *testing.T) {
 	if _, _, err := r.call(t, name, other.Fingerprint, "GET", "/v1/sessions", device.Token, ""); err == nil {
 		t.Fatal("pinning another device's certificate must fail the handshake")
 	}
-	if _, _, err := r.call(t, "d-unknown", device.Fingerprint, "GET", "/v1/sessions", device.Token, ""); err == nil {
+	if _, _, err := r.call(t, "d-unknown.taushell", device.Fingerprint, "GET", "/v1/sessions", device.Token, ""); err == nil {
 		t.Fatal("an unknown device name must get no certificate")
 	}
 	if _, _, err := r.call(t, PairName, device.Fingerprint, "GET", "/v1/sessions", device.Token, ""); err == nil {

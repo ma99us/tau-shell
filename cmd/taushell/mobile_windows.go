@@ -279,11 +279,15 @@ func (application *App) GetMobileStatus() (MobileStatus, error) {
 	defer state.mu.Unlock()
 	status := MobileStatus{Pairing: string(pairing.StateIdle), Devices: []pairing.Device{}, Audit: []control.AuditEntry{}}
 	if registry, err := application.mobileRegistryLocked(); err == nil {
-		status.Devices = registry.List()
+		if devices := registry.List(); devices != nil {
+			status.Devices = devices
+		}
 	} else {
 		return status, err
 	}
-	status.Audit = application.mobileAuditLocked().Entries()
+	if entries := application.mobileAuditLocked().Entries(); entries != nil {
+		status.Audit = entries
+	}
 	if runtime := state.runtime; runtime != nil {
 		status.Enabled = true
 		status.Address = net.JoinHostPort(runtime.host, strconv.Itoa(runtime.port))

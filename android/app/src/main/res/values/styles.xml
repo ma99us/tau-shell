@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.TauShell" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/bg_app</item>
+        <item name="android:colorBackground">@color/bg_app</item>
+        <item name="android:textColorPrimary">#f4f6fa</item>
+        <item name="android:colorAccent">#78d49f</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

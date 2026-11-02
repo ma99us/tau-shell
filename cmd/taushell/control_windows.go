@@ -2,8 +2,12 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/ma99us/tau-shell/internal/agentstate"
@@ -57,6 +61,48 @@ func (application *App) ReportSessionState(id, state, source string, hasDraft bo
 	return nil
 }
 
+// screenWaiters maps a request id to the channel waiting for the window's answer.
+var screenWaiters sync.Map
+
+var errScreenOff = errors.New("screen sharing is off on the PC (mobile.screen: false)")
+
+// requestScreen asks the window, which owns the terminal, for the last rows of
+// a session. The text is handed straight to the caller; it is never stored or logged.
+func (application *App) requestScreen(id string, rows int) ([]string, error) {
+	settings, err := appconfig.Load(application.settingsPath())
+	if err != nil || !settings.Mobile.ShareScreen() {
+		return nil, errScreenOff
+	}
+	token := make([]byte, 8)
+	if _, err := rand.Read(token); err != nil {
+		return nil, err
+	}
+	request := hex.EncodeToString(token)
+	answer := make(chan []string, 1)
+	screenWaiters.Store(request, answer)
+	defer screenWaiters.Delete(request)
+	application.emit("control-screen", map[string]any{"request": request, "id": id, "rows": rows})
+	select {
+	case text := <-answer:
+		return text, nil
+	case <-time.After(3 * time.Second):
+		return nil, errors.New("the window did not answer in time")
+	}
+}
+
+// ProvideScreen is called by the window with the rows of a control-screen request.
+func (application *App) ProvideScreen(request string, rows []string) error {
+	waiter, ok := screenWaiters.Load(request)
+	if !ok {
+		return errors.New("no such screen request")
+	}
+	select {
+	case waiter.(chan []string) <- rows:
+	default:
+	}
+	return nil
+}
+
 func (application *App) controlSessions() control.Sessions {
 	return control.Sessions{
 		List: func(ctx context.Context) ([]control.SessionInfo, error) {
@@ -73,6 +119,7 @@ func (application *App) controlSessions() control.Sessions {
 					Status:      string(snapshot.Status),
 					RunningHere: snapshot.RunningHere,
 					WorkingDir:  snapshot.WorkingDir,
+					Color:       snapshot.Color,
 					LastError:   snapshot.LastError,
 				})
 			}
@@ -83,6 +130,7 @@ func (application *App) controlSessions() control.Sessions {
 			application.emit("control-launch", map[string]any{"id": id, "mode": mode})
 			return nil
 		},
+		Screen: application.requestScreen,
 		Deliver: func(id, text string, submit bool) error {
 			// The window types through xterm so input accounting matches real typing.
 			application.emit("control-send", map[string]any{"id": id, "text": text, "submit": submit})

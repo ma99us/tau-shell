@@ -20,18 +20,30 @@ import (
 	"github.com/ma99us/tau-shell/internal/pairing"
 )
 
-// SNI names select the certificate: "pair" for the one-time pairing channel and
-// "d-<device id>" for an already paired phone, so every pairing has its own key.
+// SNI names select the certificate: "pair.taushell" for the one-time pairing
+// channel and "d-<device id>.taushell" for an already paired phone, so every
+// pairing has its own key. The suffix makes them dotted: Android's TLS stack
+// drops dotless names from the handshake.
 const (
-	PairName     = "pair"
+	PairName     = "pair.taushell"
 	devicePrefix = "d-"
+	nameSuffix   = ".taushell"
 	maxBody      = 32 * 1024
 	// maxFailures per minute from one address before it is refused for a while.
 	maxFailures = 10
 )
 
 // DeviceName is the SNI name a phone uses for its device id.
-func DeviceName(id string) string { return devicePrefix + id }
+func DeviceName(id string) string { return devicePrefix + id + nameSuffix }
+
+// deviceFromName extracts the device id from an SNI name.
+func deviceFromName(name string) (string, bool) {
+	rest, ok := strings.CutPrefix(name, devicePrefix)
+	if !ok {
+		return "", false
+	}
+	return strings.CutSuffix(rest, nameSuffix)
+}
 
 // Backend is the guarded session logic; control.Sessions satisfies it.
 type Backend interface {
@@ -39,6 +51,7 @@ type Backend interface {
 	HandleWait(json.RawMessage) control.Response
 	HandleSend(json.RawMessage) control.Response
 	HandleStart(json.RawMessage) control.Response
+	HandleScreen(json.RawMessage) control.Response
 }
 
 // Server serves phones over TLS 1.3 with per-device certificates.
@@ -88,7 +101,7 @@ func (server *Server) TLSConfig() *tls.Config {
 				}
 				return &credentials.Certificate, nil
 			}
-			if id, ok := strings.CutPrefix(name, devicePrefix); ok {
+			if id, ok := deviceFromName(name); ok {
 				return server.Registry.Certificate(id)
 			}
 			return nil, errors.New("unknown name")
@@ -116,6 +129,7 @@ func (server *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/sessions/{id}/wait", server.device("wait", server.handleWait))
 	mux.HandleFunc("POST /v1/sessions/{id}/send", server.device("send", server.handleSend))
 	mux.HandleFunc("POST /v1/sessions/{id}/start", server.device("start", server.handleStart))
+	mux.HandleFunc("GET /v1/sessions/{id}/screen", server.device("screen", server.handleScreen))
 	return mux
 }
 
@@ -131,7 +145,7 @@ func (server *Server) device(op string, next deviceHandler) http.HandlerFunc {
 		}
 		id, ok := "", false
 		if request.TLS != nil {
-			id, ok = strings.CutPrefix(request.TLS.ServerName, devicePrefix)
+			id, ok = deviceFromName(request.TLS.ServerName)
 		}
 		token := strings.TrimPrefix(request.Header.Get("Authorization"), "Bearer ")
 		device, err := server.Registry.Authenticate(id, token)
@@ -255,6 +269,25 @@ func (server *Server) handleSend(writer http.ResponseWriter, request *http.Reque
 	writeResponse(writer, response)
 }
 
+// handleScreen returns the session's visible terminal text. The audit records
+// the operation and session, never the text.
+func (server *Server) handleScreen(writer http.ResponseWriter, request *http.Request, device pairing.Device) {
+	session := request.PathValue("id")
+	rows := 0
+	if raw := request.URL.Query().Get("rows"); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil {
+			writeResponse(writer, control.Failure(control.CodeBadRequest, "rows must be a number"))
+			return
+		}
+		rows = value
+	}
+	args, _ := json.Marshal(control.ScreenArgs{Session: session, Rows: rows})
+	response := server.Backend.HandleScreen(args)
+	server.audit(device.ID, "screen", session, outcome(response))
+	writeResponse(writer, response)
+}
+
 func (server *Server) handleStart(writer http.ResponseWriter, request *http.Request, device pairing.Device) {
 	session := request.PathValue("id")
 	var body struct {
@@ -272,7 +305,7 @@ func (server *Server) handleStart(writer http.ResponseWriter, request *http.Requ
 }
 
 // PairResult is what a successfully approved phone receives. The phone then
-// reconnects with the SNI name "d-<DeviceID>" and pins Fingerprint.
+// reconnects with the SNI name DeviceName(DeviceID) and pins Fingerprint.
 type PairResult struct {
 	DeviceID    string `json:"deviceId"`
 	Token       string `json:"token"`
@@ -280,7 +313,7 @@ type PairResult struct {
 	Expires     string `json:"expires"`
 }
 
-// handlePair runs only on the pairing channel (SNI "pair"). The phone holds the
+// handlePair runs only on the pairing channel (SNI PairName). The phone holds the
 // request open until the PC user approves or denies.
 func (server *Server) handlePair(writer http.ResponseWriter, request *http.Request) {
 	remote, _, _ := net.SplitHostPort(request.RemoteAddr)

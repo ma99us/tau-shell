@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -10,7 +11,8 @@ import (
 )
 
 // Sessions serves the session-addressed operations. It holds no terminal
-// content: text passes through Deliver once and is neither stored nor logged.
+// content: sent text passes through Deliver once, and screen text is fetched
+// from the window per request and passed straight on; neither is stored or logged.
 type Sessions struct {
 	// List returns sessions without Activity; Sessions fills that in.
 	List   func(context.Context) ([]SessionInfo, error)
@@ -19,6 +21,9 @@ type Sessions struct {
 	Deliver func(sessionID, text string, submit bool) error
 	// Launch asks the window to start or restore a stopped session.
 	Launch func(sessionID, mode string) error
+	// Screen returns the last rows of a running session's terminal text from
+	// the window. Nil or an error means it is not available.
+	Screen func(sessionID string, rows int) ([]string, error)
 	// Poll is how often Wait re-reads the state; tests shorten it.
 	Poll time.Duration
 }
@@ -136,6 +141,57 @@ func (sessions Sessions) HandleStart(raw json.RawMessage) Response {
 		return Failure(CodeInternal, "the window could not accept the request")
 	}
 	return OK(nil)
+}
+
+// HandleScreen returns the visible terminal text of a running session. Only the
+// phone server routes to it, and only when the user turned screen sharing on.
+func (sessions Sessions) HandleScreen(raw json.RawMessage) Response {
+	var args ScreenArgs
+	if err := json.Unmarshal(raw, &args); err != nil || args.Session == "" {
+		return Failure(CodeBadRequest, "screen needs a session")
+	}
+	if sessions.Screen == nil {
+		return Failure(CodeDisabled, "screen sharing is off on the PC")
+	}
+	if args.Rows <= 0 {
+		args.Rows = DefaultScreenRows
+	}
+	if args.Rows > MaxScreenRows {
+		args.Rows = MaxScreenRows
+	}
+	item, failure := sessions.find(args.Session)
+	if failure != nil {
+		return Response{Error: failure}
+	}
+	if !item.RunningHere {
+		return Failure(CodeRefused, "the session is not running")
+	}
+	rows, err := sessions.Screen(item.ID, args.Rows)
+	if err != nil {
+		return Failure(CodeRefused, err.Error())
+	}
+	return OK(ScreenResult{Rows: ClipScreen(rows, args.Rows)})
+}
+
+// ClipScreen keeps the last n rows, drops trailing blank rows and caps the total size.
+func ClipScreen(rows []string, n int) []string {
+	for len(rows) > 0 && strings.TrimSpace(rows[len(rows)-1]) == "" {
+		rows = rows[:len(rows)-1]
+	}
+	if len(rows) > n {
+		rows = rows[len(rows)-n:]
+	}
+	total := 0
+	out := make([]string, 0, len(rows))
+	for index := len(rows) - 1; index >= 0; index-- {
+		row := strings.ToValidUTF8(rows[index], "?")
+		total += len(row) + 1
+		if total > MaxScreenBytes {
+			break
+		}
+		out = append([]string{row}, out...)
+	}
+	return out
 }
 
 // Refusal returns why text must not be typed into the session, or "".

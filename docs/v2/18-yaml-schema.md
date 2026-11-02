@@ -99,6 +99,7 @@ mobile:
   enabled: false       # phone server (experimental); the Home Phone switch edits this line in place
   interface: ""        # the one local IP to listen on, required when enabled; never all interfaces
   port: 47821          # 1024-65535
+  screen: true         # let paired phones read a running session's visible terminal text; false keeps it on the PC
 notifications:
   toast: true          # Windows toast while TauShell is in the background
   taskbar_flash: true  # flash the taskbar button; both default to true

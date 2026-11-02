@@ -45,6 +45,25 @@ const MaxWait = 8 * time.Second
 // MaxSendBytes bounds the text of one send.
 const MaxSendBytes = 16 * 1024
 
+// Screen limits: the phone gets the last rows of the visible terminal, never
+// scrollback (the terminal keeps none).
+const (
+	DefaultScreenRows = 40
+	MaxScreenRows     = 120
+	MaxScreenBytes    = 32 * 1024
+)
+
+// ScreenArgs asks for the last Rows rows of a running session's terminal.
+type ScreenArgs struct {
+	Session string `json:"session"`
+	Rows    int    `json:"rows,omitempty"`
+}
+
+// ScreenResult is plain text, one string per row. It is never logged or audited.
+type ScreenResult struct {
+	Rows []string `json:"rows"`
+}
+
 // WaitArgs are the arguments of OpWait. For is "idle", "input" or "working".
 type WaitArgs struct {
 	Session   string `json:"session"`
@@ -121,6 +140,7 @@ type SessionInfo struct {
 	Status      string          `json:"status"`
 	RunningHere bool            `json:"runningHere"`
 	WorkingDir  string          `json:"workingDir"`
+	Color       string          `json:"color,omitempty"`
 	LastError   string          `json:"lastError,omitempty"`
 	Activity    agentstate.View `json:"activity"`
 }

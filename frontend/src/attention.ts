@@ -89,6 +89,17 @@ const sentenceEnd = /[.!?:;]$/;
 // skipping dim (placeholder) and inverse (drawn cursor) cells. The input row starts
 // with a prompt ("> ", "\u276F ", possibly inside a box border, as in Claude Code) or
 // a left bar in column 0 (Copilot CLI).
+// readScreen returns the last `count` visible rows as plain text (the terminal keeps no scrollback).
+export function readScreen(terminal: Terminal, count: number): string[] {
+  const buffer = terminal.buffer.active;
+  const end = buffer.baseY + terminal.rows;
+  const rows: string[] = [];
+  for (let index = Math.max(buffer.baseY, end - count); index < end; index++) {
+    rows.push(buffer.getLine(index)?.translateToString(true) ?? "");
+  }
+  return rows;
+}
+
 export function readDraft(terminal: Terminal): string {
   const buffer = terminal.buffer.active;
   const end = buffer.baseY + terminal.rows;

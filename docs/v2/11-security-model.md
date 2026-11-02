@@ -181,7 +181,9 @@ address, `mobile.interface`, which must be an address of this PC; the wildcard
 address and an empty value are refused, so it never listens on all interfaces.
 TLS 1.3 only, with no system trust store: each pairing has its own self-signed
 key, the phone pins its SHA-256, and the certificate is chosen by the TLS server
-name (`pair` for the one-time pairing channel, then `d-<device id>`). A paired
+name (`pair.taushell` for the one-time pairing channel, then
+`d-<device id>.taushell`; the dotted form is needed because Android drops dotless
+names from the handshake). A paired
 phone also sends a 256-bit bearer token; only its SHA-256 is stored. Private
 keys are stored sealed with the Windows user's DPAPI key in
 `~/.tau_shell/mobile/devices.json`. Pairing needs the one-time code from the QR
@@ -190,9 +192,17 @@ approval of the phone's name on the PC. Failed authentication from one address
 backs off after 10 failures a minute. Requests use the same guarded `list`,
 `wait`, `send` and `start` logic as the control channel, so the same refusals
 apply. The in-memory audit records device id, operation, session id and
-outcome, never text. The phone never receives terminal content. Revoking a
-phone deletes its key and token; it must pair again. Not done yet: the Android
-app, a per-device request limit, and the relay. See
+outcome, never text. A paired phone may read a bounded, read-only tail of a
+running session's visible terminal text (`GET /v1/sessions/{id}/screen`, at most 120
+rows and 32 KB, no scrollback). The window answers each request on demand; Go does not
+store the text, and neither diagnostics nor the audit record it. The user can turn this
+off with `mobile.screen: false`; the phone then shows that it is off. Terminal text can
+contain secrets the harness printed, so only pair phones you trust. Revoking a
+phone deletes its key and token; it must pair again, and pairing otherwise persists
+across TauShell and app restarts (one-year expiry). The Android app (`android/`,
+sideload APK) pins the certificate, keeps its token sealed with the Android Keystore
+and sends the SNI name itself over its own TLS socket. Not done yet: a per-device
+request limit and the relay. See
 [docs/v3/implementation/04-mobile-companion-plan.md](../v3/implementation/04-mobile-companion-plan.md).
 
 ## Diagnostic logging

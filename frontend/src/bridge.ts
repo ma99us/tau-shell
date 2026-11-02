@@ -213,6 +213,7 @@ type WailsApp = {
   SetSessionOrder(ids: string[]): Promise<void>;
   NotifyAttention(id: string, kind: "input" | "done"): Promise<void>;
   ReportSessionState(id: string, state: string, source: string, hasDraft: boolean): Promise<void>;
+  ProvideScreen(request: string, rows: string[]): Promise<void>;
   OpenSettingsFile(): Promise<void>;
   OpenToolConfig(toolId: string): Promise<void>;
   GetToolUpdates(): Promise<Record<string, string>>;

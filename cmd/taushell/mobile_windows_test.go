@@ -34,6 +34,17 @@ func mobileApp(t *testing.T, settings string) *App {
 	return &App{configDirectory: filepath.Join(root, "sessions")}
 }
 
+func TestMobileStatusListsSerializeAsArrays(t *testing.T) {
+	status, err := mobileApp(t, "version: 1\n").GetMobileStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := json.Marshal(status)
+	if strings.Contains(string(data), `"devices":null`) || strings.Contains(string(data), `"audit":null`) {
+		t.Fatalf("the UI reads .length on these lists, so they must not be null: %s", data)
+	}
+}
+
 func TestPhoneServerNeedsAnExplicitLocalInterface(t *testing.T) {
 	for name, settings := range map[string]string{
 		"no interface":  "version: 1\n",

@@ -39,9 +39,15 @@ type Mobile struct {
 	Enabled   *bool  `yaml:"enabled,omitempty"`
 	Interface string `yaml:"interface,omitempty"`
 	Port      int    `yaml:"port,omitempty"`
+	// Screen lets paired phones read the visible terminal text of running
+	// sessions. On by default; set false to keep terminal text on the PC.
+	Screen *bool `yaml:"screen,omitempty"`
 }
 
 func (m Mobile) ServerEnabled() bool { return m.Enabled != nil && *m.Enabled }
+
+// ShareScreen reports whether paired phones may read terminal text.
+func (m Mobile) ShareScreen() bool { return m.Screen == nil || *m.Screen }
 
 // DefaultMobilePort is used when mobile.port is not set.
 const DefaultMobilePort = 47821
