@@ -1085,8 +1085,41 @@ h3 {
   color: var(--status-warn);
 }
 
-.control-audit .warn {
+.control-audit .warn,
+.phone-pane .warn {
   color: var(--status-warn);
+}
+
+.phone-list {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  font-size: var(--fs-14);
+}
+
+.phone-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.phone-list li button {
+  margin-left: auto;
+}
+
+.phone-offer,
+.phone-approve {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 8px 0;
+}
+
+.phone-offer img {
+  background: #fff;
+  padding: 6px;
+  border-radius: 6px;
 }
 
 .control-audit-list {

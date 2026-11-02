@@ -170,8 +170,30 @@ prompt, never over unsent text). Prefer `--stdin` for sensitive text: command
 lines are visible to other local processes. Every request is added to an
 in-memory audit trail (time, caller PID and image, operation, session id,
 outcome) with no text or content; operation names only reach the diagnostic
-log. `read`, `start`/`stop` and agent access (`control.agents`) are not
+log. `read`, `stop` and agent access (`control.agents`) are not
 implemented.
+
+## Phone server (experimental, off by default)
+
+`mobile.enabled` in `~/.tau_shell/config.yaml` (the Home Phone switch opens or
+closes it at once and rewrites that line in place). It listens on exactly one
+address, `mobile.interface`, which must be an address of this PC; the wildcard
+address and an empty value are refused, so it never listens on all interfaces.
+TLS 1.3 only, with no system trust store: each pairing has its own self-signed
+key, the phone pins its SHA-256, and the certificate is chosen by the TLS server
+name (`pair` for the one-time pairing channel, then `d-<device id>`). A paired
+phone also sends a 256-bit bearer token; only its SHA-256 is stored. Private
+keys are stored sealed with the Windows user's DPAPI key in
+`~/.tau_shell/mobile/devices.json`. Pairing needs the one-time code from the QR
+code (single use, 5 minutes, 5 wrong codes close the window) and the user's
+approval of the phone's name on the PC. Failed authentication from one address
+backs off after 10 failures a minute. Requests use the same guarded `list`,
+`wait`, `send` and `start` logic as the control channel, so the same refusals
+apply. The in-memory audit records device id, operation, session id and
+outcome, never text. The phone never receives terminal content. Revoking a
+phone deletes its key and token; it must pair again. Not done yet: the Android
+app, a per-device request limit, and the relay. See
+[docs/v3/implementation/04-mobile-companion-plan.md](../v3/implementation/04-mobile-companion-plan.md).
 
 ## Diagnostic logging
 

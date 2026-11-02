@@ -150,6 +150,19 @@ export type ControlStatus = {
   audit: ControlAuditEntry[];
 };
 
+export type PhoneDevice = { id: string; name: string; fingerprint: string; created: string; expires: string; lastSeen?: string };
+
+export type MobileStatus = {
+  enabled: boolean;
+  address?: string;
+  pairing: "idle" | "open" | "awaiting-approval";
+  pendingName?: string;
+  devices: PhoneDevice[];
+  audit: ControlAuditEntry[];
+};
+
+export type PairingOffer = { host: string; port: number; fingerprint: string; code: string; expiresAt: string; link: string; qr: string };
+
 export type SkillsView = {
   status: SkillsStatus;
   skills: SkillRow[];
@@ -159,6 +172,12 @@ export type SkillsView = {
 type WailsApp = {
   SetControlEnabled(enabled: boolean): Promise<void>;
   GetControlStatus(): Promise<ControlStatus>;
+  SetMobileEnabled(enabled: boolean): Promise<void>;
+  GetMobileStatus(): Promise<MobileStatus>;
+  StartPairing(): Promise<PairingOffer>;
+  CancelPairing(): Promise<void>;
+  DecidePairing(approve: boolean): Promise<void>;
+  RevokePhone(id: string): Promise<void>;
   GetSkills(): Promise<SkillsView>;
   CheckSkills(): Promise<SkillsView>;
   UpdateSkills(): Promise<SkillsView>;

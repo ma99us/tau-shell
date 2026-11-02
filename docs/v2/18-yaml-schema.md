@@ -95,6 +95,10 @@ version: 1
 control:
   enabled: false       # control pipe for "taushell ctl"; the Home switch edits this line in place
   agents: false        # reserved: let programs inside sessions use it (not active yet)
+mobile:
+  enabled: false       # phone server (experimental); the Home Phone switch edits this line in place
+  interface: ""        # the one local IP to listen on, required when enabled; never all interfaces
+  port: 47821          # 1024-65535
 notifications:
   toast: true          # Windows toast while TauShell is in the background
   taskbar_flash: true  # flash the taskbar button; both default to true

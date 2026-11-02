@@ -48,6 +48,7 @@ type App struct {
 	controlServer          *control.Server
 	controlMu              sync.Mutex
 	controlAudit           *control.AuditLog
+	mobile                 mobileState
 	states                 *agentstate.Registry
 	statesOnce             sync.Once
 	manager                desktopSessionManager
@@ -190,6 +191,7 @@ func (application *App) startup(ctx context.Context) {
 	application.startToolUpdateChecks(ctx)
 	application.startSkillChecks(ctx)
 	application.startControl()
+	application.startMobile()
 }
 
 func (application *App) publish(event sessionhost.Event) {
@@ -898,6 +900,7 @@ func (application *App) reportForcedShutdowns(ctx context.Context, names []strin
 
 func (application *App) shutdown(ctx context.Context) {
 	application.stopControl()
+	application.stopMobile()
 	stopCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 	if err := application.manager.Close(stopCtx); err != nil {

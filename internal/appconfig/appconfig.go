@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 
@@ -32,9 +33,44 @@ func (c Control) ChannelEnabled() bool { return c.Enabled != nil && *c.Enabled }
 // AgentsEnabled reports whether programs inside sessions may use the channel.
 func (c Control) AgentsEnabled() bool { return c.ChannelEnabled() && c.Agents != nil && *c.Agents }
 
+// Mobile configures the phone companion server. It is off by default and never
+// listens on all interfaces: Interface must name one local IP address.
+type Mobile struct {
+	Enabled   *bool  `yaml:"enabled,omitempty"`
+	Interface string `yaml:"interface,omitempty"`
+	Port      int    `yaml:"port,omitempty"`
+}
+
+func (m Mobile) ServerEnabled() bool { return m.Enabled != nil && *m.Enabled }
+
+// DefaultMobilePort is used when mobile.port is not set.
+const DefaultMobilePort = 47821
+
+// ListenPort returns the configured port or the default.
+func (m Mobile) ListenPort() int {
+	if m.Port == 0 {
+		return DefaultMobilePort
+	}
+	return m.Port
+}
+
+func (m Mobile) validate() error {
+	if m.Port != 0 && (m.Port < 1024 || m.Port > 65535) {
+		return fmt.Errorf("mobile.port must be between 1024 and 65535, got %d", m.Port)
+	}
+	if m.Interface != "" {
+		ip := net.ParseIP(m.Interface)
+		if ip == nil || ip.IsUnspecified() {
+			return fmt.Errorf("mobile.interface %q must be one local IP address, not all interfaces", m.Interface)
+		}
+	}
+	return nil
+}
+
 type Config struct {
 	Version       int           `yaml:"version"`
 	Control       Control       `yaml:"control"`
+	Mobile        Mobile        `yaml:"mobile"`
 	Notifications Notifications `yaml:"notifications"`
 	Usage         Usage         `yaml:"usage"`
 	Quota         Quota         `yaml:"quota"`
@@ -161,6 +197,9 @@ func Load(path string) (Config, error) {
 	if err := parsed.Skills.validate(); err != nil {
 		return Config{}, fmt.Errorf("%s: %w", filepath.Base(path), err)
 	}
+	if err := parsed.Mobile.validate(); err != nil {
+		return Config{}, fmt.Errorf("%s: %w", filepath.Base(path), err)
+	}
 	return parsed, nil
 }
 
@@ -173,6 +212,15 @@ control:
   # enabled: false
   # Also let programs running inside sessions use it (reserved; not active yet).
   # agents: false
+
+mobile:
+  # Let a paired Android phone list and drive sessions over TLS on your LAN.
+  # Off by default; applies after TauShell restarts. Never listens on all interfaces.
+  # enabled: false
+  # The one local IP address to listen on (required when enabled), for example 192.168.1.20.
+  # interface: ""
+  # TCP port, 1024-65535.
+  # port: 47821
 
 notifications:
   # Windows toast when a session needs your answer or finishes while TauShell is in the background.
