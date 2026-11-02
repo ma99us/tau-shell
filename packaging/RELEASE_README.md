@@ -11,6 +11,11 @@ too.
 1. Download `TauShell-<version>-windows-x64.zip` and extract it anywhere.
 2. Run `taushell.exe`. There is no installer and no admin rights are needed.
 
+**Phone companion (experimental, optional):** `TauShell-Phone-<version>.apk` is an
+Android app for the LAN-only phone server (off by default). It is debug-signed for
+sideloading: allow installing from your file manager, or `adb install -r`, then pair
+from Home > Phone on the PC. Check both downloads against `SHA256SUMS.txt`.
+
 **Requirements:** Windows 10 or later, the Microsoft Edge WebView2 Runtime, and
 PowerShell 7. If PowerShell 7 is missing, TauShell offers a confirmed install;
 if WebView2 is missing, TauShell directs you to Microsoft's official runtime
