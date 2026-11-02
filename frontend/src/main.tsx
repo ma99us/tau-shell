@@ -221,6 +221,10 @@ function App() {
       if (target) openTab(target);
     }, -1);
     runtime.EventsOnMultiple("settings-error", (message: string) => showError("settings", new Error(message + " (using default settings)")), -1);
+    runtime.EventsOnMultiple("control-launch", (request: { id: string; mode: "start" | "restore" | "fresh" }) => {
+      const target = sessionsRef.current.find((session) => session.id === request.id);
+      if (target && !target.runningHere) void launch(target, request.mode);
+    }, -1);
     runtime.EventsOnMultiple("control-send", (request: { id: string; text: string; submit: boolean }) => {
       const target = sessionsRef.current.find((session) => session.id === request.id);
       const refused = target ? controlSend(target, request.text, request.submit) : "the session is gone";
@@ -229,7 +233,7 @@ function App() {
     }, -1);
     runtime.EventsOnMultiple("shutdown-progress", (progress: ShutdownProgress) => setShutdown(progress.phase === "done" ? null : progress), -1);
     app().DialogHostReady().then((pending) => pending.forEach(add)).catch((err) => showError("ui.dialog-host", err));
-    return () => { runtime.EventsOff("dialog-request"); runtime.EventsOff("focus-session"); runtime.EventsOff("settings-error"); runtime.EventsOff("control-send"); runtime.EventsOff("shutdown-progress"); };
+    return () => { runtime.EventsOff("dialog-request"); runtime.EventsOff("focus-session"); runtime.EventsOff("settings-error"); runtime.EventsOff("control-send"); runtime.EventsOff("control-launch"); runtime.EventsOff("shutdown-progress"); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

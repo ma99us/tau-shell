@@ -124,12 +124,15 @@ Usage:
   taushell start <session-id>
   taushell restore <session-id>
   taushell ctl list [--json] [--instance <pid>]
+  taushell ctl wait <session> [--for idle|input|working] [--timeout 10m]
+  taushell ctl send [--insert-only] [--stdin] <session> <text...>
+  taushell ctl start [--restore|--fresh] <session>
 
 Session definitions: <user-home>\.tau_shell\sessions\<session-id>.yaml
 No-argument launch opens the TauShell desktop application.
 The list, start, and restore commands remain available without the desktop UI.
 ctl talks to a running TauShell and needs control.enabled: true in config.yaml.
-ctl exit codes: 0 ok, 1 error, 2 usage, 3 TauShell not running, 4 channel disabled.`)
+ctl exit codes: 0 ok, 1 error, 2 usage, 3 TauShell not running or session not found, 4 channel disabled, 5 refused, 6 wait timed out.`)
 }
 
 func appPaths() (string, string, error) {

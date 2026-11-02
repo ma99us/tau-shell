@@ -109,3 +109,22 @@ func TestWaitMatchesOnlyConfirmedState(t *testing.T) {
 		t.Fatal("unknown state name must be rejected")
 	}
 }
+
+func TestStartLaunchesOnlyStoppedSessions(t *testing.T) {
+	for _, running := range []bool{false, true} {
+		sessions, _, _ := sessionsWith(running)
+		var launched []string
+		sessions.Launch = func(id, mode string) error { launched = append(launched, id+":"+mode); return nil }
+		response := sessions.HandleStart(json.RawMessage(`{"session":"s1","mode":"restore"}`))
+		if running && (response.OK || response.Error.Code != CodeRefused || len(launched) != 0) {
+			t.Fatalf("a running session must be refused: %+v", response)
+		}
+		if !running && (!response.OK || len(launched) != 1 || launched[0] != "s1:restore") {
+			t.Fatalf("a stopped session must launch: %+v %v", response, launched)
+		}
+	}
+	sessions, _, _ := sessionsWith(false)
+	if response := sessions.HandleStart(json.RawMessage(`{"session":"s1","mode":"bogus"}`)); response.OK || response.Error.Code != CodeBadRequest {
+		t.Fatalf("unknown mode: %+v", response)
+	}
+}

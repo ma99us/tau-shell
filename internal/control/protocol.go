@@ -29,7 +29,15 @@ const (
 	OpWait = "wait"
 	// OpSend types text into a session, only when its state is confirmed safe.
 	OpSend = "send"
+	// OpStart launches a stopped session through the window.
+	OpStart = "start"
 )
+
+// StartArgs are the arguments of OpStart. Mode is "start", "restore" or "fresh".
+type StartArgs struct {
+	Session string `json:"session"`
+	Mode    string `json:"mode"`
+}
 
 // MaxWait bounds one wait request; clients repeat it until their own deadline.
 const MaxWait = 8 * time.Second

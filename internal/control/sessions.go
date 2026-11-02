@@ -17,6 +17,8 @@ type Sessions struct {
 	States *agentstate.Registry
 	// Deliver hands text to the UI, which types it through the terminal.
 	Deliver func(sessionID, text string, submit bool) error
+	// Launch asks the window to start or restore a stopped session.
+	Launch func(sessionID, mode string) error
 	// Poll is how often Wait re-reads the state; tests shorten it.
 	Poll time.Duration
 }
@@ -109,6 +111,29 @@ func (sessions Sessions) HandleSend(raw json.RawMessage) Response {
 	}
 	if err := sessions.Deliver(item.ID, args.Text, !args.InsertOnly); err != nil {
 		return Failure(CodeInternal, "the window could not accept the text")
+	}
+	return OK(nil)
+}
+
+// HandleStart hands a stopped session to the window, which launches it the same
+// way the Start, Resume and Start fresh buttons do.
+func (sessions Sessions) HandleStart(raw json.RawMessage) Response {
+	var args StartArgs
+	if err := json.Unmarshal(raw, &args); err != nil || args.Session == "" {
+		return Failure(CodeBadRequest, "start needs a session")
+	}
+	if args.Mode != "start" && args.Mode != "restore" && args.Mode != "fresh" {
+		return Failure(CodeBadRequest, "start mode must be start, restore or fresh")
+	}
+	item, failure := sessions.find(args.Session)
+	if failure != nil {
+		return Response{Error: failure}
+	}
+	if item.RunningHere {
+		return Failure(CodeRefused, "the session is already running")
+	}
+	if err := sessions.Launch(item.ID, args.Mode); err != nil {
+		return Failure(CodeInternal, "the window could not accept the request")
 	}
 	return OK(nil)
 }

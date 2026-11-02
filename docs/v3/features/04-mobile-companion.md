@@ -2,6 +2,13 @@
 
 Status: **future planning**. Rank 4. Sources: V3 ideas #7; Orca mobile companion. Out of Phase 1 scope.
 
+> **Superseded in part (2026-11-02, user decisions).** The ntfy sidecar and the "no relay, LAN only" text below predate these decisions and need rewriting before implementation:
+> - **Transport:** a TauShell-specific Android app that pins an embedded custom certificate (not ntfy, not plain HTTP). The certificate must be generated per installation or pairing, not one shared key inside the APK.
+> - **Reach:** phase 1 is the local LAN only, with no mDNS. A later phase adds a small serverless relay (Cloudflare Developer Platform or AWS Lambda) where TauShell registers itself and the phone talks to the same service. That relay must carry only ciphertext (end-to-end encrypted with pairing keys) and be enabled only after explicit consent.
+> - **Replies:** both preset one-tap answers and free-typed prompts from the phone, through the guarded send (`taushell ctl send` path), re-checked against live state on the PC.
+> - **Install:** sideloaded APK for now. **iOS:** out of scope.
+> See [implementation/04-mobile-companion-plan.md](../implementation/04-mobile-companion-plan.md) for the decision table.
+
 ## Problem
 
 Agents run for a long time. Leaving the desk means missing the moment an agent needs an

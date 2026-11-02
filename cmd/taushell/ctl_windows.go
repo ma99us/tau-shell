@@ -28,7 +28,7 @@ const (
 
 const (
 	ctlTimeout = 5 * time.Second
-	ctlUsage   = "usage: taushell ctl list [--json] [--instance <pid>]\n       taushell ctl wait <session> [--for idle|input|working] [--timeout 10m] [--instance <pid>]\n       taushell ctl send [--insert-only] [--stdin] [--instance <pid>] <session> <text...>"
+	ctlUsage   = "usage: taushell ctl list [--json] [--instance <pid>]\n       taushell ctl wait <session> [--for idle|input|working] [--timeout 10m] [--instance <pid>]\n       taushell ctl start [--restore|--fresh] [--instance <pid>] <session>\n       taushell ctl send [--insert-only] [--stdin] [--instance <pid>] <session> <text...>"
 )
 
 type ctlError struct {
@@ -85,8 +85,42 @@ func runCtlWith(args []string, stdout io.Writer, backend ctlBackend) error {
 		return runCtlWait(args[1:], stdout, backend)
 	case "send":
 		return runCtlSend(args[1:], stdout, backend)
+	case "start":
+		return runCtlStart(args[1:], stdout, backend)
 	}
 	return &ctlError{exitCtlUsage, ctlUsage}
+}
+
+func runCtlStart(args []string, stdout io.Writer, backend ctlBackend) error {
+	flags := flag.NewFlagSet("ctl start", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	restore := flags.Bool("restore", false, "resume the previous conversation")
+	fresh := flags.Bool("fresh", false, "start a fresh conversation")
+	instance := flags.Int("instance", 0, "target instance process ID")
+	if err := flags.Parse(reorderFlags(args)); err != nil || flags.NArg() != 1 || (*restore && *fresh) {
+		return &ctlError{exitCtlUsage, ctlUsage}
+	}
+	mode := "start"
+	if *restore {
+		mode = "restore"
+	} else if *fresh {
+		mode = "fresh"
+	}
+	target, err := pickInstance(backend, *instance)
+	if err != nil {
+		return err
+	}
+	arguments, _ := json.Marshal(control.StartArgs{Session: flags.Arg(0), Mode: mode})
+	response, err := backend.call(target.PipeName, control.Request{Op: control.OpStart, Args: arguments})
+	if err != nil {
+		return fmt.Errorf("start: %w", err)
+	}
+	if !response.OK {
+		return ctlFailure("start", response)
+	}
+	// The window launches it; poll "ctl list" for the running state.
+	_, err = fmt.Fprintln(stdout, "handed to the TauShell window")
+	return err
 }
 
 // ctlFailure maps a refused or missing-session response to its exit code.

@@ -35,6 +35,8 @@ func (handler controlHandler) Handle(_ control.Caller, request control.Request) 
 		return handler.sessions.HandleWait(request.Args)
 	case control.OpSend:
 		return handler.sessions.HandleSend(request.Args)
+	case control.OpStart:
+		return handler.sessions.HandleStart(request.Args)
 	default:
 		return control.Failure(control.CodeUnknownOp, "unknown operation")
 	}
@@ -77,6 +79,10 @@ func (application *App) controlSessions() control.Sessions {
 			return infos, nil
 		},
 		States: application.agentStates(),
+		Launch: func(id, mode string) error {
+			application.emit("control-launch", map[string]any{"id": id, "mode": mode})
+			return nil
+		},
 		Deliver: func(id, text string, submit bool) error {
 			// The window types through xterm so input accounting matches real typing.
 			application.emit("control-send", map[string]any{"id": id, "text": text, "submit": submit})
