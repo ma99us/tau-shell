@@ -5,9 +5,6 @@
 docs\.todo
 /docs/.todo
 /docs/.todo.md
-/docs/docs.zip
-/docs/repository-governance-skills-fat.zip
-/docs/repository-governance-skills.zip
 /conpty.dll
 /OpenConsole.exe
 /cmd/taushell/conpty.dll

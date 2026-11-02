@@ -32,7 +32,8 @@ section-level classification. Do not access excluded notes to complete inventory
 
 ## Governance invariants ("Mike Rules")
 
-- Recent activity is not evidence of truth.
+- Recent activity is not evidence of truth: a document edited daily can be wrong,
+  and one unchanged for a year can be correct.
 - Classify knowledge, not filenames or folders.
 - Knowledge loss is worse than temporary document clutter.
 - Code is evidence of implementation, not unquestionable product authority.

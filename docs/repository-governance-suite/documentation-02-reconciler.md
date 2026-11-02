@@ -64,6 +64,23 @@ redundant live copy.
 KEEP findings need no mutation. ESCALATE findings remain unresolved until the
 relevant human decision or evidence is supplied; do not resolve them by guessing.
 
+Never delete automatically, whatever the confidence: ADRs and other decision
+records, architecture documents, security documentation, and recorded design
+constraints. Archive, supersede, or convert them only with explicit approval.
+
+Freshness suggests a starting action, not a decision: 90+ KEEP; 70-89 KEEP or
+UPDATE; 50-69 UPDATE; 25-49 ESCALATE unless the fix is evident; 0-24 consider
+ARCHIVE, CONVERT, or DELETE after the preservation gate. Evidence overrides the
+default.
+
+Assume AI-generated plans must prove their ongoing value. A completed plan should
+almost never remain active: convert its durable knowledge, then archive or delete
+it under approval.
+
+Where the repository already uses review metadata, update it on reviewed
+documents (for example status, last-reviewed date, and freshness score). Do not
+introduce new header conventions without approval.
+
 ## Structure and AI context hygiene
 
 Use the [structure recipe](documentation-00-repository-structure-recipe.md) as a
@@ -93,8 +110,10 @@ by dropping weak units or assigning unverified perfect scores.
 
 ## Output
 
-- Per-finding APPLIED/SKIPPED/BLOCKED/SUPERSEDED status and evidence.
-- Changed files and action types; preservation and old-to-new mappings.
+- Per-finding APPLIED/SKIPPED/BLOCKED/SUPERSEDED status and evidence, including
+  human decisions applied.
+- Changed files grouped by action (updated, merged, converted, archived, deleted);
+  preservation and old-to-new mappings.
 - Comparable freshness/debt results, denominators, and measurement limitations.
 - Checks actually performed, outcomes, residual conflicts, and approval needs.
 

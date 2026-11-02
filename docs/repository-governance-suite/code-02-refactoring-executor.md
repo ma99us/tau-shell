@@ -54,6 +54,11 @@ Expect legacy accretion, but prove redundancy. Reuse an existing canonical helpe
 before adding a new one. Every abstraction must justify its complexity; this is
 not permission to flatten useful isolation or couple independently evolving code.
 
+Where they fit the codebase, prefer simplicity over cleverness, explicit over
+implicit behaviour, data-driven logic over repeated branching, composition over
+inheritance, shared patterns over one-off implementations, and consistency over
+local optimisation.
+
 ## Prohibited without a separately approved change
 
 - Framework replacement, full rewrites, or large rewrites where targeted fixes exist.
@@ -76,16 +81,21 @@ Verify the actual acceptance criteria, not just compilation or lower line count.
 Compare observable behaviour and protected contracts against the baseline. Explain
 any necessary deviation and stop on unexpected regressions until resolved.
 
+Challenge each result: is it simpler, easier to understand and extend, with fewer
+concepts, code paths, and special cases? If not, reconsider the refactor.
+
 ## Output
 
 Provide a finding-by-finding APPLIED/SKIPPED/BLOCKED/SUPERSEDED summary with:
 
-- Files changed, problems eliminated, duplications removed, and protected behaviour.
+- Files changed, problems eliminated, duplications and abstractions removed, and
+  protected behaviour.
 - Exact checks run, outcomes, baseline failures, and checks not run with reasons.
 - Evidence of reduced code, cognitive load, coupling, or duplication, and of
   improved testability; retain useful boundaries and report measurements only
   when actually measured.
-- Remaining technical debt, residual risks, and separately proposed next refactors.
+- Remaining technical debt, risks introduced or remaining, and separately
+  proposed next refactors.
 - A concise handoff to the [documentation curator](code-03-documentation-curator.md)
   listing verified architectural changes and affected knowledge sources.
 

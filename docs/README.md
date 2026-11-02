@@ -16,6 +16,10 @@
 
 ## Documentation workflow
 
-- [Documentation auditor](documentation-01-auditor.md): read-only audit.
-- [Documentation reconciler](documentation-02-reconciler.md): apply approved audit findings
-  while preserving unique knowledge.
+- [Repository Governance Suite](repository-governance-suite/README.md): canonical
+  architecture and documentation governance prompts (audit, refactor, curate,
+  reconcile) with a shared [usage guide](repository-governance-suite/USAGE-GUIDE.md).
+- [Documentation auditor](repository-governance-suite/documentation-01-auditor.md):
+  read-only audit.
+- [Documentation reconciler](repository-governance-suite/documentation-02-reconciler.md):
+  apply approved audit findings while preserving unique knowledge.

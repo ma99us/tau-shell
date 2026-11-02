@@ -29,9 +29,14 @@ Ask continuously:
 
 - Why does this exist? What requirement, invariant, or operational need does it serve?
 - Is it still needed? What evidence demonstrates reachability or obsolescence?
-- Can it be simplified, unified, or removed without changing semantics?
+- Can it be simplified, unified, made data-driven, replaced by an existing
+  pattern, or removed without changing semantics?
 - Is similar-looking code actually the same concept with the same change cadence?
-- Does this abstraction remove more complexity than it introduces?
+- Does this abstraction remove more complexity than it introduces, or does it only
+  pass data between layers or hide duplication?
+
+Assume the original authors are unavailable: every abstraction, dependency, and
+special case must justify itself from evidence in the repository.
 
 Optimise for maintainability, simplicity, appropriate reuse, consistency,
 predictability, testability, justified performance, clear agent reasoning, and
@@ -44,15 +49,16 @@ contracts and variation points genuinely align.
 | Area | Inspect for | Required caution |
 |---|---|---|
 | Duplication | Repeated business rules, validation, integrations, utilities, state management, UI patterns, and workflows. | Show semantic duplication and the cost of divergence; do not unify coincidental similarity. |
-| Complexity | Large files/classes, long functions, nesting, excessive branching, scattered state, and indirection. | Size is a signal, not a finding; show a concrete reasoning or change hazard. |
-| Architectural drift | Competing solutions, layer/boundary violations, mixed responsibilities, and unclear ownership. | Compare with current approved architecture, not a preferred architecture invented for the audit. |
-| Technical debt | Dead paths, unsupported legacy behaviour, workarounds, deprecated APIs, and unused dependencies. | Check dynamic registration, platform/build variants, compatibility obligations, and external consumers before recommending removal. |
+| Complexity | Large files/classes, long functions, nesting, excessive branching, large switch statements, special cases, feature-flag divergence, scattered state, and indirection. | Size is a signal, not a finding; show a concrete reasoning or change hazard. |
+| Architectural drift | Competing solutions, inconsistent conventions, leaky abstractions, layer/boundary violations, mixed responsibilities, and unclear ownership. | Compare with current approved architecture, not a preferred architecture invented for the audit. |
+| Technical debt | Dead paths, unused files/exports/configuration, unsupported legacy behaviour, workarounds, deprecated APIs, and unused dependencies. | Check dynamic registration, platform/build variants, compatibility obligations, and external consumers before recommending removal. |
 | Dependency health | Cycles, tight/excessive coupling, unnecessary packages, and weak module boundaries. | Distinguish evidence-backed dependency issues from speculative upgrades or substitutions. |
-| AI maintainability | Hidden side effects, implicit contracts, pattern inconsistency, confusing naming, and unclear execution flow. | Describe observable cognitive hazards; do not claim a measured improvement in AI performance without evidence. |
+| Performance | Redundant work, calls, queries, renders, allocations, or expensive transformations. | Recommend only where the cost is known or measured; avoid premature optimisation. |
+| AI maintainability | Hidden side effects, implicit contracts, pattern inconsistency, confusing naming, unclear execution flow, and non-obvious extension points. | An agent should be able to study one feature and implement another with the same conventions. Describe observable hazards; do not claim measured AI gains without evidence. |
 
 Consider error propagation, lifecycle, concurrency, persistence, platform support,
-and public compatibility where relevant to the selected scope. Performance claims
-require measurements. Do not expand an architecture audit into unrelated rewrites.
+and public compatibility where relevant to the selected scope. Do not expand an
+architecture audit into unrelated rewrites.
 
 ## Method
 
@@ -71,8 +77,8 @@ require measurements. Do not expand an architecture audit into unrelated rewrite
 Return one report with `ARCH-*` findings following the guide's handoff contract:
 
 - Architecture findings and risk/confidence assessment.
-- Duplication, complexity, dependency, technical-debt, and AI-maintainability
-  coverage summaries; say "not assessed" where appropriate.
+- Duplication, complexity, dependency, technical-debt, performance, and
+  AI-maintainability coverage summaries; say "not assessed" where appropriate.
 - A remediation plan ordered by impact and risk, with prerequisite finding IDs,
   approval needs, regression checks, and any unresolved design decisions.
 - Coverage limits, unchanged strengths, and residual risks.
