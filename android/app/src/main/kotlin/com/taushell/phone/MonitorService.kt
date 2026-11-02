@@ -73,16 +73,17 @@ class MonitorService : Service() {
                     manager.cancel(2)
                 }
                 val first = lastState.isEmpty()
+                val muted = Store(this).muted
                 val next = HashMap<String, String>()
-                outcome.value.forEachIndexed { index, item ->
+                outcome.value.forEach { item ->
                     // Only confirmed readings count, so a guess never pages anyone.
                     val state = if (item.running && item.activity.confirmed) item.activity.state else "other"
                     next[item.id] = state
                     val before = lastState[item.id]
-                    if (!first && before != null && before != state) {
+                    if (!first && before != null && before != state && item.id !in muted) {
                         when {
-                            state == "input" -> manager.notify(100 + index, notification(item.name, "Needs an answer", ongoing = false, channel = ALERT))
-                            state == "idle" && before == "working" -> manager.notify(100 + index, notification(item.name, "Finished", ongoing = false, channel = ALERT))
+                            state == "input" -> manager.notify(item.id.hashCode(), notification(item.name, "Needs an answer", ongoing = false, channel = ALERT, session = item.id))
+                            state == "idle" && before == "working" -> manager.notify(item.id.hashCode(), notification(item.name, "Finished", ongoing = false, channel = ALERT, session = item.id))
                         }
                     }
                 }
@@ -97,9 +98,11 @@ class MonitorService : Service() {
         manager.createNotificationChannel(NotificationChannel(ALERT, "Session alerts", NotificationManager.IMPORTANCE_HIGH))
     }
 
-    private fun notification(title: String, body: String, ongoing: Boolean, channel: String): Notification {
+    private fun notification(title: String, body: String, ongoing: Boolean, channel: String, session: String? = null): Notification {
+        val request = session?.hashCode() ?: 0
         val open = PendingIntent.getActivity(
-            this, 0, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            this, request,
+            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP).apply { session?.let { putExtra(EXTRA_SESSION, it) } },
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         return Notification.Builder(this, channel)
@@ -115,6 +118,7 @@ class MonitorService : Service() {
     companion object {
         private const val WATCH = "watch"
         private const val ALERT = "alert"
+        const val EXTRA_SESSION = "session"
 
         fun start(context: Context) {
             context.startForegroundService(Intent(context, MonitorService::class.java))

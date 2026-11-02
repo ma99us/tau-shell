@@ -82,6 +82,10 @@ class Store(context: Context) {
         prefs.edit().remove("host").remove("port").remove("deviceId").remove("fingerprint").remove("token").remove("expires").apply()
     }
 
+    var muted: Set<String>
+        get() = prefs.getStringSet("muted", emptySet()) ?: emptySet()
+        set(value) = prefs.edit().putStringSet("muted", value).apply()
+
     var alerts: Boolean
         get() = prefs.getBoolean("alerts", false)
         set(value) = prefs.edit().putBoolean("alerts", value).apply()

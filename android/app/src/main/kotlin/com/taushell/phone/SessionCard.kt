@@ -20,6 +20,8 @@ class SessionCard(
         fun start(item: SessionItem, mode: String, done: (Result<Unit>) -> Unit)
         fun screen(item: SessionItem, done: (Result<List<String>>) -> Unit)
         fun presets(): List<String>
+        fun muted(id: String): Boolean
+        fun setMuted(id: String, value: Boolean)
     }
 
     lateinit var item: SessionItem
@@ -42,6 +44,11 @@ class SessionCard(
         background = context.shape(Theme.bgControl, 8, Theme.border)
     }
     private val screenScroll = HorizontalScrollView(context).apply { addView(screenView) }
+    private val mute = context.button("", false) {
+        actions.setMuted(item.id, !actions.muted(item.id))
+        renderMute()
+    }
+    private fun renderMute() { mute.text = if (actions.muted(item.id)) "Alerts muted (tap to unmute)" else "Mute alerts for this session" }
     private var screenBusy = false
     private var shownPresets: List<String>? = null
     private var replyViews: List<View> = emptyList()
@@ -95,6 +102,7 @@ class SessionCard(
         body.addView(promptRow, lp().apply { topMargin = context.dp(10) })
         body.addView(hint, lp().apply { topMargin = context.dp(6) })
         body.addView(result, lp().apply { topMargin = context.dp(6) })
+        body.addView(mute, lp().apply { topMargin = context.dp(10) })
         addView(body)
     }
 
@@ -118,6 +126,7 @@ class SessionCard(
         )
         icon.textSize = if (icon.text.length > 2) 11f else 15f
 
+        renderMute()
         renderBody()
     }
 
@@ -184,6 +193,9 @@ class SessionCard(
         }
         startRow?.visibility = VISIBLE
     }
+
+    /** Opens the tile, e.g. when its notification is tapped. */
+    fun open() = setExpanded(true)
 
     private fun setExpanded(value: Boolean) {
         expanded = value

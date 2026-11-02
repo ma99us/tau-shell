@@ -42,6 +42,7 @@ class MainActivity : Activity(), SessionCard.Actions {
     private var linkField: android.widget.EditText? = null
     private var nameField: android.widget.EditText? = null
     private var pendingLink: String? = null
+    private var pendingOpen: String? = null
 
     private val poll = object : Runnable {
         override fun run() {
@@ -65,12 +66,17 @@ class MainActivity : Activity(), SessionCard.Actions {
         window.statusBarColor = Theme.bgApp
         window.navigationBarColor = Theme.bgApp
         pendingLink = intent?.dataString
+        pendingOpen = intent?.getStringExtra(MonitorService.EXTRA_SESSION)
         pairing = store.pairing()
         if (pairing != null && pendingLink == null) showHome() else showPairing()
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        intent.getStringExtra(MonitorService.EXTRA_SESSION)?.let {
+            pendingOpen = it
+            if (screen == Screen.HOME) refresh() else if (pairing != null && intent.dataString == null) showHome()
+        }
         intent.dataString?.let {
             pendingLink = it
             if (screen == Screen.PAIR) linkField?.setText(it) else showPairing()
@@ -266,6 +272,7 @@ class MainActivity : Activity(), SessionCard.Actions {
                         container.addView(card, index, lp().apply { bottomMargin = dp(10) })
                     }
                 }
+                pendingOpen?.let { id -> cards[id]?.let { it.open(); pendingOpen = null } }
                 empty?.text = if (items.isEmpty()) "No sessions on this PC yet." else ""
                 empty?.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
             }
@@ -305,6 +312,12 @@ class MainActivity : Activity(), SessionCard.Actions {
     }
 
     override fun presets(): List<String> = store.presets
+
+    override fun muted(id: String) = id in store.muted
+
+    override fun setMuted(id: String, value: Boolean) {
+        store.muted = if (value) store.muted + id else store.muted - id
+    }
 
     // Settings
 
