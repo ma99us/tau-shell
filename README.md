@@ -17,8 +17,8 @@ keeps core session management independent of any one AI provider.
 ## Status
 
 Remote access, phone/mobile integration and web dashboards are not part of
-Phase 1; local attention alerts (taskbar flash and Windows toast) are. The old Bubble Tea TUI has been removed
-and no TUI fallback is planned.
+Phase 1; local attention alerts (taskbar flash and Windows toast) are. The old
+Bubble Tea TUI has been removed and no TUI fallback is planned.
 
 **Implemented**
 
@@ -69,7 +69,7 @@ Verified against a real Copilot log; the packaged window could not be driven.
 ## Using TauShell
 
 ```powershell
-taushell                      # open the desktop app (never auto-starts sessions)
+taushell                      # open Home (auto-resume is opt-in)
 taushell list
 taushell start <session-id>
 taushell restore <session-id>
@@ -136,9 +136,12 @@ in a session YAML. Settings: [schema](docs/v2/18-yaml-schema.md).
 Verified live only with Copilot CLI 1.0.105; Claude Code 2.1.312's plugin
 manifest validates but a live skill listing was not verified.
 
-Install PowerShell 7 and the harness CLI (`claude` or `copilot`) on `PATH`.
-`start` creates a harness session ID and `restore` reuses it. TauShell closes
-the managed PowerShell process when its harness exits.
+First-run setup offers a confirmed PowerShell 7 install. Missing harnesses do
+not block Home; install supported harnesses from the Tools panel or use their
+official vendor pages. The `start` and `restore` CLI commands require the
+selected harness CLI to be available. `start` creates a harness session ID and
+`restore` reuses it. TauShell closes the managed PowerShell process when its
+harness exits.
 
 ## Download
 

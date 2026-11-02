@@ -53,7 +53,13 @@ executable path alongside its version so users can identify which installation
 won PATH resolution; do not silently prefer a newer or separately installed
 copy.
 
-## Initial CLI options observed
+## Historical CLI option snapshot
+
+The versions below record earlier CLI-contract discovery; they are not the
+current support or tested-version matrix. Use the adapter declarations in
+[`internal/tools/tools.go`](../../internal/tools/tools.go) for current ranges,
+and the [engineering handoff](21-engineering-handoff.md) for live-verification
+status.
 
 | Harness | New managed conversation | Resume |
 | --- | --- | --- |

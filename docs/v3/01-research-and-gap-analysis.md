@@ -6,7 +6,7 @@ Status: **future planning**. Nothing here is a current requirement.
 
 ### 1.1 TauShell V3 ideas summary
 
-[`docs/V3_Ideas_Summary (out of scope future).md`](../V3_Ideas_Summary%20(out%20of%20scope%20future).md)
+[`V3_Ideas_Summary (out of scope future).md`](V3_Ideas_Summary%20(out%20of%20scope%20future).md)
 describes TauShell growing from a session manager into a local "AI workspace orchestrator".
 Its themes:
 
@@ -90,7 +90,7 @@ Status values: **Done** exists today. **Partial** exists in part. **Gap** is mis
 | Agent state machine and attention | V3 #6, #8 | **Partial** | Working, quiet, unseen, waiting and failed icons, inferred from screen and title cues (`frontend/src/attention.ts`) |
 | Notifications | Orca | **Partial** | Toast, taskbar flash and click-to-open exist; no inbox, sound, per-session mute or tray icon ([22-doc](../v2/22-local-attention-notifications.md)) |
 | Git awareness (light) | user | **Partial** | `GetGitBranch` shows the branch in the top bar; no dirty or ahead/behind status |
-| Quota and rate-limit awareness | Orca | **Partial** | Research note only ([backlog](../v2/20-mvp-backlog.md#research-copilot-quota-chip-not-started)) |
+| Quota and rate-limit awareness | Orca | **Partial** | A Copilot quota chip is implemented via the user's GitHub CLI sign-in; other provider coverage is absent and the endpoint is undocumented ([backlog](../v2/20-mvp-backlog.md#copilot-quota-chip-done)) |
 | Quick open | Orca | **Partial** | The palette searches commands, prompts and sessions, but not files |
 | Conversation history | Orca | **Partial** | Harness logs are already parsed for usage and model (`SessionUsage.conversations`); no browsing UI |
 | Declarative harness support | V3 plugin SDK, Orca | **Partial** | 5 adapters written in Go; [`23-adding-a-harness.md`](../v2/23-adding-a-harness.md) still requires Go code |

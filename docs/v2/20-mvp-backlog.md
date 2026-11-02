@@ -3,7 +3,7 @@
 ## Phase 1: local Windows desktop GUI (TUI removed)
 
 - Completed migration: the Bubble Tea TUI and its TUI-only dependencies were removed. `list`, `start <session-id>`, and explicit `restore <session-id>` remain available as CLI operations; no TUI fallback is planned.
-- In progress: a Go/Wails WebView2 host, bundled React/xterm.js launcher, local tabs, session creation, tool inventory, session lifecycle bridge, and shutdown confirmation are implemented. A user-authorized, live-credential walkthrough exercised both supported harnesses (Claude Code, GitHub Copilot CLI) through the real hosted terminal on this Windows 10 machine; a clean-environment test without WebView2 will not be performed (user decision); the missing-runtime prompt is accepted as working. See [`docs/v1/08-UI-Design.md`](../v1/08-UI-Design.md) and [`docs/v1/09-UI-Implementation-Plan.md`](../v1/09-UI-Implementation-Plan.md).
+- Implemented: a Go/Wails WebView2 host, bundled React/xterm.js launcher, local tabs, session creation, tool inventory, session lifecycle bridge, and shutdown confirmation. A user-authorized, live-credential walkthrough exercised both supported harnesses (Claude Code, GitHub Copilot CLI) through the real hosted terminal on this Windows 10 machine; a clean-environment test without WebView2 will not be performed (user decision); the missing-runtime prompt is accepted as working. See [`docs/v1/08-UI-Design.md`](../v1/08-UI-Design.md) and [`docs/v1/09-UI-Implementation-Plan.md`](../v1/09-UI-Implementation-Plan.md).
 - Security hardening: the Windows host now cancels top-level WebView2 navigations outside the bundled `http://wails.localhost` origin before they load. Wails' bound-method origin validation remains a separate defense.
 - Session-manager lifecycle coverage is implemented for concurrent independent fake sessions, input/output/resize, process exit, failed restore preserving the resume ID, graceful and forced stop, and cleanup. This does not cover a real hosted xterm or harness.
 - Implemented executable detection, resolved version parsing, minimum/tested-version classification, and per-adapter capability probes (via `--help` option matching) for PowerShell 7 and supported harnesses; Home shows each tool's resolved executable path, version, support classification, and any unmet capability. Optional Node.js/npm and Git for Windows are also detected in the Tools panel; their absence never gates Home. Node reports npm as a required companion. A first-run Setup screen still gates only on missing/unusable PowerShell 7, with a "continue without" escape hatch. Do not silently pin or downgrade.
@@ -37,8 +37,9 @@
 - **Host prerequisite:** registry-detection unit tests cover Phase 1; the
   missing-WebView2 native prompt and official download handoff are deferred to
   a manual Windows Sandbox/VM check (the current machine has WebView2).
-- **Tool discovery/setup** and **session authoring** proceed in parallel with
-  the feasibility gate (decided); they do not depend on the terminal path.
+- Decision retained: tool discovery/setup and session authoring proceeded in
+  parallel with the feasibility gate; neither depended on terminal-path
+  validation.
 - **Tool discovery/setup: done.** `internal/tools` declares minimum/tested
   version ranges and per-adapter capability lists, probes installed versions
   and `--help` output, and `cmd/taushell` wires confirmed winget installs
@@ -59,9 +60,9 @@
   below 22 is below minimum; newer Node/Git versions remain untested until
   tested ranges are established. Missing Node for npm harness installation
   prompts separately for Node and then the harness.
-- **Session authoring:** generate harness-specific editable YAML defaults,
-  preview and validate effective discrete argv before saving, and offer to
-  start after creation.
+- **Session authoring:** harness-specific editable YAML defaults, launch
+  preview, and effective-argument validation are implemented in New Session.
+  An explicit offer to start immediately after creation remains open.
 - **Workspace UX:** verify recent folder suggestions and keyboard-only tab
   navigation/overflow controls in the desktop host, persisted-tab restoration
   across app restarts, and background terminal behavior through the actual

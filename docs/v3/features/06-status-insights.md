@@ -4,10 +4,10 @@ Status: **future planning**. Rank 6. Sources: Orca usage tracking; user decision
 
 ## Problem
 
-TauShell already shows tokens and cost per session and per month from harness logs. It does
-not show **how close the user is to a plan limit** or when it resets, so an agent can stall
-unexpectedly. The top bar shows the git branch but not whether the working tree is dirty or
-out of sync.
+TauShell already shows tokens and cost per session and per month from harness logs, and an
+initial Copilot quota chip is implemented. It does not show quota information for other
+harnesses or whether the working tree is dirty or out of sync, so users may still miss a
+limit or uncommitted changes.
 
 ## User stories
 
@@ -20,10 +20,10 @@ out of sync.
 ## In scope
 
 - **Quota chip** per supported harness: usage against the plan, reset time, warning
-  threshold. Starts from the Copilot research note in the
-  [MVP backlog](../../v2/20-mvp-backlog.md#research-copilot-quota-chip-not-started)
-  (`gh api /copilot_internal/user`, polled about every 15 minutes and on Refresh), then
-  Claude where a reliable source exists.
+  threshold. The Copilot implementation uses `gh api /copilot_internal/user`, polls every
+  five minutes with a five-minute cache, and can be disabled in configuration; see the
+  [MVP backlog](../../v2/20-mvp-backlog.md#copilot-quota-chip-done). Extend to Claude only
+  where a reliable source exists.
 - Clear "unavailable" and "not signed in" states.
 - **Git chip**: branch (exists), dirty marker, ahead/behind counts, refreshed on a light
   poll or on focus.
@@ -66,4 +66,5 @@ out of sync.
 
 ## Docs to update when implemented
 
-`11-security-model.md`, `12-storage-layout.md`, README, backlog (close the research item).
+Keep `11-security-model.md`, `12-storage-layout.md`, README and the backlog current as
+additional providers are implemented; Copilot quota support is already recorded there.
