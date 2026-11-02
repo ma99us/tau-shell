@@ -74,6 +74,8 @@ taushell list
 taushell start <session-id>
 taushell restore <session-id>
 taushell ctl list [--json] [--instance <pid>]   # needs control.enabled: true
+taushell ctl wait <session> [--for idle|input|working] [--timeout 10m]
+taushell ctl send [--insert-only] [--stdin] <session> <text...>   # refused unless the harness state is confirmed
 ```
 
 - Sessions are shown in the same order on Home, in the sidebar and in the tabs.

@@ -4,7 +4,7 @@ import "@xterm/xterm/css/xterm.css";
 import { app, DialogRequest, InstallResult, Session, SessionEvent, ShutdownProgress, SkillsView, SystemStatus, ToolStatus } from "./bridge";
 import "./theme/tokens.css";
 import "./style.css";
-import { Activity, AttentionKind, attentionEdge, hasCueSignal, nextActivity, readHarnessSignal } from "./attention";
+import { Activity, AttentionKind, attentionEdge, hasCueSignal, nextActivity, readDraft, readHarnessSignal, reportedState } from "./attention";
 import { moveId } from "./order";
 import { CommandPalette, PaletteItem } from "./harnessActions";
 import { GearIcon, HomeIcon } from "./harnessIcons";
@@ -14,7 +14,7 @@ import { errorDetails, reportFrontendFailure, isStoppedSessionError } from "./er
 import { AppDialog, ShutdownPopup, RenameDialog } from "./dialogs";
 import { ProjectIcon, sessionColorStyle, SessionMenu, statusLabel, StateIcon } from "./sessionVisuals";
 import { Home, SkillsActions, toolUsable, Setup } from "./home";
-import { terminalInstances, lastInputAt, terminalTitles, echoWindowMs, fitInstances, waitForTerminal, sendToSession, interruptSession, TerminalPane } from "./terminalPane";
+import { terminalInstances, lastInputAt, terminalTitles, echoWindowMs, fitInstances, waitForTerminal, sendToSession, controlSend, interruptSession, TerminalPane } from "./terminalPane";
 import { CreateSession } from "./createSession";
 import { duplicateAndLaunch } from "./sessionActions";
 import { clearPollFailure, shouldReportPollFailure } from "./polling";
@@ -78,6 +78,11 @@ function App() {
         if (signal === undefined && at === undefined) return;
         const old = previous[id] ?? { working: false, input: false, unseen: false };
         const { working, input, unseen } = nextActivity(old, signal, at, now, selectedRef.current === id && watching, hasCueSignal(session.tool));
+        // Go never sees terminal content, only this state and whether a draft is typed.
+        const reported = reportedState(signal, { working, input, unseen });
+        const terminal = terminalInstances.get(id);
+        const hasDraft = reported.state === "idle" && reported.source === "cue" && !!terminal && readDraft(terminal).trim() !== "";
+        app().ReportSessionState(id, reported.state, reported.source, hasDraft).catch((err) => showError("ui.report-state", err));
         if (working && !old.working) workingSince.current.set(id, now);
         const alert = attentionEdge(old, { working, input }, now - (workingSince.current.get(id) ?? now));
         if (alert) alerts.push({ id, kind: alert });
@@ -216,9 +221,15 @@ function App() {
       if (target) openTab(target);
     }, -1);
     runtime.EventsOnMultiple("settings-error", (message: string) => showError("settings", new Error(message + " (using default settings)")), -1);
+    runtime.EventsOnMultiple("control-send", (request: { id: string; text: string; submit: boolean }) => {
+      const target = sessionsRef.current.find((session) => session.id === request.id);
+      const refused = target ? controlSend(target, request.text, request.submit) : "the session is gone";
+      // The reason names no text; the sender sees success once the window has accepted the hand-off.
+      if (refused) showError("control.send", new Error(`A control-channel send was refused: ${refused}.`));
+    }, -1);
     runtime.EventsOnMultiple("shutdown-progress", (progress: ShutdownProgress) => setShutdown(progress.phase === "done" ? null : progress), -1);
     app().DialogHostReady().then((pending) => pending.forEach(add)).catch((err) => showError("ui.dialog-host", err));
-    return () => { runtime.EventsOff("dialog-request"); runtime.EventsOff("focus-session"); runtime.EventsOff("settings-error"); runtime.EventsOff("shutdown-progress"); };
+    return () => { runtime.EventsOff("dialog-request"); runtime.EventsOff("focus-session"); runtime.EventsOff("settings-error"); runtime.EventsOff("control-send"); runtime.EventsOff("shutdown-progress"); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -129,6 +129,31 @@ export function composeInjection(draft: string, text: string, submit: boolean): 
 
 export const hasCueSignal = (tool: string) => tool === "claude-code" || tool === "copilot-cli";
 
+export type ControlSendPlan = { allowed: true } | { allowed: false; reason: string };
+
+// Re-check on the live screen for a send that arrived over the control channel.
+// Go already required a confirmed state; the window refuses again because the
+// screen may have changed in between. Nothing is typed unless this allows it.
+export function controlSendPlan(signal: HarnessSignal, submit: boolean, draft: string): ControlSendPlan {
+  if (signal === undefined) return { allowed: false, reason: "the harness shows no readable state" };
+  if (signal === "input") return { allowed: false, reason: "the harness is waiting for an answer" };
+  if (submit && signal !== "idle") return { allowed: false, reason: "the harness is working" };
+  if (submit && draft.trim()) return { allowed: false, reason: "there is unsent text in the input line" };
+  return { allowed: true };
+}
+
+export type ReportedState = { state: "working" | "input" | "idle" | "unknown"; source: "cue" | "heuristic" };
+
+// What the window tells Go about a session. Only a harness cue is "cue"; output
+// timing is "heuristic" and Go will not let automation act on it. A "working"
+// cue that went stale (no output for staleWorkingMs) is reported as unknown.
+export function reportedState(signal: HarnessSignal, activity: Activity): ReportedState {
+  if (signal === "input") return { state: "input", source: "cue" };
+  if (signal === "idle") return { state: "idle", source: "cue" };
+  if (signal === "working") return activity.working ? { state: "working", source: "cue" } : { state: "unknown", source: "cue" };
+  return { state: activity.working ? "working" : "idle", source: "heuristic" };
+}
+
 // Harness-specific cues only: terminal title for Claude Code, the status/footer
 // row (last two rows, never the whole screen) for Copilot CLI.
 export function readHarnessSignal(tool: string, terminal: Terminal | undefined, title: string): HarnessSignal {

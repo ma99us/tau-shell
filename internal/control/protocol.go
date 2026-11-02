@@ -10,6 +10,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
+
+	"github.com/ma99us/tau-shell/internal/agentstate"
 )
 
 // ProtocolVersion is bumped for incompatible wire changes.
@@ -22,7 +25,42 @@ const maxLineBytes = 1 << 20
 const (
 	OpHello = "hello"
 	OpList  = "list"
+	// OpWait blocks up to MaxWait for a session to reach a confirmed state.
+	OpWait = "wait"
+	// OpSend types text into a session, only when its state is confirmed safe.
+	OpSend = "send"
 )
+
+// MaxWait bounds one wait request; clients repeat it until their own deadline.
+const MaxWait = 8 * time.Second
+
+// MaxSendBytes bounds the text of one send.
+const MaxSendBytes = 16 * 1024
+
+// WaitArgs are the arguments of OpWait. For is "idle", "input" or "working".
+type WaitArgs struct {
+	Session   string `json:"session"`
+	For       string `json:"for"`
+	TimeoutMS int    `json:"timeoutMs"`
+}
+
+// WaitResult says whether the state was reached within this request.
+type WaitResult struct {
+	Matched  bool             `json:"matched"`
+	Activity agentstate.View `json:"activity"`
+}
+
+// SendArgs are the arguments of OpSend. Text is never logged or audited.
+type SendArgs struct {
+	Session    string `json:"session"`
+	Text       string `json:"text"`
+	InsertOnly bool   `json:"insertOnly,omitempty"`
+}
+
+// SessionArg is the part of any session-addressed request the audit trail keeps.
+type SessionArg struct {
+	Session string `json:"session"`
+}
 
 // Error codes returned in Response.Error.Code.
 const (
@@ -31,6 +69,9 @@ const (
 	CodeUnknownOp          = "unknown_op"
 	CodeInternal           = "internal"
 	CodeUnsupportedVersion = "unsupported_version"
+	CodeNotFound           = "not_found"
+	// CodeRefused: the request was valid but the session state does not allow it.
+	CodeRefused = "refused"
 )
 
 // Request is one command from a client.
@@ -64,16 +105,16 @@ type Hello struct {
 }
 
 // SessionInfo is the read-only view of a session returned by list. Activity
-// (working, idle, waiting for input) is not reported yet: it is derived in the
-// UI today, and a reliable shared state is planned work.
+// carries the state and whether it is confirmed (see package agentstate).
 type SessionInfo struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Tool        string `json:"tool"`
-	Status      string `json:"status"`
-	RunningHere bool   `json:"runningHere"`
-	WorkingDir  string `json:"workingDir"`
-	LastError   string `json:"lastError,omitempty"`
+	ID          string          `json:"id"`
+	Name        string          `json:"name"`
+	Tool        string          `json:"tool"`
+	Status      string          `json:"status"`
+	RunningHere bool            `json:"runningHere"`
+	WorkingDir  string          `json:"workingDir"`
+	LastError   string          `json:"lastError,omitempty"`
+	Activity    agentstate.View `json:"activity"`
 }
 
 // Caller describes the connected process. It is a hint for the audit trail,

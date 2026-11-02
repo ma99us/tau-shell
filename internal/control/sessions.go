@@ -1,0 +1,139 @@
+package control
+
+import (
+	"context"
+	"encoding/json"
+	"time"
+	"unicode/utf8"
+
+	"github.com/ma99us/tau-shell/internal/agentstate"
+)
+
+// Sessions serves the session-addressed operations. It holds no terminal
+// content: text passes through Deliver once and is neither stored nor logged.
+type Sessions struct {
+	// List returns sessions without Activity; Sessions fills that in.
+	List   func(context.Context) ([]SessionInfo, error)
+	States *agentstate.Registry
+	// Deliver hands text to the UI, which types it through the terminal.
+	Deliver func(sessionID, text string, submit bool) error
+	// Poll is how often Wait re-reads the state; tests shorten it.
+	Poll time.Duration
+}
+
+func (sessions Sessions) find(id string) (SessionInfo, *Error) {
+	items, err := sessions.List(context.Background())
+	if err != nil {
+		return SessionInfo{}, &Error{Code: CodeInternal, Message: "list sessions failed"}
+	}
+	for _, item := range items {
+		if item.ID == id {
+			item.Activity = sessions.activity(item)
+			return item, nil
+		}
+	}
+	return SessionInfo{}, &Error{Code: CodeNotFound, Message: "no session with that id"}
+}
+
+func (sessions Sessions) activity(item SessionInfo) agentstate.View {
+	if !item.RunningHere {
+		return agentstate.View{State: agentstate.Stopped}
+	}
+	return sessions.States.Get(item.ID)
+}
+
+// HandleList returns all sessions with their activity.
+func (sessions Sessions) HandleList() Response {
+	items, err := sessions.List(context.Background())
+	if err != nil {
+		return Failure(CodeInternal, "list sessions failed")
+	}
+	for index := range items {
+		items[index].Activity = sessions.activity(items[index])
+	}
+	return OK(items)
+}
+
+// HandleWait blocks up to MaxWait until the session is in the wanted state.
+// Idle, input and working only count when confirmed.
+func (sessions Sessions) HandleWait(raw json.RawMessage) Response {
+	var args WaitArgs
+	if err := json.Unmarshal(raw, &args); err != nil || args.Session == "" {
+		return Failure(CodeBadRequest, "wait needs a session")
+	}
+	want := agentstate.State(args.For)
+	if want != agentstate.Idle && want != agentstate.Input && want != agentstate.Working {
+		return Failure(CodeBadRequest, "wait --for must be idle, input or working")
+	}
+	timeout := time.Duration(args.TimeoutMS) * time.Millisecond
+	if timeout <= 0 || timeout > MaxWait {
+		timeout = MaxWait
+	}
+	poll := sessions.Poll
+	if poll <= 0 {
+		poll = 250 * time.Millisecond
+	}
+	deadline := time.Now().Add(timeout)
+	for {
+		item, failure := sessions.find(args.Session)
+		if failure != nil {
+			return Response{Error: failure}
+		}
+		if !item.RunningHere {
+			return Failure(CodeRefused, "the session is not running")
+		}
+		matched := item.Activity.State == want && item.Activity.Confirmed
+		if matched || !time.Now().Before(deadline) {
+			return OK(WaitResult{Matched: matched, Activity: item.Activity})
+		}
+		time.Sleep(poll)
+	}
+}
+
+// HandleSend refuses unless the session is confirmed ready, so a working turn
+// is never interrupted and a permission prompt never receives text.
+func (sessions Sessions) HandleSend(raw json.RawMessage) Response {
+	var args SendArgs
+	if err := json.Unmarshal(raw, &args); err != nil || args.Session == "" || args.Text == "" {
+		return Failure(CodeBadRequest, "send needs a session and text")
+	}
+	if len(args.Text) > MaxSendBytes || !utf8.ValidString(args.Text) {
+		return Failure(CodeBadRequest, "text is too large or not valid UTF-8")
+	}
+	item, failure := sessions.find(args.Session)
+	if failure != nil {
+		return Response{Error: failure}
+	}
+	if reason := Refusal(item, args.InsertOnly); reason != "" {
+		return Failure(CodeRefused, reason)
+	}
+	if err := sessions.Deliver(item.ID, args.Text, !args.InsertOnly); err != nil {
+		return Failure(CodeInternal, "the window could not accept the text")
+	}
+	return OK(nil)
+}
+
+// Refusal returns why text must not be typed into the session, or "".
+// A submitted send needs a confirmed idle harness with an empty input line;
+// an insert-only send also works while the harness is busy, but never while
+// it waits for an answer.
+func Refusal(item SessionInfo, insertOnly bool) string {
+	activity := item.Activity
+	switch {
+	case !item.RunningHere:
+		return "the session is not running"
+	case activity.State == agentstate.Input && activity.Confirmed:
+		return "the harness is waiting for an answer; answer it in the terminal first"
+	case activity.State == agentstate.Unknown || activity.State == agentstate.Stopped || activity.Source != agentstate.Cue:
+		return "the session state is not confirmed (is the TauShell window open?)"
+	case insertOnly:
+		return ""
+	case activity.State == agentstate.Working:
+		return "the harness is working; a running turn is never interrupted"
+	case activity.State != agentstate.Idle || !activity.Confirmed:
+		return "the session is not confirmed idle yet"
+	case activity.HasDraft:
+		return "there is unsent text in the input line"
+	}
+	return ""
+}

@@ -2,7 +2,27 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Terminal } from "@xterm/xterm";
-import { attentionEdge, composeInjection, nextActivity, readHarnessSignal, staleWorkingMs, workingWindowMs } from "../src/attention.ts";
+import { attentionEdge, composeInjection, controlSendPlan, nextActivity, readHarnessSignal, reportedState, staleWorkingMs, workingWindowMs } from "../src/attention.ts";
+
+test("reportedState marks only harness cues as cue and stale working as unknown", () => {
+  const busy = { working: true, input: false, unseen: false };
+  const quiet = { working: false, input: false, unseen: false };
+  assert.deepEqual(reportedState("idle", quiet), { state: "idle", source: "cue" });
+  assert.deepEqual(reportedState("input", quiet), { state: "input", source: "cue" });
+  assert.deepEqual(reportedState("working", busy), { state: "working", source: "cue" });
+  assert.deepEqual(reportedState("working", quiet), { state: "unknown", source: "cue" });
+  assert.deepEqual(reportedState(undefined, busy), { state: "working", source: "heuristic" });
+  assert.deepEqual(reportedState(undefined, quiet), { state: "idle", source: "heuristic" });
+});
+
+test("controlSendPlan refuses unreadable, waiting, busy and drafted screens", () => {
+  assert.equal(controlSendPlan(undefined, false, "").allowed, false);
+  assert.equal(controlSendPlan("input", false, "").allowed, false);
+  assert.equal(controlSendPlan("working", true, "").allowed, false);
+  assert.equal(controlSendPlan("idle", true, "half typed").allowed, false);
+  assert.equal(controlSendPlan("idle", true, "").allowed, true);
+  assert.equal(controlSendPlan("working", false, "draft").allowed, true);
+});
 
 // Minimal xterm buffer: only what the signal reader touches.
 function fakeTerminal(rows: string[]): Terminal {

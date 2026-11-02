@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ma99us/tau-shell/internal/agentstate"
 	"github.com/ma99us/tau-shell/internal/control"
 	"github.com/ma99us/tau-shell/internal/diagnostics"
 	"github.com/ma99us/tau-shell/internal/harness"
@@ -47,6 +48,8 @@ type App struct {
 	controlServer          *control.Server
 	controlMu              sync.Mutex
 	controlAudit           *control.AuditLog
+	states                 *agentstate.Registry
+	statesOnce             sync.Once
 	manager                desktopSessionManager
 	ctx                    context.Context
 	configDirectory        string

@@ -132,6 +132,7 @@ verified. Paths are the current layout and are starting points to confirm, not c
   they exist; for the MVP implement the smallest internal function and note the seam.
 - Tests: reply matrix (waiting, working, ended, unknown session, revoked device, replayed
   message, unknown preset).
+- Status: the guarded send (`control.Sessions.HandleSend`) and confirmed state (`internal/agentstate`) now exist and satisfy "continue" on a confirmed-idle session. Answering a permission prompt ("yes"/"stop") is NOT possible yet: `send` deliberately refuses a waiting prompt. WP7 needs a separate, preset-only "answer" operation that sends a fixed key for a confirmed `input` state; its design is still open.
 
 ### WP8: UI
 - Settings > Phone: enable/disable, interface picker, status of the tool and sidecar,

@@ -3,7 +3,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import { app, HarnessWidgets, Session } from "./bridge";
 import { theme } from "./theme/theme";
-import { composeInjection, readDraft, readHarnessSignal } from "./attention";
+import { composeInjection, controlSendPlan, readDraft, readHarnessSignal } from "./attention";
 import { SessionUsage, formatTokens, formatUSD, hasUsage, usageTooltip } from "./usage";
 import { HarnessToolbar, planSend, sendNotice } from "./harnessActions";
 import { reportFrontendFailure, isStoppedSessionError } from "./errors";
@@ -102,6 +102,19 @@ export function sendToSession(session: Session, text: string, submit: boolean, l
   if (plan === "submit") window.setTimeout(() => terminal.input("\r", true), 150);
   notify(sendNotice(plan, label));
   window.setTimeout(() => terminal.focus(), 160);
+}
+
+// Types text that arrived over the control channel. Returns why it was refused, or "" when typed.
+export function controlSend(session: Session, text: string, submit: boolean): string {
+  const terminal = terminalInstances.get(session.id);
+  if (!terminal || !session.runningHere) return "the session has no open terminal";
+  const plan = controlSendPlan(readHarnessSignal(session.tool, terminal, terminalTitles.get(session.id) ?? ""), submit, readDraft(terminal));
+  if (!plan.allowed) return plan.reason;
+  const injected = composeInjection(readDraft(terminal), text, submit);
+  if (injected.includes("\n")) terminal.paste(injected);
+  else terminal.input(injected, true);
+  if (submit) window.setTimeout(() => terminal.input("\r", true), 150);
+  return "";
 }
 
 export function interruptSession(session: Session, keys: string[]) {

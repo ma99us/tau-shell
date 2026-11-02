@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -203,7 +204,13 @@ func (server *Server) record(caller Caller, request Request, response Response) 
 	if len(op) > 32 {
 		op = op[:32]
 	}
-	server.audit.Add(AuditEntry{Time: time.Now(), PID: caller.PID, Image: caller.Image, Op: op, Outcome: outcome})
+	// Only the session id is read from the arguments; text is never kept.
+	var target SessionArg
+	_ = json.Unmarshal(request.Args, &target)
+	if len(target.Session) > 64 {
+		target.Session = target.Session[:64]
+	}
+	server.audit.Add(AuditEntry{Time: time.Now(), PID: caller.PID, Image: caller.Image, Op: op, Session: target.Session, Outcome: outcome})
 }
 
 // imageName returns only the executable's base name, a hint for humans.

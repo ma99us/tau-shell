@@ -161,11 +161,17 @@ loudly if the name is already taken) and `PIPE_REJECT_REMOTE_CLIENTS`. Clients
 connect with anonymous impersonation and check that the server PID matches the
 pipe name. Programs running as the same user are trusted by design; the caller
 PID and image name are audit hints, not authorization. Messages are bounded
-single JSON lines. The current operations (`hello`, `list`) are read-only and
-return no prompt text or terminal content. Every request is added to an
-in-memory audit trail (time, caller PID and image, operation, outcome) with no
-arguments or content; operation names only reach the diagnostic log. `send`,
-`read` and `wait`, and agent access (`control.agents`), are not implemented.
+single JSON lines. `hello`, `list` and `wait` return no prompt text or terminal
+content (`list` shows each session's state and whether it is confirmed). `send`
+carries text one way into the window, which types it through the terminal only
+if the live screen still shows a safe state; Go refuses first unless the state
+is a fresh harness cue (never while a turn is working, never into a permission
+prompt, never over unsent text). Prefer `--stdin` for sensitive text: command
+lines are visible to other local processes. Every request is added to an
+in-memory audit trail (time, caller PID and image, operation, session id,
+outcome) with no text or content; operation names only reach the diagnostic
+log. `read`, `start`/`stop` and agent access (`control.agents`) are not
+implemented.
 
 ## Diagnostic logging
 
