@@ -5,6 +5,7 @@ import { GearIcon } from "./harnessIcons";
 import { harnesses, harnessIds, harnessShort, isHarness } from "./harnesses";
 import { ProjectIcon, statusLabel } from "./sessionVisuals";
 import { clearPollFailure, shouldReportPollFailure } from "./polling";
+import { ControlAudit } from "./controlAudit";
 
 export function Home({ sessions, loaded, autoResumeAll, onAutoResumeAll, onAutoResume, status, busy, tools, skills, onNew, onRefresh, onHome, onLaunch, onDelete, onDuplicate, onError, dragProps, dropClass, dragId }: {
   skills: SkillsActions;
@@ -105,6 +106,7 @@ export function Home({ sessions, loaded, autoResumeAll, onAutoResumeAll, onAutoR
           <div className="card-top"><ProjectIcon session={session} /><span className={`state-pill ${session.runningHere ? "running" : ""} ${!session.runningHere && session.status === "failed" ? "status-warn-text" : ""}`}>{session.runningHere ? "Running" : statusLabel(session.status)}</span><button className="delete-button" aria-label={`Delete ${session.name}`} title="Delete session" onClick={() => onDelete(session)}>x</button></div>
           <div className="card-title"><h3>{session.name}</h3>{hasUsage(summary?.sessions?.[session.id]) && <span className="card-usage" title="Estimate from harness logs; never reset">{usageText(summary!.sessions![session.id])}</span>}</div><p className="path">{session.workingDir}</p><p className="session-meta">{session.tool}</p>
           {session.lastError && <p className="card-error">{session.lastError}</p>}
+          <div className="card-sizer" aria-hidden="true"><span className="tile-button">Start fresh</span><span className="tile-button">Resume</span><span className="tile-button">Clone</span><span className="check-option"><input type="checkbox" tabIndex={-1} />Auto resume</span></div>
           <div className="card-actions">
             {session.runningHere ? <button className="tile-button" onClick={() => onLaunch(session, "start")}>Open</button> :
               session.hasResumeId ? <><button className="tile-button" disabled={busy} title={session.resumeNote} onClick={() => setFreshSession(session)}>Start fresh</button>{!session.resumeNote && <button className="tile-button" disabled={busy} onClick={() => onLaunch(session, "restore")}>Resume</button>}</> :
@@ -123,6 +125,7 @@ export function Home({ sessions, loaded, autoResumeAll, onAutoResumeAll, onAutoR
       </div></div>
       <SkillsPanel skills={skills} unsupportedNote={skills.view?.unsupported} />
       {toolNoticeBanner(tools)}
+      <ControlAudit onError={onError} />
       <div className="home-footer">
         {appUpdate && <button className="link-button home-update" title="Open the TauShell releases page" onClick={() => void app().OpenReleasePage()}>{appUpdate.tag} available</button>}
         {appVersion && <span className="home-version" title="TauShell version">{appVersion === "dev" ? "dev build" : `v${appVersion.replace(/^v/, "")}`}</span>}

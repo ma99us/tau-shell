@@ -664,15 +664,19 @@ h3 {
 }
 
 .session-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 330px));
-  justify-content: start;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  justify-content: flex-start;
   gap: 13px;
 }
 
 .session-card {
   display: flex;
-  min-width: 0;
+  min-width: 260px;
+  max-width: 100%;
+  /* As wide as the unwrappable bottom toolbar; text inside wraps to that width. */
+  width: min-content;
   flex-direction: column;
   padding: 15px;
   border: 1px solid var(--border);
@@ -758,9 +762,20 @@ h3 {
   line-height: 1.4;
 }
 
+/* Invisible copy of the widest toolbar: gives every tile the same minimal width. */
+.card-sizer {
+  display: flex;
+  gap: 8px;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
 .card-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
   margin-top: auto;
@@ -1068,6 +1083,18 @@ h3 {
 
 .home-quota.warn {
   color: var(--status-warn);
+}
+
+.control-audit .warn {
+  color: var(--status-warn);
+}
+
+.control-audit-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  max-height: 160px;
+  overflow-y: auto;
+  font-size: var(--fs-14);
 }
 
 .home-footer {

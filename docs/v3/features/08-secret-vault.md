@@ -6,7 +6,7 @@ Status: **future planning**. Rank 8. Sources: V3 ideas #3.
 
 Session `environment:` values are plaintext in YAML, which users hand-edit, copy and may
 commit. They are also visible on the process command line today
-([finding 2.1](../02-cross-cutting.md#21-environment-values-are-visible-on-the-process-command-line-phase-1-bug)).
+([finding 2.1](../02-cross-cutting.md#21-environment-values-are-visible-on-the-process-command-line-phase-1-bug-fixed)).
 Many harnesses sign in with OAuth, so the vault mainly helps API-key flows, provider
 overrides and tool tokens that a user wants scoped to one session.
 

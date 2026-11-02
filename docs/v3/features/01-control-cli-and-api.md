@@ -94,11 +94,18 @@ value of letting agents and scripts drive the host.
 - How the CLI finds the running app, including several TauShell windows.
 - What "recent transcript" can be read without keeping scrollback (the terminal has none).
 
+## Decisions
+
+- The CLI drives **existing sessions only**. Creating and deleting sessions stays in the app.
+- Each running TauShell has its **own pipe**; the CLI targets one with `--instance <pid>` and defaults to the newest.
+- `read` returns the **current screen text** (rendered rows), not the raw stream and not scrollback.
+- First slice shipped: `taushell ctl list`, the pipe and the audit trail. `send`, `read` and `wait`
+  follow once feature 02 provides a trustworthy idle state. Plan:
+  [implementation/01-control-cli-plan.md](../implementation/01-control-cli-plan.md).
+
 ## Open questions
 
-- Should the CLI be able to create sessions, or only drive existing ones?
-- One instance or several app windows: which one answers?
-- Does `read` return screen text or the raw stream?
+None blocking. Later: how `wait --for` names states once feature 02 defines them.
 
 ## Docs to update when implemented
 

@@ -92,6 +92,9 @@ the file is missing and never overwrites it. The file is re-read on every alert.
 
 ```yaml
 version: 1
+control:
+  enabled: false       # control pipe for "taushell ctl"; the Home switch edits this line in place
+  agents: false        # reserved: let programs inside sessions use it (not active yet)
 notifications:
   toast: true          # Windows toast while TauShell is in the background
   taskbar_flash: true  # flash the taskbar button; both default to true

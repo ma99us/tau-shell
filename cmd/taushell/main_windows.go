@@ -65,6 +65,10 @@ func runMain() (exitCode int) {
 	if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
 		diagnostics.Error("application command failed", err, "command", command)
 		fmt.Fprintln(os.Stderr, "taushell:", err)
+		var coded *ctlError
+		if errors.As(err, &coded) {
+			return coded.code
+		}
 		return 1
 	}
 	diagnostics.Info("application process completed", "command", command)
@@ -93,6 +97,8 @@ func runCommand(args []string, stdout, stderr io.Writer) error {
 			return fmt.Errorf("list does not accept arguments")
 		}
 		return listSessions(stdout)
+	case "ctl":
+		return runCtl(args[1:], stdout)
 	case "start", "restore":
 		if len(args) != 2 {
 			return fmt.Errorf("%s requires one session ID", args[0])
@@ -117,10 +123,13 @@ Usage:
   taushell list
   taushell start <session-id>
   taushell restore <session-id>
+  taushell ctl list [--json] [--instance <pid>]
 
 Session definitions: <user-home>\.tau_shell\sessions\<session-id>.yaml
 No-argument launch opens the TauShell desktop application.
-The list, start, and restore commands remain available without the desktop UI.`)
+The list, start, and restore commands remain available without the desktop UI.
+ctl talks to a running TauShell and needs control.enabled: true in config.yaml.
+ctl exit codes: 0 ok, 1 error, 2 usage, 3 TauShell not running, 4 channel disabled.`)
 }
 
 func appPaths() (string, string, error) {

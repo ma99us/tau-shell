@@ -36,6 +36,26 @@ func TestSkillsSettings(t *testing.T) {
 	}
 }
 
+func TestControlSettingsDefaultOff(t *testing.T) {
+	path := filepath.Join(t.TempDir(), FileName)
+	config, err := Load(path)
+	if err != nil || config.Control.ChannelEnabled() || config.Control.AgentsEnabled() {
+		t.Fatalf("control must default off: %+v %v", config.Control, err)
+	}
+	if err := os.WriteFile(path, []byte("version: 1\ncontrol:\n  agents: true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if config, err = Load(path); err != nil || config.Control.AgentsEnabled() {
+		t.Fatalf("agents without enabled must stay off: %+v %v", config.Control, err)
+	}
+	if err := os.WriteFile(path, []byte("version: 1\ncontrol:\n  enabled: true\n  agents: true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if config, err = Load(path); err != nil || !config.Control.ChannelEnabled() || !config.Control.AgentsEnabled() {
+		t.Fatalf("flags: %+v %v", config.Control, err)
+	}
+}
+
 func TestLoadDefaultsAndFlags(t *testing.T) {
 	path := filepath.Join(t.TempDir(), FileName)
 	config, err := Load(path)

@@ -21,8 +21,20 @@ type Notifications struct {
 	TaskbarFlash *bool `yaml:"taskbar_flash,omitempty"`
 }
 
+// Control configures the local control channel. Both flags default to off.
+type Control struct {
+	Enabled *bool `yaml:"enabled,omitempty"`
+	Agents  *bool `yaml:"agents,omitempty"`
+}
+
+func (c Control) ChannelEnabled() bool { return c.Enabled != nil && *c.Enabled }
+
+// AgentsEnabled reports whether programs inside sessions may use the channel.
+func (c Control) AgentsEnabled() bool { return c.ChannelEnabled() && c.Agents != nil && *c.Agents }
+
 type Config struct {
 	Version       int           `yaml:"version"`
+	Control       Control       `yaml:"control"`
 	Notifications Notifications `yaml:"notifications"`
 	Usage         Usage         `yaml:"usage"`
 	Quota         Quota         `yaml:"quota"`
@@ -154,6 +166,13 @@ func Load(path string) (Config, error) {
 
 const exampleFile = `# TauShell settings. Edit and save; changes apply to the next alert.
 version: 1
+
+control:
+  # Let "taushell ctl" (run as you, on this PC) read and drive running sessions
+  # through a private pipe. Off by default; applies after TauShell restarts.
+  # enabled: false
+  # Also let programs running inside sessions use it (reserved; not active yet).
+  # agents: false
 
 notifications:
   # Windows toast when a session needs your answer or finishes while TauShell is in the background.

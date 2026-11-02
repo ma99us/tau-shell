@@ -64,4 +64,4 @@ usage and cost ledger, tool actions, terminal compatibility, skills, updates and
 - [02 Cross-cutting rules, findings and spec template](02-cross-cutting.md)
 - [03 Parked and rejected ideas](03-parked-and-rejected.md)
 - [Feature specs](features/)
-- [Implementation plans](implementation/) (ready-to-start work packages; so far feature 04 only)
+- [Implementation plans](implementation/) (ready-to-start work packages: [01 control CLI](implementation/01-control-cli-plan.md), [04 mobile](implementation/04-mobile-companion-plan.md))

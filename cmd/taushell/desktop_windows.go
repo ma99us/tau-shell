@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ma99us/tau-shell/internal/control"
 	"github.com/ma99us/tau-shell/internal/diagnostics"
 	"github.com/ma99us/tau-shell/internal/harness"
 	"github.com/ma99us/tau-shell/internal/quota"
@@ -43,6 +44,9 @@ var frontendAssets embed.FS
 var sessionIDPattern = regexp.MustCompile(`[^a-z0-9]+`)
 
 type App struct {
+	controlServer          *control.Server
+	controlMu              sync.Mutex
+	controlAudit           *control.AuditLog
 	manager                desktopSessionManager
 	ctx                    context.Context
 	configDirectory        string
@@ -182,6 +186,7 @@ func (application *App) startup(ctx context.Context) {
 	application.manager.StartPriceUpdates(ctx)
 	application.startToolUpdateChecks(ctx)
 	application.startSkillChecks(ctx)
+	application.startControl()
 }
 
 func (application *App) publish(event sessionhost.Event) {
@@ -889,6 +894,7 @@ func (application *App) reportForcedShutdowns(ctx context.Context, names []strin
 }
 
 func (application *App) shutdown(ctx context.Context) {
+	application.stopControl()
 	stopCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 	if err := application.manager.Close(stopCtx); err != nil {

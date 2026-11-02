@@ -150,6 +150,23 @@ token and never logs response bodies; failures are logged once without detail
 and the chip is hidden. It is on by default and disabled with
 `quota: { copilot: false }` in `~/.tau_shell/config.yaml`.
 
+## Control channel
+
+Off by default (`control.enabled` in `~/.tau_shell/config.yaml`, read at
+startup; the Home switch opens or closes the pipe at once and rewrites that one
+line in place, keeping comments). When on, each TauShell process serves one named pipe
+`\\.\pipe\taushell-ctl-<user-tag>-<pid>` created with a protected DACL that
+grants only the current user, `FILE_FLAG_FIRST_PIPE_INSTANCE` (startup fails
+loudly if the name is already taken) and `PIPE_REJECT_REMOTE_CLIENTS`. Clients
+connect with anonymous impersonation and check that the server PID matches the
+pipe name. Programs running as the same user are trusted by design; the caller
+PID and image name are audit hints, not authorization. Messages are bounded
+single JSON lines. The current operations (`hello`, `list`) are read-only and
+return no prompt text or terminal content. Every request is added to an
+in-memory audit trail (time, caller PID and image, operation, outcome) with no
+arguments or content; operation names only reach the diagnostic log. `send`,
+`read` and `wait`, and agent access (`control.agents`), are not implemented.
+
 ## Diagnostic logging
 
 The per-run log is stored under the current user's system temp directory and

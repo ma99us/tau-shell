@@ -136,6 +136,20 @@ export type SkillsStatus = {
   warnings?: string[];
 };
 
+export type ControlAuditEntry = {
+  time: string;
+  pid: number;
+  image: string;
+  op: string;
+  session?: string;
+  outcome: string;
+};
+
+export type ControlStatus = {
+  enabled: boolean;
+  audit: ControlAuditEntry[];
+};
+
 export type SkillsView = {
   status: SkillsStatus;
   skills: SkillRow[];
@@ -143,6 +157,8 @@ export type SkillsView = {
 };
 
 type WailsApp = {
+  SetControlEnabled(enabled: boolean): Promise<void>;
+  GetControlStatus(): Promise<ControlStatus>;
   GetSkills(): Promise<SkillsView>;
   CheckSkills(): Promise<SkillsView>;
   UpdateSkills(): Promise<SkillsView>;

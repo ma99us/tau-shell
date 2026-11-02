@@ -73,6 +73,7 @@ taushell                      # open Home (auto-resume is opt-in)
 taushell list
 taushell start <session-id>
 taushell restore <session-id>
+taushell ctl list [--json] [--instance <pid>]   # needs control.enabled: true
 ```
 
 - Sessions are shown in the same order on Home, in the sidebar and in the tabs.
