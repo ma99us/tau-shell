@@ -40,6 +40,20 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install the Android SDK platform
+        shell: pwsh
+        run: |
+          $mgr = Join-Path $env:ANDROID_HOME 'cmdline-tools/latest/bin/sdkmanager.bat'
+          if (-not (Test-Path $mgr)) { throw "sdkmanager not found under $env:ANDROID_HOME" }
+          1..30 | ForEach-Object { 'y' } | & $mgr --licenses | Out-Null
+          & $mgr 'platforms;android-36' 'build-tools;36.0.0'
+          if ($LASTEXITCODE -ne 0) { throw 'sdkmanager failed' }
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -111,9 +125,25 @@ jobs:
           if ($info.ProductVersion -ne $bare) { throw "ProductVersion '$($info.ProductVersion)' != '$bare'" }
           Get-AuthenticodeSignature $exe | Format-List Status, StatusMessage
 
+      - name: Build the Android APK
+        shell: pwsh
+        working-directory: android
+        run: |
+          $bare = $env:VERSION.TrimStart('v')
+          $parts = $bare.Split('-')[0].Split('.')
+          $code = [int]$parts[0] * 10000 + [int]$parts[1] * 100 + [int]$parts[2]
+          ./gradlew.bat --no-daemon :app:testDebugUnitTest :app:assembleDebug "-PappVersion=$bare" "-PappVersionCode=$code"
+          if ($LASTEXITCODE -ne 0) { throw 'Android build failed' }
+          $apk = "../dist/TauShell-Phone-$bare.apk"
+          Copy-Item app/build/outputs/apk/debug/app-debug.apk $apk
+          $hash = (Get-FileHash $apk -Algorithm SHA256).Hash.ToLower()
+          Add-Content -Encoding ascii ../dist/SHA256SUMS.txt "$hash  TauShell-Phone-$bare.apk"
+
       - uses: actions/attest-build-provenance@v2
         with:
-          subject-path: dist/*.zip
+          subject-path: |
+            dist/*.zip
+            dist/*.apk
 
       - name: Publish GitHub release
         shell: pwsh
@@ -126,13 +156,13 @@ jobs:
           if ('${{ github.event_name }}' -eq 'push') {
             gh release view $env:VERSION --json tagName
             if ($LASTEXITCODE -eq 0) {
-              gh release upload $env:VERSION "dist/TauShell-$bare-windows-x64.zip" dist/SHA256SUMS.txt --clobber
+              gh release upload $env:VERSION "dist/TauShell-$bare-windows-x64.zip" "dist/TauShell-Phone-$bare.apk" dist/SHA256SUMS.txt --clobber
               if ($LASTEXITCODE -ne 0) { throw 'gh release upload failed' }
               gh release edit $env:VERSION --prerelease
               if ($LASTEXITCODE -ne 0) { throw 'gh release edit failed' }
               exit 0
             }
           }
-          gh release create $env:VERSION "dist/TauShell-$bare-windows-x64.zip" dist/SHA256SUMS.txt `
+          gh release create $env:VERSION "dist/TauShell-$bare-windows-x64.zip" "dist/TauShell-Phone-$bare.apk" dist/SHA256SUMS.txt `
             --title "TauShell $bare" --notes-file packaging/RELEASE_README.md --generate-notes @flags
           if ($LASTEXITCODE -ne 0) { throw 'gh release create failed' }

@@ -21,8 +21,8 @@ android {
         // TLS 1.3 is only available from Android 10.
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = (findProperty("appVersionCode") as String?)?.toInt() ?: 1
+        versionName = (findProperty("appVersion") as String?) ?: "0.1.0"
     }
 
     signingConfigs {
