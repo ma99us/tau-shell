@@ -130,7 +130,7 @@ class SessionScreen(
         val color = Labels.stateColor(item)
         val working = running && item.activity.confirmed && item.activity.state == "working"
         val waiting = running && item.activity.state == "input" && item.activity.confirmed
-        val answerable = waiting && item.tool == "claude-code"
+        val answerable = waiting && (item.tool == "claude-code" || item.tool == "copilot-cli")
 
         stateText.text = StateClock.headline(item)
         stateText.setTextColor(color)

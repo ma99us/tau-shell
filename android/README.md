@@ -4,7 +4,7 @@ Companion app for the TauShell phone server (LAN only, off by default). It lists
 sessions, shows their state and sends preset or typed prompts through the PC's
 guarded `send` path. It also shows the visible terminal text (off with
 `mobile.screen: false`), raises alerts, and offers Yes/No buttons that answer a Claude
-Code permission prompt (Yes = Enter only when the highlighted choice is Yes, No = Esc;
+Code or Copilot CLI permission prompt (Yes = Enter only when the highlighted choice is the plain Yes, No = Esc;
 other harnesses are not supported). The Home screen lists compact session tiles under a
 fixed header; a tile opens a full-screen session view with fixed top and bottom bars and
 only the terminal text scrolling. Experimental; see

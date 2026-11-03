@@ -152,8 +152,8 @@ func AnswerRefusal(item SessionInfo) string {
 	switch {
 	case !item.RunningHere:
 		return "the session is not running"
-	case item.Tool != "claude-code":
-		return "answering from the phone is only verified for Claude Code"
+	case item.Tool != "claude-code" && item.Tool != "copilot-cli":
+		return "answering from the phone is only verified for Claude Code and Copilot CLI"
 	case item.Activity.State != agentstate.Input || !item.Activity.Confirmed || item.Activity.Source != agentstate.Cue:
 		return "the harness is not confirmed to be waiting for an answer"
 	}

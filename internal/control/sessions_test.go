@@ -140,12 +140,16 @@ func TestAnswerOnlyConfirmedClaudePrompts(t *testing.T) {
 	if r := ask("maybe"); r.OK || r.Error.Code != CodeBadRequest {
 		t.Fatalf("only yes or no: %+v", r)
 	}
-	tool = "copilot-cli"
+	tool = "codex"
 	if r := ask("yes"); r.OK {
 		t.Fatal("an unverified harness must refuse an answer")
 	}
+	tool = "copilot-cli"
+	if r := ask("no"); !r.OK {
+		t.Fatalf("a confirmed Copilot prompt takes an answer: %+v", r)
+	}
 	tool = "claude-code"
-	if r := ask("no"); !r.OK || len(answered) != 1 || answered[0] != "no" {
+	if r := ask("no"); !r.OK || len(answered) != 2 || answered[1] != "no" {
 		t.Fatalf("a confirmed Claude prompt takes an answer: %+v %v", r, answered)
 	}
 }

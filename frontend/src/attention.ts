@@ -59,7 +59,8 @@ const claudePermissionFooter = /\bEnter to confirm\b.*\bEsc to cancel\b|\bEsc to
 export type AnswerPlan = { keys: string[]; reason: "" } | { keys: []; reason: string };
 
 export function answerPlan(tool: string, terminal: Terminal | undefined, title: string, answer: string): AnswerPlan {
-  if (tool !== "claude-code") return { keys: [], reason: "answering from the phone is only verified for Claude Code" };
+  if (tool === "copilot-cli") return copilotAnswerPlan(terminal, title, answer);
+  if (tool !== "claude-code") return { keys: [], reason: "answering from the phone is only verified for Claude Code and Copilot CLI" };
   if (!terminal || readHarnessSignal(tool, terminal, title) !== "input") return { keys: [], reason: "the harness is not waiting for an answer" };
   if (!lastTextRows(terminal, 2).some((row) => claudePermissionFooter.test(row))) return { keys: [], reason: "this prompt is a question or plan; answer it on the PC" };
   if (answer !== "yes") return { keys: ["\u001b"], reason: "" };
@@ -72,6 +73,27 @@ export function answerPlan(tool: string, terminal: Terminal | undefined, title: 
 export function highlightedIsYes(rows: string[]): boolean {
   const marked = rows.find((row) => /^[❯>]\s*/.test(row));
   return !!marked && /^[❯>]\s*(\d+\.\s*)?Yes\b/.test(marked);
+}
+
+// Copilot CLI's permission box (observed on 1.0.105) reads "Do you want to <action>?" with
+// "1. Yes", "2. Yes, and don't ask again ...", "3. No, and tell Copilot ... (Esc to stop)" and
+// the same "enter to select · esc to cancel" footer as its other pickers, so the question and
+// the No row are required too. Rows sit inside a box, so the border is stripped first.
+export function copilotPermission(rows: string[]): { permission: boolean; yesHighlighted: boolean } {
+  const inner = rows.map((row) => row.replace(/^[│|\s]+/, "").replace(/[│|\s]+$/, ""));
+  const permission = inner.some((row) => /^Do you want to\b/.test(row)) && inner.some((row) => /^(?:[❯>]\s*)?\d+\.\s*No\b/.test(row));
+  // Only the plain first "Yes": option 2 grants a standing permission.
+  const yesHighlighted = inner.some((row) => /^[❯>]\s*1\.\s*Yes$/.test(row));
+  return { permission, yesHighlighted };
+}
+
+function copilotAnswerPlan(terminal: Terminal | undefined, title: string, answer: string): AnswerPlan {
+  if (!terminal || readHarnessSignal("copilot-cli", terminal, title) !== "input") return { keys: [], reason: "the harness is not waiting for an answer" };
+  const found = copilotPermission(lastRows(terminal, 24));
+  if (!found.permission) return { keys: [], reason: "this prompt is not a permission request; answer it on the PC" };
+  if (answer !== "yes") return { keys: ["\u001b"], reason: "" };
+  if (!found.yesHighlighted) return { keys: [], reason: "the highlighted choice is not a plain Yes; answer it on the PC" };
+  return { keys: ["\r"], reason: "" };
 }
 
 const copilotWorkingStatus = /^\S{0,2}\s*Working\b.*\besc\b/i;

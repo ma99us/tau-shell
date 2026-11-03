@@ -2,13 +2,28 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Terminal } from "@xterm/xterm";
-import { answerPlan, attentionEdge, composeInjection, controlSendPlan, highlightedIsYes, nextActivity, readHarnessSignal, reportedState, staleWorkingMs, workingWindowMs } from "../src/attention.ts";
+import { answerPlan, attentionEdge, composeInjection, controlSendPlan, copilotPermission, highlightedIsYes, nextActivity, readHarnessSignal, reportedState, staleWorkingMs, workingWindowMs } from "../src/attention.ts";
 
 test("Yes is sent only when the highlighted choice is Yes", () => {
   assert.equal(highlightedIsYes(["Enter to confirm · Esc to cancel", "  Yes, I trust this folder", "❯ No, exit"]), false);
   assert.equal(highlightedIsYes(["❯ 1. Yes", "  2. No"]), true);
   assert.equal(highlightedIsYes(["  1. Yes", "  2. No"]), false);
   assert.deepEqual(answerPlan("copilot-cli", undefined, "", "yes").keys, []);
+});
+
+test("Copilot permission boxes are recognised and Yes needs the plain first choice", () => {
+  const box = (marked: number) => [
+    "│ Do you want to create C:\\tmp\\hello.txt?                       │",
+    `│ ${marked === 1 ? "❯" : " "} 1. Yes                                                  │`,
+    `│ ${marked === 2 ? "❯" : " "} 2. Yes, and don't ask again for file operations         │`,
+    `│ ${marked === 3 ? "❯" : " "} 3. No, and tell Copilot what to do differently (Esc to stop) │`,
+    "│ ↑/↓ to navigate · enter to select · esc to cancel              │",
+  ];
+  assert.deepEqual(copilotPermission(box(1)), { permission: true, yesHighlighted: true });
+  assert.deepEqual(copilotPermission(box(2)), { permission: true, yesHighlighted: false });
+  assert.deepEqual(copilotPermission(box(3)), { permission: true, yesHighlighted: false });
+  // A plain picker with the same footer is not a permission request.
+  assert.equal(copilotPermission(["│ Pick a model │", "│ ❯ 1. Yes-model │", "│ enter to select · esc to cancel │"]).permission, false);
 });
 
 test("reportedState marks only harness cues as cue and stale working as unknown", () => {
