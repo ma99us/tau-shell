@@ -41,6 +41,8 @@ type Preset struct {
 	Submit *bool    `yaml:"submit,omitempty"`
 	// Skill hides the preset unless that skill is available to the session.
 	Skill string `yaml:"skill,omitempty"`
+	// Remote marks presets imported from the skills library, not written locally.
+	Remote bool `yaml:"-"`
 }
 
 // Resolved is a preset ready to send.
@@ -48,6 +50,7 @@ type Resolved struct {
 	Name   string `json:"name"`
 	Text   string `json:"text"`
 	Submit bool   `json:"submit"`
+	Remote bool   `json:"remote,omitempty"`
 	// Unknown lists variables that were left as written.
 	Unknown []string `json:"unknown,omitempty"`
 }
@@ -158,7 +161,7 @@ func Resolve(ctx context.Context, list []Preset, values Context) []Resolved {
 		if preset.Skill != "" && !values.Skills[preset.Skill] {
 			continue
 		}
-		item := Resolved{Name: preset.Name, Submit: preset.Submit == nil || *preset.Submit}
+		item := Resolved{Name: preset.Name, Submit: preset.Submit == nil || *preset.Submit, Remote: preset.Remote}
 		item.Text = variablePattern.ReplaceAllStringFunc(preset.Text, func(match string) string {
 			name := match[1 : len(match)-1]
 			if value, ok := lookup(name); ok {

@@ -33,6 +33,9 @@ const (
 	OpStart = "start"
 	// OpStop asks a running session to stop gracefully (the same path as the Stop button).
 	OpStop = "stop"
+	// OpRead returns the last visible terminal rows of a running session. The text
+	// goes straight to the caller; it is never stored, logged or audited.
+	OpRead = "read"
 )
 
 // StartArgs are the arguments of OpStart. Mode is "start", "restore" or "fresh".

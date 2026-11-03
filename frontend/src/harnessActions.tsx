@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { app, HarnessWidgets, ResolvedPreset, Session } from "./bridge";
 import { hasCueSignal, type HarnessSignal } from "./attention";
 import { QueuePanel, useQueueLength } from "./queuePanel";
@@ -126,8 +126,11 @@ export function HarnessToolbar({ session, peers, widgets, modelSupported, send, 
         {presetError && <div className="toolbar-popover-note error">{presetError}</div>}
         {presets === null && <div className="toolbar-popover-note">Loading...</div>}
         {presets?.length === 0 && !presetError && <div className="toolbar-popover-note">No presets yet.</div>}
-        {presets?.map((preset) => <button role="menuitem" key={preset.name} title={preset.text}
-          onClick={() => { send(preset.text, preset.submit, `"${preset.name}"`); close(); }}>{preset.name}</button>)}
+        {[presets?.filter((preset) => !preset.remote), presets?.filter((preset) => preset.remote)].map((group, index) => group && group.length > 0 && <Fragment key={index}>
+          {index === 1 && presets?.some((preset) => !preset.remote) && <hr />}
+          {group.map((preset) => <button role="menuitem" key={preset.name} title={preset.text}
+            onClick={() => { send(preset.text, preset.submit, `"${preset.name}"`); close(); }}>{preset.name}</button>)}
+        </Fragment>)}
         <hr />
         <button role="menuitem" onClick={() => { app().OpenPresetsFile().catch(onError); close(); }}>Edit presets...</button>
       </>}

@@ -176,6 +176,38 @@ func TestStopOnlyStopsRunningSessions(t *testing.T) {
 	}
 }
 
+func TestAuditEntriesEncodeAsEmptyArray(t *testing.T) {
+	raw, err := json.Marshal(NewAuditLog(10, nil).Entries())
+	if err != nil || string(raw) != "[]" {
+		t.Fatalf("an empty audit log must encode as [] (not null): %s %v", raw, err)
+	}
+}
+
+func TestScreenReadsOnlyRunningSessions(t *testing.T) {
+	for _, running := range []bool{false, true} {
+		sessions, _, _ := sessionsWith(running)
+		var asked int
+		sessions.Screen = func(id string, rows int) ([]string, error) {
+			asked = rows
+			return []string{"", "one", "two", "", ""}, nil
+		}
+		response := sessions.HandleScreen(json.RawMessage(`{"session":"s1","rows":5}`))
+		if !running && (response.OK || response.Error.Code != CodeRefused) {
+			t.Fatalf("a stopped session must be refused: %+v", response)
+		}
+		if running {
+			var result ScreenResult
+			if err := json.Unmarshal(response.Data, &result); err != nil || !response.OK || len(result.Rows) != 3 || asked != MaxScreenRows {
+				t.Fatalf("a running session must return trimmed rows: %+v", response)
+			}
+		}
+	}
+	sessions, _, _ := sessionsWith(true)
+	if response := sessions.HandleScreen(json.RawMessage(`{"session":"s1"}`)); response.OK || response.Error.Code != CodeDisabled {
+		t.Fatalf("no screen hook must report disabled: %+v", response)
+	}
+}
+
 func TestStartLaunchesOnlyStoppedSessions(t *testing.T) {
 	for _, running := range []bool{false, true} {
 		sessions, _, _ := sessionsWith(running)

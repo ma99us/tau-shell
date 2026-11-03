@@ -41,7 +41,10 @@ func (application *App) GetPresets(sessionID string) (resolved []presets.Resolve
 	var source []presets.Preset
 	var available map[string]bool
 	if application.skills != nil {
-		source = application.skills.Presets()
+		source = append([]presets.Preset(nil), application.skills.Presets()...)
+		for index := range source {
+			source[index].Remote = true
+		}
 		available = application.skills.Available(string(config.Tool))
 	}
 	layered := presets.Merge(presets.Merge(source, global), config.Presets)

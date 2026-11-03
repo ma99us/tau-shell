@@ -44,6 +44,8 @@ func (handler controlHandler) Handle(_ control.Caller, request control.Request) 
 		return handler.sessions.HandleStart(request.Args)
 	case control.OpStop:
 		return handler.sessions.HandleStop(request.Args)
+	case control.OpRead:
+		return handler.sessions.HandleScreen(request.Args)
 	default:
 		return control.Failure(control.CodeUnknownOp, "unknown operation")
 	}

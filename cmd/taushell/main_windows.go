@@ -131,6 +131,7 @@ Usage:
   taushell ctl send [--insert-only] [--stdin] <session> <text...>
   taushell ctl start [--restore|--fresh] <session>
   taushell ctl stop <session>
+  taushell ctl read [--rows N] <session>
 
 Session definitions: <user-home>\.tau_shell\sessions\<session-id>.yaml
 No-argument launch opens the TauShell desktop application.

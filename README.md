@@ -78,6 +78,7 @@ taushell ctl wait <session> [--for idle|input|working] [--timeout 10m]
 taushell ctl send [--insert-only] [--stdin] <session> <text...>   # refused unless the harness state is confirmed
 taushell ctl start [--restore|--fresh] <session>
 taushell ctl stop <session>                     # graceful stop, same path as the Stop button
+taushell ctl read [--rows N] <session>          # visible terminal text; needs mobile.screen (default on)
 ```
 
 - Sessions are shown in the same order on Home, in the sidebar and in the tabs.

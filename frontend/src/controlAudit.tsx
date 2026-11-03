@@ -15,7 +15,7 @@ export function ControlAudit({ onError }: { onError: (source: string, error: unk
     app().GetControlStatus().then((status) => {
       if (!active) return;
       setEnabled(status.enabled);
-      setEntries([...status.audit].reverse().slice(0, keepEntries));
+      setEntries([...(status.audit ?? [])].reverse().slice(0, keepEntries));
     }).catch((err) => onError("ui.control-status", err));
     const runtime = window.runtime;
     runtime?.EventsOnMultiple("control-audit", (entry: ControlAuditEntry) => setEntries((current) => addAuditEntry(current, entry)), -1);

@@ -89,6 +89,7 @@ export type ResolvedPreset = {
   name: string;
   text: string;
   submit: boolean;
+  remote?: boolean;
   unknown?: string[];
 };
 

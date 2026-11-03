@@ -75,7 +75,7 @@ export function PhonePane({ onError }: { onError: (source: string, error: unknow
       </div>}
       {!offer && !awaiting && <button className="primary-button" disabled={busy}
         onClick={() => run("ui.phone-pair", async () => setOffer(await app().StartPairing()))}>Add phone</button>}
-      {status && status.audit.length > 0 && <ul className="control-audit-list">{[...status.audit].reverse().slice(0, 20).map((entry, index) => <li key={`${entry.time}-${index}`}>
+      {status && (status.audit?.length ?? 0) > 0 && <ul className="control-audit-list">{[...status.audit].reverse().slice(0, 20).map((entry, index) => <li key={`${entry.time}-${index}`}>
         <span className="muted">{new Date(entry.time).toLocaleTimeString()}</span> {entry.image} {entry.op} <span className={entry.outcome === "ok" ? "" : "warn"}>{entry.outcome}</span>
       </li>)}</ul>}
     </>}

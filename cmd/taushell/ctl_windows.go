@@ -28,7 +28,7 @@ const (
 
 const (
 	ctlTimeout = 5 * time.Second
-	ctlUsage   = "usage: taushell ctl list [--json] [--instance <pid>]\n       taushell ctl wait <session> [--for idle|input|working] [--timeout 10m] [--instance <pid>]\n       taushell ctl start [--restore|--fresh] [--instance <pid>] <session>\n       taushell ctl stop [--instance <pid>] <session>\n       taushell ctl send [--insert-only] [--stdin] [--instance <pid>] <session> <text...>"
+	ctlUsage   = "usage: taushell ctl list [--json] [--instance <pid>]\n       taushell ctl wait <session> [--for idle|input|working] [--timeout 10m] [--instance <pid>]\n       taushell ctl start [--restore|--fresh] [--instance <pid>] <session>\n       taushell ctl stop [--instance <pid>] <session>\n       taushell ctl read [--rows N] [--instance <pid>] <session>\n       taushell ctl send [--insert-only] [--stdin] [--instance <pid>] <session> <text...>"
 )
 
 type ctlError struct {
@@ -89,8 +89,42 @@ func runCtlWith(args []string, stdout io.Writer, backend ctlBackend) error {
 		return runCtlStart(args[1:], stdout, backend)
 	case "stop":
 		return runCtlStop(args[1:], stdout, backend)
+	case "read":
+		return runCtlRead(args[1:], stdout, backend)
 	}
 	return &ctlError{exitCtlUsage, ctlUsage}
+}
+
+func runCtlRead(args []string, stdout io.Writer, backend ctlBackend) error {
+	flags := flag.NewFlagSet("ctl read", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	rows := flags.Int("rows", control.DefaultScreenRows, "number of last rows")
+	instance := flags.Int("instance", 0, "target instance process ID")
+	if err := flags.Parse(reorderFlags(args)); err != nil || flags.NArg() != 1 || *rows <= 0 {
+		return &ctlError{exitCtlUsage, ctlUsage}
+	}
+	target, err := pickInstance(backend, *instance)
+	if err != nil {
+		return err
+	}
+	arguments, _ := json.Marshal(control.ScreenArgs{Session: flags.Arg(0), Rows: *rows})
+	response, err := backend.call(target.PipeName, control.Request{Op: control.OpRead, Args: arguments})
+	if err != nil {
+		return fmt.Errorf("read: %w", err)
+	}
+	if !response.OK {
+		return ctlFailure("read", response)
+	}
+	var result control.ScreenResult
+	if err := json.Unmarshal(response.Data, &result); err != nil {
+		return fmt.Errorf("read: %w", err)
+	}
+	for _, row := range result.Rows {
+		if _, err := fmt.Fprintln(stdout, row); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func runCtlStop(args []string, stdout io.Writer, backend ctlBackend) error {

@@ -67,7 +67,8 @@ func Decode(data []byte, builtin bool) (*Manifest, error) {
 	if err := item.Validate(); err != nil {
 		return nil, err
 	}
-	sum := sha256.Sum256(data)
+	// Hash LF-normalized text so a CRLF checkout (core.autocrlf) trusts the same manifest.
+	sum := sha256.Sum256(bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n")))
 	item.Hash = hex.EncodeToString(sum[:])
 	return &item, nil
 }

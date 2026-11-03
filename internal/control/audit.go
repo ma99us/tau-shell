@@ -50,7 +50,7 @@ func (log *AuditLog) Add(entry AuditEntry) {
 func (log *AuditLog) Entries() []AuditEntry {
 	log.mu.Lock()
 	defer log.mu.Unlock()
-	return append([]AuditEntry(nil), log.entries...)
+	return append([]AuditEntry{}, log.entries...)
 }
 
 // decode unmarshals a successful response's data or returns its error.

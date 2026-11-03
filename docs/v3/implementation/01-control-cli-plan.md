@@ -1,7 +1,7 @@
 # Implementation plan: Control CLI and local API (feature 01)
 
 Spec: [../features/01-control-cli-and-api.md](../features/01-control-cli-and-api.md).
-Status: work packages 1, 2, 3 (start), stop, 5 and 6 shipped (list, wait, guarded send, start, graceful stop, window-reported state). `ctl stop <session>` refuses a session that is not running and runs the same graceful path as the Stop button asynchronously (poll `ctl list`); it is unit tested and not yet exercised live. Read and agent access are open.
+Status: work packages 1, 2, 3 (start), stop, 5 and 6 shipped (list, wait, guarded send, start, graceful stop, window-reported state). `ctl stop <session>` refuses a session that is not running and runs the same graceful path as the Stop button asynchronously (poll `ctl list`); it is unit tested and not yet exercised live. `ctl read [--rows N] <session>` prints the visible terminal rows of a running session; it is the one control op that returns terminal text, is gated by `mobile.screen` (default on), refuses stopped sessions, and the audit log records only the op and session. It was checked live (start, read, stop) in a disposable profile. Agent access is open.
 
 ## Decisions
 

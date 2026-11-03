@@ -240,7 +240,9 @@ func (sessions Sessions) HandleScreen(raw json.RawMessage) Response {
 	if !item.RunningHere {
 		return Failure(CodeRefused, "the session is not running")
 	}
-	rows, err := sessions.Screen(item.ID, args.Rows)
+	// Ask for the whole viewport: a TUI often leaves its last rows blank, and
+	// ClipScreen then keeps the last non-blank rows.
+	rows, err := sessions.Screen(item.ID, MaxScreenRows)
 	if err != nil {
 		return Failure(CodeRefused, err.Error())
 	}

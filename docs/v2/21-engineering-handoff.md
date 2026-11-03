@@ -93,7 +93,22 @@ regression-test plans, see the
     "Enter to select ... Esc to cancel" (questions) and "/plan to preview"
     (plan approval); all captured live. With no cue, tools without cues (GSD, OpenCode, Codex) fall back to output timing; Claude Code and Copilot CLI count as not working instead, so idle redraws cannot repeat "done" alerts
   (output within 400 ms of a keystroke is ignored as echo). "Quiet" is not
-  proof the harness awaits input. Copilot
+  proof the harness awaits input. OpenCode observations (2026-11-03, raw
+  output only, not enough for cues): idle title `OpenCode`; the title becomes
+  `OC | <topic>` after the first prompt and stays, so it cannot signal state;
+  while a reply streams a `⬝`/`■` bar is drawn above the footer, and the
+  reply ends with `· <seconds>s`. The rendered idle/working screens were not
+  captured, so no OpenCode cue is shipped. Live check (2026-11-03, disposable
+  profile, Claude Code, driven with UI Automation and `ctl`): the History
+  drawer lists both conversations of a session (latest badge, id, model,
+  tokens), filters by text, copies the id, disables Resume while the session
+  runs, and choosing an older conversation in the confirm dialog restarted
+  the session on it; `ctl start --restore` resumed the latest one. The Queue
+  menu sent queued prompts one at a time in order once idle, held the rest
+  while the harness worked, removed and cleared items, and audited "queue
+  send". The Queue menu does not exist for a stopped session. Not covered:
+  a queue paused by a draft in the prompt (typing into xterm could not be
+  automated). Copilot
   sends only topic titles, no BEL/OSC 9/777/133.
   Eight frontend unit tests cover pure attention helpers; React component and
   widget lifecycle behavior does not yet have direct component tests.
@@ -581,8 +596,14 @@ CLI). Log parsing stays in named Go readers chosen by plain string. See
 Verified: `go test ./...`, frontend tests and build; characterization and
 golden tests freeze the old adapter behavior; live GSD and OpenCode launch,
 resume and restore; a user manifest loads, is refused until confirmed, then
-passes the trust gate (CLI). Not verified: the Home Confirm button in the live
-UI, Codex live (no signed-in session), and manifests load at startup only.
+passes the trust gate (CLI). Also checked live on 2026-11-03 in a disposable
+profile driven by Windows UI Automation: the Home "Not confirmed" row and
+Confirm button (the session launched afterwards), the error row for an
+invalid manifest, the phone address picker (lists the PC's addresses and writes
+`mobile.interface` to that profile's config), the workspace group Resume and
+Stop (with its confirmation), and `ctl start/read/stop`. Not verified: Codex
+live (no signed-in session), OpenCode and GSD cues, and manifests load at
+startup only.
 
 ## Harness widgets (implemented)
 
