@@ -1,6 +1,10 @@
 # 05 - Project File Drawer
 
-Status: **future planning**. Rank 5. Sources: user decision; Orca file explorer and quick open.
+Status: **first slice built**. Rank 5. Sources: user decision; Orca file explorer and quick open.
+
+**Built:** a **Files** button in the terminal toolbar opens a read-only drawer (`frontend/src/fileDrawer.tsx`) with a lazily loaded tree of the session's working directory, an "all" toggle for `.git`/`node_modules` and similar, file-type icons, a right-click menu (Copy relative name, Copy full name, Open in File Explorer), and a viewer for text files, with Markdown rendered by `frontend/src/markdown.ts`. The renderer builds plain nodes (no HTML is inserted, links show as text and are never followed, images are not loaded). File access goes through `internal/projectfiles`: every path is resolved with symlinks and must stay inside the working directory (`..`, absolute paths and links out of the folder are refused; lists are capped at 2000 entries and reads at 512 KB; binary files are refused). Relative paths always use `/`. Verified by Go and frontend unit tests, `tsc` and the build; the drawer was not clicked through live.
+
+**Not built yet:** drag a file onto the terminal to paste its path (needs the WebView2 spike), file names in quick open, per-harness `@path` syntax, git markers.
 
 ## Problem
 

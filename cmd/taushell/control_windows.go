@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ma99us/tau-shell/internal/agentstate"
@@ -101,6 +102,27 @@ func (application *App) ProvideScreen(request string, rows []string) error {
 	default:
 	}
 	return nil
+}
+
+// SetQueuedPrompts tells the app how many prompts are waiting in the window's queues,
+// so that closing can warn that they are discarded.
+func (application *App) SetQueuedPrompts(count int) {
+	if count < 0 {
+		count = 0
+	}
+	atomic.StoreInt32(&application.queuedPrompts, int32(count))
+}
+
+// RecordQueueSend notes that the queue typed a prompt into a session. It records the
+// session and outcome only, never the prompt text.
+func (application *App) RecordQueueSend(session, outcome string) {
+	diagnostics.Info("queued prompt sent", "session_id", session, "outcome", outcome)
+	application.controlMu.Lock()
+	audit := application.controlAudit
+	application.controlMu.Unlock()
+	if audit != nil {
+		audit.Add(control.AuditEntry{Time: time.Now(), Image: "prompt queue", Op: "queue send", Session: session, Outcome: outcome})
+	}
 }
 
 func (application *App) controlSessions() control.Sessions {

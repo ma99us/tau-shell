@@ -1,6 +1,8 @@
 # 06 - Status Insights (Quota and Git Chips)
 
-Status: **future planning**. Rank 6. Sources: Orca usage tracking; user decision (light git).
+Status: **git chip built; quota chip partial (Copilot only)**. Rank 6. Sources: Orca usage tracking; user decision (light git).
+
+**Built:** the toolbar branch chip now comes from `git status --porcelain=v2 --branch` (`presets.GitStatus`, 4 s limit, `--no-optional-locks`, polled with the existing 5 s toolbar refresh). It shows `branch*` when the tree is dirty and `+N -M` when ahead/behind; with no upstream the counts are omitted and the tooltip says so. A folder that is not a repository shows no chip. Tested by `TestParseGitStatus` and `gitChip.test.ts`. Not clicked through live. **Not built:** Claude quota (no reliable source found yet), per-harness budget fallback, chips on Home.
 
 ## Problem
 

@@ -38,9 +38,9 @@ against the current code.
 |---|---|---|---|
 | 1 | [Control CLI and local API](features/01-control-cli-and-api.md) | Gap | Start gate |
 | 2 | [Reliable agent state and notification inbox](features/02-reliable-state-and-inbox.md) | Partial | none |
-| 3 | [Prompt dispatch (queue and broadcast)](features/03-prompt-dispatch.md) | Gap | 2 (auto-send); 1 (optional) |
+| 3 | [Prompt dispatch (queue and broadcast)](features/03-prompt-dispatch.md) | Partial: queue and broadcast built (Claude Code, Copilot CLI) | 2 (auto-send); 1 (optional) |
 | 4 | [Mobile companion MVP](features/04-mobile-companion.md) | Gap | 1, 2; LAN spikes |
-| 5 | [Project file drawer](features/05-project-file-drawer.md) | Gap | none |
+| 5 | [Project file drawer](features/05-project-file-drawer.md) | Partial | none |
 | 6 | [Status insights (quota and git chips)](features/06-status-insights.md) | Partial | none |
 | 7 | [Conversation history browser](features/07-conversation-history.md) | Partial | none |
 | 8 | [Secret vault](features/08-secret-vault.md) | Gap | Phase 1 env-leak fix |

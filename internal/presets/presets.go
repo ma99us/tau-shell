@@ -199,6 +199,52 @@ func GitBranch(ctx context.Context, dir string) string {
 	return strings.TrimSpace(string(output))
 }
 
+// RepoStatus is a light git summary. Ahead and Behind are -1 when there is no
+// upstream to compare with.
+type RepoStatus struct {
+	Branch string `json:"branch"`
+	Dirty  bool   `json:"dirty"`
+	Ahead  int    `json:"ahead"`
+	Behind int    `json:"behind"`
+}
+
+// GitStatus summarizes the repository at dir. ok is false when dir is not a
+// git working tree or git did not answer within the time limit.
+func GitStatus(ctx context.Context, dir string) (status RepoStatus, ok bool) {
+	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
+	defer cancel()
+	command := exec.CommandContext(ctx, "git", "-C", dir, "--no-optional-locks", "status", "--porcelain=v2", "--branch", "--untracked-files=normal")
+	hideWindow(command)
+	output, err := command.Output()
+	if err != nil {
+		return RepoStatus{}, false
+	}
+	return ParseGitStatus(string(output)), true
+}
+
+// ParseGitStatus reads `git status --porcelain=v2 --branch` output.
+func ParseGitStatus(output string) RepoStatus {
+	status := RepoStatus{Ahead: -1, Behind: -1}
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimRight(line, "\r")
+		switch {
+		case strings.HasPrefix(line, "# branch.head "):
+			status.Branch = strings.TrimPrefix(line, "# branch.head ")
+			if status.Branch == "(detached)" {
+				status.Branch = "detached"
+			}
+		case strings.HasPrefix(line, "# branch.ab "):
+			var ahead, behind int
+			if _, err := fmt.Sscanf(strings.TrimPrefix(line, "# branch.ab "), "+%d -%d", &ahead, &behind); err == nil {
+				status.Ahead, status.Behind = ahead, behind
+			}
+		case line != "" && !strings.HasPrefix(line, "#"):
+			status.Dirty = true
+		}
+	}
+	return status
+}
+
 // EnsureExample creates a commented example file only when none exists.
 func EnsureExample(path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {

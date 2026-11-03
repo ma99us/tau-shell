@@ -63,6 +63,20 @@ func (application *App) GetGitBranch(sessionID string) (string, error) {
 	return presets.GitBranch(context.Background(), config.WorkingDir), nil
 }
 
+// GetGitStatus returns the session repository's branch, dirty flag and
+// ahead/behind counts, or nil when the folder is not a repository.
+func (application *App) GetGitStatus(sessionID string) (*presets.RepoStatus, error) {
+	config, err := session.FindConfig(application.configDirectory, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	status, ok := presets.GitStatus(context.Background(), config.WorkingDir)
+	if !ok {
+		return nil, nil
+	}
+	return &status, nil
+}
+
 // GetSessionModel returns the model the harness last recorded for the
 // session, or "" when it is unknown.
 func (application *App) GetSessionModel(sessionID string) (string, error) {

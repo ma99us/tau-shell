@@ -1,6 +1,8 @@
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { app, HarnessWidgets, ResolvedPreset, Session } from "./bridge";
-import type { HarnessSignal } from "./attention";
+import { hasCueSignal, type HarnessSignal } from "./attention";
+import { QueuePanel, useQueueLength } from "./queuePanel";
+import { Icon } from "./icons";
 
 // What to do with text bound for the harness, given what its own UI is showing.
 //  - "blocked": a permission/selection prompt is open; typed text could answer it.
@@ -65,10 +67,11 @@ export function fuzzyScore(query: string, text: string): number {
   return 100 + gaps;
 }
 
-function ToolbarMenu({ label, title, disabled, onOpen, children }: {
+function ToolbarMenu({ label, title, disabled, up, onOpen, children }: {
   label: ReactNode;
   title: string;
   disabled?: boolean;
+  up?: boolean;
   onOpen?: () => void;
   children: (close: () => void) => ReactNode;
 }) {
@@ -83,24 +86,29 @@ function ToolbarMenu({ label, title, disabled, onOpen, children }: {
     return () => { window.removeEventListener("pointerdown", onPointer, true); window.removeEventListener("keydown", onKey); };
   }, [open]);
   return <div className="toolbar-menu" ref={root}>
-    <button className="text-button terminal-action" aria-haspopup="menu" aria-expanded={open} disabled={disabled} title={title}
+    <button className="text-button terminal-action icon-button" aria-haspopup="menu" aria-expanded={open} disabled={disabled} title={title} aria-label={title}
       onClick={() => { if (!open) onOpen?.(); setOpen(!open); }}>{label}</button>
-    {open && <div className="toolbar-popover" role="menu">{children(() => setOpen(false))}</div>}
+    {open && <div className={`toolbar-popover ${up ? "up" : ""}`} role="menu">{children(() => setOpen(false))}</div>}
   </div>;
 }
 
-export function HarnessToolbar({ session, widgets, modelSupported, send, interrupt, onError }: {
+export function InterruptButton({ interrupt }: { interrupt: () => void }) {
+  return <button className="text-button terminal-action icon-button interrupt-button" title="Interrupt: stop the harness (Esc)" aria-label="Interrupt: stop the harness (Esc)" onClick={interrupt}><Icon name="interrupt" size={14} /></button>;
+}
+
+export function HarnessToolbar({ session, peers, widgets, modelSupported, send, onError }: {
   session: Session;
+  peers: Session[];
   widgets: HarnessWidgets;
   modelSupported: boolean;
   send: SendFn;
-  interrupt: () => void;
   onError: (error: unknown) => void;
 }) {
   const [presets, setPresets] = useState<ResolvedPreset[] | null>(null);
   const [presetError, setPresetError] = useState("");
   const [customModel, setCustomModel] = useState("");
   const [confirmClear, setConfirmClear] = useState(false);
+  const queued = useQueueLength(session.id);
   const loadPresets = () => {
     app().GetPresets(session.id)
       .then((list) => { setPresets(list ?? []); setPresetError(""); })
@@ -113,7 +121,7 @@ export function HarnessToolbar({ session, widgets, modelSupported, send, interru
     close();
   };
   return <div className="harness-actions">
-    <ToolbarMenu label="Prompts" title="Send a saved prompt" onOpen={loadPresets}>
+    <ToolbarMenu label={<Icon name="prompts" />} title="Prompts: send a saved prompt" onOpen={loadPresets}>
       {(close) => <>
         {presetError && <div className="toolbar-popover-note error">{presetError}</div>}
         {presets === null && <div className="toolbar-popover-note">Loading...</div>}
@@ -124,11 +132,14 @@ export function HarnessToolbar({ session, widgets, modelSupported, send, interru
         <button role="menuitem" onClick={() => { app().OpenPresetsFile().catch(onError); close(); }}>Edit presets...</button>
       </>}
     </ToolbarMenu>
-    <ToolbarMenu label="Commands" title="Send a harness slash command">
+    {hasCueSignal(session.tool) && <ToolbarMenu label={<><Icon name="queue" />{queued > 0 && <span className="icon-badge">{queued}</span>}</>} title={queued > 0 ? `Queue (${queued}): prompts to send when the harness is idle` : "Queue: prompts to send when the harness is idle, or queue one for several sessions"} onOpen={loadPresets}>
+      {() => <QueuePanel session={session} peers={peers} presets={presets} />}
+    </ToolbarMenu>}
+    <ToolbarMenu up label={<Icon name="commands" />} title="Commands: send a harness slash command">
       {(close) => widgets.commands.map((command) => <button role="menuitem" key={command.text} title={command.text}
         onClick={() => { send(command.text, true, command.text); close(); }}>{command.label}<small>{command.text}</small></button>)}
     </ToolbarMenu>
-    {modelSupported && <ToolbarMenu label="Model" title="Ask the harness to switch model (sends /model)">
+    {modelSupported && <ToolbarMenu up label={<Icon name="model" />} title="Model: ask the harness to switch model (sends /model)">
       {(close) => <>
         <button role="menuitem" onClick={() => { send("/model", true, "/model"); close(); }}>Open the harness model picker<small>/model</small></button>
         <hr />
@@ -139,10 +150,9 @@ export function HarnessToolbar({ session, widgets, modelSupported, send, interru
         </form>
       </>}
     </ToolbarMenu>}
-    <button className="text-button terminal-action" title="Compact the conversation" onClick={() => send(widgets.compactText, true, widgets.compactText)}>Compact</button>
-        <button className="text-button terminal-action" title="Clear the conversation (asks first)" onClick={() => setConfirmClear(true)}>Clear</button>
-        <button className="text-button terminal-action" title="Interrupt the harness (Esc)" onClick={interrupt}>Interrupt</button>
-        {confirmClear && <div className="modal-backdrop"><div className="modal confirm-modal">
+    <button className="text-button terminal-action icon-button" title="Compact: compact the conversation" aria-label="Compact: compact the conversation" onClick={() => send(widgets.compactText, true, widgets.compactText)}><Icon name="compact" /></button>
+    <button className="text-button terminal-action icon-button" title="Clear: clear the conversation (asks first)" aria-label="Clear: clear the conversation (asks first)" onClick={() => setConfirmClear(true)}><Icon name="clear" /></button>
+        {confirmClear &&  <div className="modal-backdrop"><div className="modal confirm-modal">
           <div className="modal-heading"><div><p className="eyebrow">CLEAR CONVERSATION</p><h2>Clear the current context?</h2></div></div>
           <p className="muted">This sends <strong>{widgets.clearText}</strong> to <strong>{session.name}</strong>. The harness will discard the current conversation context, and it cannot be brought back from within the harness.</p>
           <div className="modal-actions"><button className="secondary-button" autoFocus onClick={() => setConfirmClear(false)}>Cancel</button><button className="danger-button" onClick={() => { setConfirmClear(false); send(widgets.clearText, true, widgets.clearText); }}>Clear context</button></div>

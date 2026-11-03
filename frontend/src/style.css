@@ -1026,6 +1026,7 @@ h3 {
 }
 
 .terminal-view {
+  position: relative;
   display: flex;
   width: 100%;
   height: 100%;
@@ -1040,15 +1041,62 @@ h3 {
   align-items: center;
   gap: 9px;
   padding: 0 13px;
+  overflow: hidden;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-panel);
   color: var(--text-6);
   font-size: var(--fs-15);
+  white-space: nowrap;
+}
+
+.terminal-toolbar button {
+  white-space: nowrap;
+}
+
+.terminal-body {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+}
+
+.side-rail {
+  display: flex;
+  width: 40px;
+  flex: 0 0 40px;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0;
+  border-left: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+}
+
+.side-rail .harness-actions {
+  flex-direction: column;
+}
+
+.side-rail .terminal-action {
+  width: 30px;
+  padding: 0;
+}
+
+.interrupt-button {
+  min-height: 22px;
+  padding: 0 6px;
+  border-color: var(--status-warn-glow);
+  color: var(--status-warn);
+}
+
+.interrupt-button:hover:not(:disabled) {
+  background: var(--status-warn-glow);
+  color: var(--status-warn);
 }
 
 .toolbar-path {
   overflow: hidden;
   min-width: 0;
+  flex: 1 1 auto;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1202,6 +1250,66 @@ h3 {
   gap: 6px;
 }
 
+.icon-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 7px;
+}
+
+.icon-button[aria-pressed="true"] {
+  background: var(--bg-control-hover);
+  color: var(--text-2);
+}
+
+.icon-badge {
+  margin-left: 3px;
+  font-size: var(--fs-12);
+}
+
+.ui-icon {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.file-ico {
+  margin: 0 5px 0 2px;
+  vertical-align: -3px;
+}
+
+.file-menu {
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  min-width: 190px;
+  flex-direction: column;
+  padding: 4px;
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius-5);
+  background: var(--bg-raised);
+  box-shadow: 0 8px 24px var(--shadow-soft);
+}
+
+.file-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: var(--radius-5);
+  background: transparent;
+  color: var(--text-3);
+  font-family: inherit;
+  font-size: var(--fs-12);
+  text-align: left;
+}
+
+.file-menu button:hover {
+  background: var(--bg-control-hover);
+  color: var(--text-2);
+}
+
 .toolbar-menu {
   position: relative;
 }
@@ -1209,8 +1317,8 @@ h3 {
 .toolbar-popover {
   position: absolute;
   z-index: 15;
-  top: calc(100% + 4px);
-  right: 0;
+  top: 0;
+  right: calc(100% + 6px);
   display: flex;
   min-width: 230px;
   max-width: 340px;
@@ -1222,6 +1330,11 @@ h3 {
   border-radius: var(--radius-8);
   background: var(--bg-raised);
   box-shadow: 0 12px 36px var(--shadow-soft);
+}
+
+.toolbar-popover.up {
+  top: auto;
+  bottom: 0;
 }
 
 .toolbar-popover > button {
@@ -1294,6 +1407,220 @@ h3 {
 
 .toolbar-popover-form button:disabled {
   opacity: 0.5;
+}
+
+.queue-panel {
+  display: flex;
+  min-width: 290px;
+  flex-direction: column;
+}
+
+.queue-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 9px;
+  font-size: var(--fs-12);
+}
+
+.queue-position {
+  color: var(--text-10);
+}
+
+.queue-text {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--text-3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queue-remove,
+.queue-link {
+  border: 0;
+  background: transparent;
+  color: var(--text-8);
+  font-size: var(--fs-12);
+}
+
+.queue-link {
+  padding: 4px 9px;
+  text-align: left;
+  text-decoration: underline;
+}
+
+.queue-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+}
+
+.queue-presets button {
+  padding: 3px 8px;
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius-5);
+  background: var(--bg-control-hover);
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}
+
+.queue-target {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  color: var(--text-3);
+  font-size: var(--fs-12);
+}
+
+.queue-target.disabled {
+  opacity: 0.55;
+}
+
+.file-drawer {
+  position: absolute;
+  z-index: 12;
+  top: 0;
+  right: 41px;
+  bottom: 0;
+  display: flex;
+  width: min(360px, 60%);
+  flex-direction: column;
+  border-left: 1px solid var(--border-hover);
+  background: var(--bg-raised);
+  box-shadow: -8px 0 24px var(--shadow-soft);
+  font-size: var(--fs-12);
+}
+
+.file-drawer-head,
+.file-view-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  color: var(--text-3);
+}
+
+.file-view-head span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-tree {
+  min-height: 80px;
+  flex: 1;
+  overflow: auto;
+}
+
+.file-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.file-name {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+  font-family: inherit;
+  font-size: var(--fs-12);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.file-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-ico {
+  flex: 0 0 auto;
+}
+
+.file-name:hover {
+  background: var(--bg-control-hover);
+}
+
+.file-act {
+  padding: 1px 5px;
+  border: 0;
+  border-radius: var(--radius-5);
+  background: transparent;
+  color: var(--text-8);
+  font-size: var(--fs-12);
+}
+
+.file-act:hover {
+  background: var(--bg-control-hover);
+  color: var(--text-2);
+}
+
+.file-view {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: auto;
+  border-top: 1px solid var(--border-hover);
+}
+
+.md {
+  padding: 4px 10px 12px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+
+.md p,
+.md ul,
+.md ol,
+.md blockquote {
+  margin: 6px 0;
+}
+
+.md-heading {
+  margin: 10px 0 4px;
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.md-h1 {
+  font-size: 1.3em;
+}
+
+.md-h2 {
+  font-size: 1.15em;
+}
+
+.md-code {
+  margin: 0;
+  padding: 6px 10px;
+  overflow: auto;
+  background: var(--bg-inset);
+  color: var(--text-3);
+  font-family: ui-monospace, Consolas, monospace;
+  white-space: pre;
+}
+
+.md code {
+  padding: 0 3px;
+  background: var(--bg-inset);
+  font-family: ui-monospace, Consolas, monospace;
+}
+
+.md-link {
+  text-decoration: underline;
 }
 
 .notice-banner {

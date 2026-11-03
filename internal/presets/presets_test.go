@@ -66,6 +66,17 @@ func TestMergeSessionOverridesGlobal(t *testing.T) {
 	}
 }
 
+func TestParseGitStatus(t *testing.T) {
+	clean := ParseGitStatus("# branch.oid abc\n# branch.head main\n# branch.upstream origin/main\n# branch.ab +2 -1\n")
+	if clean.Branch != "main" || clean.Dirty || clean.Ahead != 2 || clean.Behind != 1 {
+		t.Fatalf("unexpected clean status: %+v", clean)
+	}
+	dirty := ParseGitStatus("# branch.head (detached)\r\n1 .M N... 100644 100644 100644 a b file.txt\r\n? new.txt\r\n")
+	if dirty.Branch != "detached" || !dirty.Dirty || dirty.Ahead != -1 || dirty.Behind != -1 {
+		t.Fatalf("unexpected dirty status: %+v", dirty)
+	}
+}
+
 func TestResolveExpandsFiltersAndReportsUnknown(t *testing.T) {
 	no := false
 	dir := t.TempDir()

@@ -17,6 +17,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ma99us/tau-shell/internal/agentstate"
@@ -48,6 +49,7 @@ type App struct {
 	controlServer          *control.Server
 	controlMu              sync.Mutex
 	controlAudit           *control.AuditLog
+	queuedPrompts          int32
 	mobile                 mobileState
 	states                 *agentstate.Registry
 	statesOnce             sync.Once
@@ -790,10 +792,15 @@ func (application *App) confirmShutdown(ctx context.Context) bool {
 		return application.reportForcedShutdowns(ctx, nil)
 	}
 	diagnostics.Info("shutdown confirmation required", "active_session_count", len(active))
+	queued := int(atomic.LoadInt32(&application.queuedPrompts))
+	message := fmt.Sprintf("%d session(s) are running in TauShell. Closing will interrupt them. Stop the sessions and close TauShell?", len(active))
+	if queued > 0 {
+		message = fmt.Sprintf("%d session(s) are running in TauShell and %d queued prompt(s) are waiting. Closing will interrupt the sessions and discard the queue (queued prompts are not saved). Stop the sessions and close TauShell?", len(active), queued)
+	}
 	choice, err := application.messageDialog(ctx, runtime.MessageDialogOptions{
 		Type:          runtime.QuestionDialog,
 		Title:         "Sessions are still running",
-		Message:       fmt.Sprintf("%d session(s) are running in TauShell. Closing will interrupt them. Stop the sessions and close TauShell?", len(active)),
+		Message:       message,
 		Buttons:       []string{"Yes", "No"},
 		DefaultButton: "No",
 		CancelButton:  "No",

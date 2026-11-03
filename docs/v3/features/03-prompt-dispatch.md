@@ -1,6 +1,10 @@
 # 03 - Prompt Dispatch (Queue and Broadcast)
 
-Status: **future planning**. Rank 3. Sources: Orca parallel agents and automations (adapted); user decision.
+Status: **first slice built** (Claude Code and Copilot CLI only). Rank 3. Sources: Orca parallel agents and automations (adapted); user decision.
+
+**Built:** a per-session **Queue** menu in the harness toolbar (`frontend/src/queuePanel.tsx`, scheduler and rules in `frontend/src/promptQueue.ts`, unit tested). A prompt is typed only when the harness shows a confirmed idle cue, the input line is empty, and the previous prompt has been seen working (or a 10 s grace passed). The same menu broadcasts a prompt into the queues of other running sessions and warns when selected sessions share a folder. A stopped session pauses its queue until "Resume queue"; items are never dropped silently. The queue is memory-only (decision: cleared on restart, so a stale prompt never fires); closing TauShell with queued prompts warns and says they are discarded. Each automatic send is logged by session only (`RecordQueueSend`; it appears in the control audit when the control channel is on).
+
+**Not built yet:** side-by-side view, per-day cap, expiry, harnesses without cues (the Queue menu is hidden for them). Verified by unit tests, `go vet` and the frontend build; the desktop menu was not clicked through live.
 
 ## Problem
 

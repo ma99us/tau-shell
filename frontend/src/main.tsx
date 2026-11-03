@@ -14,7 +14,8 @@ import { errorDetails, reportFrontendFailure, isStoppedSessionError } from "./er
 import { AppDialog, ShutdownPopup, RenameDialog } from "./dialogs";
 import { ProjectIcon, sessionColorStyle, SessionMenu, statusLabel, StateIcon } from "./sessionVisuals";
 import { Home, SkillsActions, toolUsable, Setup } from "./home";
-import { terminalInstances, lastInputAt, terminalTitles, echoWindowMs, fitInstances, waitForTerminal, sendToSession, controlSend, interruptSession, TerminalPane } from "./terminalPane";
+import { terminalInstances, lastInputAt, terminalTitles, echoWindowMs, fitInstances, waitForTerminal, sendToSession, controlSend, interruptSession, queueHooks, TerminalPane } from "./terminalPane";
+import { queuedTotal, runQueues, subscribeQueues } from "./promptQueue";
 import { CreateSession } from "./createSession";
 import { duplicateAndLaunch } from "./sessionActions";
 import { clearPollFailure, shouldReportPollFailure } from "./polling";
@@ -244,7 +245,11 @@ function App() {
     }, -1);
     runtime.EventsOnMultiple("shutdown-progress", (progress: ShutdownProgress) => setShutdown(progress.phase === "done" ? null : progress), -1);
     app().DialogHostReady().then((pending) => pending.forEach(add)).catch((err) => showError("ui.dialog-host", err));
-    return () => { runtime.EventsOff("dialog-request"); runtime.EventsOff("focus-session"); runtime.EventsOff("settings-error"); runtime.EventsOff("control-send"); runtime.EventsOff("control-answer"); runtime.EventsOff("control-screen"); runtime.EventsOff("control-launch"); runtime.EventsOff("shutdown-progress"); };
+    // Prompt queues: one scheduler pass a second, and the queued count for the close warning.
+    const queueTimer = window.setInterval(() => runQueues(sessionsRef.current, queueHooks, Date.now()), 1000);
+    const reportQueued = () => app().SetQueuedPrompts(queuedTotal()).catch((err) => console.error("TauShell could not report the prompt queue size.", err));
+    const unsubscribeQueues = subscribeQueues(reportQueued);
+    return () => { window.clearInterval(queueTimer); unsubscribeQueues(); runtime.EventsOff("dialog-request"); runtime.EventsOff("focus-session"); runtime.EventsOff("settings-error"); runtime.EventsOff("control-send"); runtime.EventsOff("control-answer"); runtime.EventsOff("control-screen"); runtime.EventsOff("control-launch"); runtime.EventsOff("shutdown-progress"); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -696,7 +701,7 @@ function App() {
               if (!tab && !session?.runningHere) return null;
               return (
                 <div id={`panel-${id}`} className={`terminal-tab-content ${tab && selected === id ? "" : "hidden"}`} role="tabpanel" aria-labelledby={`tab-${id}`} tabIndex={0} key={id}>
-                  <TerminalPane session={session} visible={Boolean(tab && selected === id)} busy={busy} harness={session ? harnessFor(session) : undefined} onSend={session ? sendFor(session) : undefined} onInterrupt={() => { const harness = session && harnessFor(session); if (session && harness) interruptSession(session, harness.widgets.interruptKeys); }} onLaunch={launch} onError={(failure) => showError("ui.terminal", failure)} />
+                  <TerminalPane session={session} peers={sessions} visible={Boolean(tab && selected === id)} busy={busy} harness={session ? harnessFor(session) : undefined} onSend={session ? sendFor(session) : undefined} onInterrupt={() => { const harness = session && harnessFor(session); if (session && harness) interruptSession(session, harness.widgets.interruptKeys); }} onLaunch={launch} onError={(failure) => showError("ui.terminal", failure)} />
                 </div>
               );
             })}

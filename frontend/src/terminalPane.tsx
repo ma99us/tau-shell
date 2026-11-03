@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
-import { app, HarnessWidgets, Session } from "./bridge";
+import { app, GitStatus, HarnessWidgets, Session } from "./bridge";
+import { gitLabel, gitTooltip } from "./gitChip";
+import { Icon } from "./icons";
 import { theme } from "./theme/theme";
 import { composeInjection, controlSendPlan, readDraft, readHarnessSignal } from "./attention";
 import { SessionUsage, formatTokens, formatUSD, hasUsage, usageTooltip } from "./usage";
-import { HarnessToolbar, planSend, sendNotice } from "./harnessActions";
+import { HarnessToolbar, InterruptButton, planSend, sendNotice } from "./harnessActions";
+import type { QueueHooks } from "./promptQueue";
+import { FileDrawer } from "./fileDrawer";
 import { reportFrontendFailure, isStoppedSessionError } from "./errors";
 import { Sep, statusLabel } from "./sessionVisuals";
 import { clearPollFailure, shouldReportPollFailure } from "./polling";
@@ -117,6 +121,15 @@ export function controlSend(session: Session, text: string, submit: boolean): st
   return "";
 }
 
+// How the prompt queue reads and drives the live terminals. controlSend re-checks the screen
+// itself, so a send is refused when the harness changed state since the scheduler looked.
+export const queueHooks: QueueHooks = {
+  signalOf: (session) => readHarnessSignal(session.tool, terminalInstances.get(session.id), terminalTitles.get(session.id) ?? ""),
+  draftOf: (session) => { const terminal = terminalInstances.get(session.id); return terminal ? readDraft(terminal) : ""; },
+  send: (session, text) => controlSend(session as Session, text, true),
+  sent: (session) => { app().RecordQueueSend(session.id, "sent").catch((error) => console.error("TauShell could not record a queued send.", error)); },
+};
+
 export function interruptSession(session: Session, keys: string[]) {
   const terminal = terminalInstances.get(session.id);
   if (!terminal || !session.runningHere) return;
@@ -125,8 +138,9 @@ export function interruptSession(session: Session, keys: string[]) {
   terminal.focus();
 }
 
-export function TerminalPane({ session, visible, busy, harness, onSend, onInterrupt, onLaunch, onError }: {
+export function TerminalPane({ session, peers, visible, busy, harness, onSend, onInterrupt, onLaunch, onError }: {
   session?: Session;
+  peers?: Session[];
   visible: boolean;
   busy: boolean;
   harness?: { widgets: HarnessWidgets; modelSupported: boolean };
@@ -138,9 +152,10 @@ export function TerminalPane({ session, visible, busy, harness, onSend, onInterr
   const container = useRef<HTMLDivElement>(null);
   const runningRef = useRef(session?.runningHere ?? false);
   runningRef.current = session?.runningHere ?? false;
-  const [branch, setBranch] = useState("");
+  const [git, setGit] = useState<GitStatus | null>(null);
   const [model, setModel] = useState("");
   const [usage, setUsage] = useState<SessionUsage | null>(null);
+  const [filesOpen, setFilesOpen] = useState(false);
   const pollFailures = useRef(new Set<string>());
   const sessionId = session?.id;
   useEffect(() => {
@@ -151,7 +166,7 @@ export function TerminalPane({ session, visible, busy, harness, onSend, onInterr
       if (loading) return;
       loading = true;
       const requests = await Promise.allSettled([
-        app().GetGitBranch(sessionId),
+        app().GetGitStatus(sessionId),
         app().GetSessionModel(sessionId),
         app().GetSessionUsage(sessionId),
       ]);
@@ -160,7 +175,7 @@ export function TerminalPane({ session, visible, busy, harness, onSend, onInterr
         const pollKey = (field: string) => `${sessionId}:${field}`;
         if (branchResult.status === "fulfilled") {
           clearPollFailure(pollFailures.current, pollKey("branch"));
-          setBranch(branchResult.value);
+          setGit(branchResult.value);
         } else if (shouldReportPollFailure(pollFailures.current, pollKey("branch"))) {
           onError(new Error(`Branch refresh failed: ${String(branchResult.reason)}`, { cause: branchResult.reason }));
         }
@@ -271,5 +286,5 @@ export function TerminalPane({ session, visible, busy, harness, onSend, onInterr
     return () => window.clearTimeout(timer);
   }, [visible, session?.id, session?.runningHere]);
   if (!session) return <div className="terminal-missing">Session configuration is unavailable.</div>;
-  return <div className="terminal-view"><div className="terminal-toolbar"><span className={`status-dot ${session.runningHere ? "online" : ""}`} />{session.tool}<Sep /><span className="toolbar-path">{session.workingDir}</span>{branch && <><Sep /><span className="toolbar-branch">{branch}</span></>}{model && <><Sep /><span className="toolbar-model" title="Model last recorded by the harness">{model}</span></>}{hasUsage(usage?.total) && <><Sep /><span className="toolbar-usage" title={usageTooltip(usage!)}>{formatTokens(usage!.total.tokens)}</span>{(usage!.total.usd > 0 || usage!.total.unpriced) && <><Sep /><span className="toolbar-usage" title={usageTooltip(usage!)}>{formatUSD(usage!.total)}</span></>}</>}<span className={`terminal-status ${!session.runningHere && session.status === "failed" ? "status-warn-text" : ""}`}>{session.runningHere ? "" : statusLabel(session.status) || "Not started"}</span>{!session.runningHere && (session.hasResumeId && session.resumeNote ? <button className="secondary-button terminal-action" disabled={busy} title={session.resumeNote} onClick={() => onLaunch(session, "fresh")}>Start fresh</button> : <button className="primary-button terminal-action" disabled={busy} onClick={() => onLaunch(session, session.hasResumeId ? "restore" : "start")}>{session.hasResumeId ? "Resume" : "Start"}</button>)}{harness && onSend && <HarnessToolbar session={session} widgets={harness.widgets} modelSupported={harness.modelSupported} send={onSend} interrupt={onInterrupt} onError={onError} />}</div><div className="terminal-container" ref={container} /></div>;
+  return <div className="terminal-view"><div className="terminal-toolbar"><span className={`status-dot ${session.runningHere ? "online" : ""}`} />{session.tool}{harness && onSend && <InterruptButton interrupt={onInterrupt} />}<Sep /><span className="toolbar-path">{session.workingDir}</span>{git?.branch && <><Sep /><span className="toolbar-branch" title={gitTooltip(git)}>{gitLabel(git)}</span></>}{model && <><Sep /><span className="toolbar-model" title="Model last recorded by the harness">{model}</span></>}{hasUsage(usage?.total) && <><Sep /><span className="toolbar-usage" title={usageTooltip(usage!)}>{formatTokens(usage!.total.tokens)}</span>{(usage!.total.usd > 0 || usage!.total.unpriced) && <><Sep /><span className="toolbar-usage" title={usageTooltip(usage!)}>{formatUSD(usage!.total)}</span></>}</>}<span className={`terminal-status ${!session.runningHere && session.status === "failed" ? "status-warn-text" : ""}`}>{session.runningHere ? "" : statusLabel(session.status) || "Not started"}</span>{!session.runningHere && (session.hasResumeId && session.resumeNote ? <button className="secondary-button terminal-action" disabled={busy} title={session.resumeNote} onClick={() => onLaunch(session, "fresh")}>Start fresh</button> : <button className="primary-button terminal-action" disabled={busy} onClick={() => onLaunch(session, session.hasResumeId ? "restore" : "start")}>{session.hasResumeId ? "Resume" : "Start"}</button>)}</div><div className="terminal-body"><div className="terminal-container" ref={container} /><div className="side-rail"><button className="text-button terminal-action icon-button" aria-pressed={filesOpen} title="Files: browse the project files (read-only)" aria-label="Files: browse the project files (read-only)" onClick={() => setFilesOpen(!filesOpen)}><Icon name="files" /></button>{harness && onSend && <HarnessToolbar session={session} peers={peers ?? []} widgets={harness.widgets} modelSupported={harness.modelSupported} send={onSend} onError={onError} />}</div>{filesOpen && <FileDrawer session={session} onClose={() => setFilesOpen(false)} onError={onError} />}</div></div>;
 }
