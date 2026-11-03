@@ -101,7 +101,8 @@ func (item carried) record() Record {
 // IngestFile counts the usage appended to one log file since it was last read.
 func (ledger *Ledger) IngestFile(sessionID string, tool session.Harness, harnessSessionID, path string) error {
 	parse := LineParser(tool)
-	if parse == nil && tool != session.Codex {
+	codexReader := Reader(tool) == "codex-rollout"
+	if parse == nil && !codexReader {
 		return nil
 	}
 	ledger.mu.Lock()
@@ -128,7 +129,7 @@ func (ledger *Ledger) IngestFile(sessionID string, tool session.Harness, harness
 		return nil
 	}
 
-	if tool == session.Codex {
+	if codexReader {
 		parse = newCodexParser(codexModelBefore(path, offset)).parse
 	}
 	var previous *carried

@@ -5,13 +5,13 @@ package main
 import (
 	"context"
 	"errors"
-	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/ma99us/tau-shell/internal/appconfig"
 	"github.com/ma99us/tau-shell/internal/diagnostics"
 	"github.com/ma99us/tau-shell/internal/harness"
+	"github.com/ma99us/tau-shell/internal/harness/manifest"
 	"github.com/ma99us/tau-shell/internal/session"
 	"github.com/ma99us/tau-shell/internal/sessionhost"
 	"github.com/ma99us/tau-shell/internal/skills"
@@ -22,18 +22,15 @@ const skillCheckInterval = 24 * time.Hour
 // personalSkillDirs lists the user's own skill folders per harness; skills
 // found there win over TauShell's copies.
 func personalSkillDirs() map[string][]string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil
+	dirs := map[string][]string{}
+	for _, item := range manifest.All() {
+		for _, template := range item.Skills.PersonalDirs {
+			if path, err := manifest.ExpandPath(template, ""); err == nil {
+				dirs[item.ID] = append(dirs[item.ID], path)
+			}
+		}
 	}
-	claude := filepath.Join(home, ".claude")
-	if override := os.Getenv("CLAUDE_CONFIG_DIR"); override != "" {
-		claude = override
-	}
-	return map[string][]string{
-		string(session.ClaudeCode): {filepath.Join(claude, "skills")},
-		string(session.CopilotCLI): {filepath.Join(home, ".copilot", "skills"), filepath.Join(home, ".agents", "skills")},
-	}
+	return dirs
 }
 
 // initSkills opens the skill library. A broken config.yaml leaves skills off
@@ -111,7 +108,11 @@ func (application *App) skillsView(ctx context.Context) SkillsView {
 	}
 	view := SkillsView{Status: application.skills.Status(), Skills: []SkillRow{}}
 	index := map[string]int{}
-	for _, tool := range []session.Harness{session.ClaudeCode, session.CopilotCLI} {
+	for _, item := range manifest.All() {
+		if item.Skills.PluginDirOption == "" {
+			continue
+		}
+		tool := session.Harness(item.ID)
 		for _, entry := range application.skills.List(string(tool)) {
 			position, seen := index[entry.Name]
 			if !seen {
@@ -127,7 +128,7 @@ func (application *App) skillsView(ctx context.Context) SkillsView {
 		if err != nil {
 			continue
 		}
-		if executable, err := adapter.FindExecutable(); err == nil && !harness.SupportsPluginDir(ctx, executable) {
+		if executable, err := adapter.FindExecutable(); err == nil && !harness.SupportsPluginDir(ctx, executable, item.Skills.PluginDirOption) {
 			view.Unsupported = append(view.Unsupported, string(tool))
 		}
 	}

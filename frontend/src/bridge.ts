@@ -15,7 +15,7 @@ export type CopilotQuota = {
   overagesPermitted: boolean;
   canProject: boolean;
 };
-import type { HarnessId } from "./harnesses";
+import type { HarnessId, HarnessInfo, HarnessLoadError } from "./harnesses.ts";
 import type { WorkspaceGroup } from "./workspaces";
 
 export type Session = {
@@ -163,12 +163,15 @@ export type PhoneDevice = { id: string; name: string; fingerprint: string; creat
 
 export type MobileStatus = {
   enabled: boolean;
+  interface?: string;
   address?: string;
   pairing: "idle" | "open" | "awaiting-approval";
   pendingName?: string;
   devices: PhoneDevice[];
   audit: ControlAuditEntry[];
 };
+
+export type MobileInterface = { name: string; address: string };
 
 export type PairingOffer = { host: string; port: number; fingerprint: string; code: string; expiresAt: string; link: string; qr: string };
 
@@ -183,6 +186,8 @@ type WailsApp = {
   GetControlStatus(): Promise<ControlStatus>;
   SetMobileEnabled(enabled: boolean): Promise<void>;
   GetMobileStatus(): Promise<MobileStatus>;
+  GetMobileInterfaces(): Promise<MobileInterface[]>;
+  SetMobileInterface(address: string): Promise<void>;
   StartPairing(): Promise<PairingOffer>;
   CancelPairing(): Promise<void>;
   DecidePairing(approve: boolean): Promise<void>;
@@ -202,6 +207,8 @@ type WailsApp = {
   LogTerminalMouseTrackingMode(id: string, mode: "none" | "x10" | "vt200" | "drag" | "any"): Promise<void>;
   SelectWorkingDirectory(): Promise<string>;
   GetSessionTemplate(tool: string): Promise<SessionTemplate>;
+  GetHarnesses(): Promise<{ harnesses: HarnessInfo[]; errors: HarnessLoadError[] }>;
+  ConfirmHarness(id: string): Promise<void>;
   PreviewSessionLaunch(tool: string, launchArgs: string[]): Promise<LaunchPreview>;
   CreateSession(name: string, tool: string, workingDir: string, launchArgs: string[]): Promise<Session>;
   PreviewSessionYAML(name: string, tool: string, workingDir: string, launchArgs: string[]): Promise<string>;

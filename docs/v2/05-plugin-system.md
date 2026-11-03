@@ -2,12 +2,16 @@
 
 ## Phase 1
 
-Use built-in adapters for the supported CLI harnesses: Claude Code, GitHub
-Copilot CLI, GSD, OpenAI Codex CLI, and OpenCode. Keep the interface internal;
-a general plugin manager, third-party plugin loading, UI actions, and plugin
-SDK are later work.
+Harnesses are described by declarative YAML manifests: the five built-in ones
+(Claude Code, GitHub Copilot CLI, GSD, OpenAI Codex CLI, OpenCode) are
+embedded in the binary, and users can add their own in
+`~/.tau_shell/harnesses/` (confirmed once per manifest content on Home). A
+manifest declares data; log parsing stays in named Go readers that a manifest
+selects by name. A general plugin manager and third-party code loading are
+still later work. See [`23-adding-a-harness.md`](23-adding-a-harness.md) for
+the schema, trust model and readers.
 
-Each adapter should provide:
+Each harness (manifest plus the generic adapter) provides:
 
 - Harness identity, executable detection, version information, and declared
   minimum/tested version ranges.
@@ -56,8 +60,8 @@ copy.
 ## Historical CLI option snapshot
 
 The versions below record earlier CLI-contract discovery; they are not the
-current support or tested-version matrix. Use the adapter declarations in
-[`internal/tools/tools.go`](../../internal/tools/tools.go) for current ranges,
+current support or tested-version matrix. Use the built-in manifests in
+[`internal/harness/manifest/builtin/`](../../internal/harness/manifest/builtin/) for current ranges,
 and the [engineering handoff](21-engineering-handoff.md) for live-verification
 status.
 

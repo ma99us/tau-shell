@@ -1,7 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { clearQueue, enqueuePrompt, getQueue, graceMs, queueDecision, queuedTotal, resumeQueue, runQueues, type QueueHooks, type QueueSession, type SessionQueue } from "../src/promptQueue.ts";
 import type { HarnessSignal } from "../src/attention.ts";
+import { setHarnesses, type HarnessInfo } from "../src/harnesses.ts";
+
+setHarnesses(JSON.parse(readFileSync(new URL("./fixtures/harnesses.json", import.meta.url), "utf8")) as HarnessInfo[]);
 
 const queue = (over: Partial<SessionQueue> = {}): SessionQueue => ({ items: [{ id: 1, text: "next" }], sentAt: 0, sawBusy: false, paused: "", ...over });
 

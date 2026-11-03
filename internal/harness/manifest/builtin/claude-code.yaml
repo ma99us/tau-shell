@@ -1,0 +1,73 @@
+schema: 1
+id: claude-code
+name: Claude Code
+short: Claude
+executable: claude
+order: 20
+probes:
+  version_args: ["--version"]
+  help_args: ["--help"]
+  tested_from: "2.1.133"
+  tested_before: "2.2.0"
+capabilities:
+  - { name: Start with a TauShell session ID, option: "--session-id" }
+  - { name: Resume a conversation, option: "--resume" }
+  - { name: Select a model, option: "--model", optional: true }
+launch:
+  default_args: ["--dangerously-skip-permissions"]
+  reserved_args: ["--session-id", "--resume"]
+session:
+  id: tau
+  start_args: ["--session-id", "{id}"]
+  resume_args: ["--resume", "{id}"]
+resume_check: claude-transcript
+graceful_exit:
+  - { input: "\x03", pause_ms: 400 }
+  - { input: "/exit", pause_ms: 400 }
+  - { input: "\r" }
+widgets:
+  commands:
+    - { label: Compact conversation, text: "/compact" }
+    - { label: Clear conversation, text: "/clear" }
+    - { label: Show context usage, text: "/context" }
+    - { label: Show cost, text: "/cost" }
+    - { label: Help, text: "/help" }
+  models: ["default", "sonnet", "opus", "haiku"]
+  interrupt_keys: ["\x1b"]
+  compact_text: "/compact"
+  clear_text: "/clear"
+# Claude Code 2.1.316 animates the title prefix with U+25D0-25D3 while working
+# and shows U+2733 when idle (also while a permission prompt is open, so the
+# title cannot signal input). Prompt footers: the trust-folder prompt shows
+# "Enter to confirm / Esc to cancel"; shell-command and file-edit permission
+# prompts show "Esc to cancel / Tab to amend"; question and plan-approval
+# prompts show "Enter to select ... Esc to cancel" and "ctrl+g to edit ... /plan to preview".
+cues:
+  - state: input
+    source: last-text-rows
+    rows: 2
+    ignore_case: true
+    pattern: '\bEnter to (?:confirm|select)\b.*\bEsc to cancel\b|\bEsc to cancel\b.*\bTab to amend\b|\bctrl\+g to edit\b.*/plan to preview'
+  - state: working
+    source: title
+    pattern: '^[\u2800-\u28FF\u25D0-\u25D3]'
+  - state: idle
+    source: title
+    pattern: '^\u2733'
+model: claude-jsonl
+title: claude-ai-title
+usage:
+  reader: claude-jsonl
+skills:
+  plugin_dir_option: "--plugin-dir"
+  personal_dirs: ["{env:CLAUDE_CONFIG_DIR|~/.claude}/skills"]
+config_file:
+  paths: ["~/.claude/settings.json"]
+  create: true
+phone_answer: claude-permission
+install:
+  vendor_url: https://code.claude.com/docs/en/setup
+  winget_id: Anthropic.ClaudeCode
+brand:
+  mark: claude
+  color: "#d97757"

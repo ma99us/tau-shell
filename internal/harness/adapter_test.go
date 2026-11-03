@@ -67,7 +67,7 @@ func TestWindowsHarnessLookupUsesPATHEXTResolution(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := adapter.(cliAdapter).executable; got != executable {
+		if got := adapter.(cliAdapter).manifest.Executable; got != executable {
 			t.Errorf("%s lookup name = %q, want %q", harnessID, got, executable)
 		}
 	}

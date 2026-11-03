@@ -76,6 +76,8 @@ taushell restore <session-id>
 taushell ctl list [--json] [--instance <pid>]   # needs control.enabled: true
 taushell ctl wait <session> [--for idle|input|working] [--timeout 10m]
 taushell ctl send [--insert-only] [--stdin] <session> <text...>   # refused unless the harness state is confirmed
+taushell ctl start [--restore|--fresh] <session>
+taushell ctl stop <session>                     # graceful stop, same path as the Stop button
 ```
 
 - Sessions are shown in the same order on Home, in the sidebar and in the tabs.
@@ -145,6 +147,11 @@ official vendor pages. The `start` and `restore` CLI commands require the
 selected harness CLI to be available. `start` creates a harness session ID and
 `restore` reuses it. TauShell closes the managed PowerShell process when its
 harness exits.
+
+Harnesses are declarative YAML manifests. The five built-in ones are embedded;
+add your own as `~/.tau_shell/harnesses/<id>.yaml` (loaded at startup; Home asks
+you to confirm each new or changed manifest before it can start sessions). See
+[adding a harness](docs/v2/23-adding-a-harness.md).
 
 ## Download
 

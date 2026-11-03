@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ma99us/tau-shell/internal/harness/manifest"
 	"github.com/ma99us/tau-shell/internal/session"
 )
 
@@ -25,8 +26,12 @@ func CurrentModel(tool session.Harness, harnessSessionID string) string {
 	if harnessSessionID == "" {
 		return ""
 	}
-	switch tool {
-	case session.ClaudeCode:
+	item, ok := manifest.Get(string(tool))
+	if !ok {
+		return ""
+	}
+	switch item.Model {
+	case "claude-jsonl":
 		root := os.Getenv("CLAUDE_CONFIG_DIR")
 		if root == "" {
 			home, err := os.UserHomeDir()
@@ -36,21 +41,21 @@ func CurrentModel(tool session.Harness, harnessSessionID string) string {
 			root = filepath.Join(home, ".claude")
 		}
 		return claudeModelIn(filepath.Join(root, "projects"), harnessSessionID)
-	case session.CopilotCLI:
+	case "copilot-events":
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return ""
 		}
 		return copilotModelIn(filepath.Join(home, ".copilot", "session-state"), harnessSessionID)
-	case session.GSD:
+	case "gsd-jsonl":
 		return lastModel(GSDSessionPath(harnessSessionID), gsdLineModel)
-	case session.Codex:
+	case "codex-rollout":
 		path := CodexRolloutFile(harnessSessionID)
 		if path == "" {
 			return ""
 		}
 		return lastModel(path, codexLineModel)
-	case session.OpenCode:
+	case "opencode-db":
 		return openCodeModel(harnessSessionID)
 	default:
 		return ""

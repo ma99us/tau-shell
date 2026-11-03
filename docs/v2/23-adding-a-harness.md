@@ -1,248 +1,190 @@
-# Recipe: Adding a Harness
+# Adding a Harness
 
-This is a step-by-step recipe for adding support for another AI CLI harness.
-Use Claude Code (`claude-code`) and GitHub Copilot CLI (`copilot-cli`) as the
-worked examples; search the repository for those IDs to find every touch point
-(see the checklist at the end). Architecture background is in
-[`05-plugin-system.md`](05-plugin-system.md). Adapters are built in and
-internal; there is no plugin loader.
+A harness is one AI CLI that TauShell launches, resumes and reads. Harnesses
+are described by **declarative YAML manifests**, not Go code:
 
-Principles to keep:
+- The five built-in harnesses (Claude Code, GitHub Copilot CLI, OpenAI Codex
+  CLI, OpenCode, GSD) are manifests embedded in the binary:
+  `internal/harness/manifest/builtin/*.yaml`.
+- You can add your own by dropping a `*.yaml` file into
+  `~/.tau_shell/harnesses/`. It is loaded at startup (restart TauShell to apply
+  edits) and appears on Home, in the New Session dialog and in the CLI.
 
-- Core session management stays tool-independent. Harness-specific behavior
-  lives in the adapter, the tool spec, and the frontend signal reader only.
+Architecture background: [`05-plugin-system.md`](05-plugin-system.md).
+
+Principles that still hold:
+
 - Launch and resume arguments are discrete argv values, never shell strings.
 - Never claim a conversation was resumed unless the harness supports and
-  confirms it. Unsupported behavior must be visible, not faked.
+  confirms it. A harness with no `resume_check` is shown as "resume cannot be
+  verified".
 - Do not silently pin, downgrade, or auto-update the harness.
+- Reading a harness's private files is fail-open and fail-quiet.
 
-Throughout, `<id>` is the new harness ID (kebab-case, for example
-`gemini-cli`).
+## What a manifest can and cannot do
 
-## 0. Gather facts first
+A manifest declares data: executable, version probes, capabilities, launch and
+resume arguments, graceful-exit keystrokes, widgets, state cues (regular
+expressions), skills and config-file locations, install sources and branding.
 
-Run the real CLI and record, before writing code:
+Anything that needs code, such as parsing a harness's private log or database,
+is a **named reader** implemented in Go. A manifest only picks a reader by
+name (a plain string such as `model: claude-jsonl`). The reader owns the
+store's layout. User manifests can use any existing reader but cannot add new
+ones; a new log format needs a Go change (see "Adding a reader").
 
-| Question | Used by |
+| Field | Readers available |
 | --- | --- |
-| Executable name on PATH, and `--version` output format | tool spec, version parse |
-| Whether the vendor distributes the CLI as an npm package and its Node.js minimum | install source; npm installs require a usable Node.js/npm companion |
-| Help command (`--help`) and whether it lists the options below | capability probes |
-| How to start a conversation with an ID TauShell chooses (Claude/Copilot: `--session-id <uuid>`) | `StartArgs` |
-| How to resume by that ID (Claude/Copilot: `--resume <uuid>`) | `ResumeArgs` |
-| Whether the harness chooses its own ID and how its store identifies new conversations | `DiscoversSessionID`, pre-launch snapshot and `DiscoverSessionID` |
-| Optional model option (`--model <name>`) | optional capability |
-| Safe default args that avoid prompts blocking an unattended session (Claude: `--dangerously-skip-permissions`; Copilot: `--yolo`) | `DefaultLaunchArgs` |
-| A clean quit input sequence that flushes state (Copilot: Ctrl+C then `/exit` Enter) | `GracefulExit` |
-| Where the harness stores conversations, if you can tell "no conversation yet" from disk | `CheckResume` |
-| Terminal title or status-row cues for working vs idle | frontend signal reader |
-| winget package ID and official vendor install page | install source |
+| `resume_check` | `claude-transcript`, `copilot-session-state`, `gsd-session-file`, `codex-rollout`, `opencode-db` |
+| `session.discovery` | `codex-rollout`, `opencode-db` |
+| `model` | `claude-jsonl`, `copilot-events`, `gsd-jsonl`, `codex-rollout`, `opencode-db` |
+| `title` | `claude-ai-title`, `copilot-workspace` |
+| `usage.reader` | `claude-jsonl`, `copilot-events`, `gsd-jsonl`, `codex-rollout`, `opencode-db` |
+| `phone_answer` | `claude-permission`, `copilot-permission` |
 
-Prefer a TauShell-chosen ID when the harness supports it. Codex and OpenCode
-choose their own IDs, so their adapters snapshot existing same-folder
-conversations before launch and discover a new ID afterwards. If discovery is
-ambiguous or the existing conversations cannot be enumerated, leave the ID
-unclaimed and surface the limitation; never guess or choose the most recent
-conversation.
+Leaving a field out means the feature is absent for that harness. It never
+becomes an error or a guess.
 
-For an npm-distributed harness, TauShell first verifies Node.js and npm as a
-pair. When they are unusable or missing, installation offers a separately
-confirmed per-user Node LTS ZIP install, re-detects Node/npm, and then asks
-separately before installing the harness package. npm runs via the detected
-Node runtime and its npm CLI JavaScript entry point, not through interpolated
-shell text. Harness package lifecycle scripts execute as the current user.
+## Annotated example
 
-## 1. Register the ID in session config
+```yaml
+schema: 1                      # the only version this build understands
+id: demo-cli                   # lowercase slug; built-in IDs are reserved
+name: Demo CLI
+short: Demo                    # used in tight spaces
+executable: demo-cli           # bare name on PATH; no path, .exe or no extension
+order: 100                     # optional; ties sort by id; user harnesses follow built-ins
+probes:
+  version_args: ["--version"]
+  help_args: ["--help"]
+  tested_from: "1.0.0"         # inclusive; outside the range is a warning, never a block
+  tested_before: "2.0.0"       # exclusive
+capabilities:                  # options matched against help text
+  - { name: Resume a conversation, option: "--resume" }
+  - { name: Select a model, option: "--model", optional: true }
+launch:
+  default_args: ["--fast"]     # editable preset for new sessions
+  reserved_args: ["--resume", "--session-id"]   # managed by TauShell; rejected in launch_args
+session:
+  id: tau                      # tau = TauShell picks the ID; discover = the harness picks it
+  start_args: ["--session-id", "{id}"]
+  resume_args: ["--resume", "{id}"]
+  # file: "~/.demo/{id}.jsonl" # optional; {session_file} expands to it and its folder is created
+  # resume_position: before    # put resume args before launch_args (default after)
+graceful_exit:                 # ordered writes that make the harness quit by itself
+  - { input: "/exit\r", pause_ms: 200 }
+widgets:                       # quick actions typed into the session (unconfirmed by the harness)
+  commands:
+    - { label: Compact conversation, text: "/compact" }
+  interrupt_keys: ["\x1b"]
+cues:                          # ordered rules; the first match wins
+  - { state: working, source: last-rows, rows: 2, pattern: 'esc to interrupt', ignore_case: true }
+  - { state: idle,    source: title,     pattern: '^Demo' }
+install:
+  vendor_url: https://example.com/demo   # https only; opened by TauShell
+brand:
+  mark: monogram               # user harnesses use the monogram mark
+  text: Dm                     # up to 2 letters
+  color: "#3aa675"
+```
 
-File: `internal/session/config.go`
+`{id}` is the harness conversation ID and `{session_file}` is the expanded
+`session.file`. Path templates also accept `~` and `{env:NAME|fallback}`.
 
-1. Add a constant next to `ClaudeCode` and `CopilotCLI` (type `Harness`).
-2. Add it to the supported-tool check in `Config.Validate` (the
-   `unsupported tool` error also lists supported tools; update the message).
-3. Add an entry to the `reservedArgs` map in `ValidateLaunchArgs` listing the
-   arguments TauShell manages for this harness (at least the start-ID and
-   resume options). Users must not be able to override these through
-   `launch_args`.
+### Cue sources
 
-Tests: extend `internal/session/config_test.go` (validation accepts the new
-tool and rejects its reserved args) and any table in `store_test.go` that
-enumerates tools.
-
-## 2. Declare the tool spec (detection, versions, capabilities, install)
-
-File: `internal/tools/tools.go`
-
-1. Add an `ID` constant next to `ClaudeCode`/`CopilotCLI`. The string must
-   equal the session `Harness` value, because lookups cross the two packages
-   (`tools.Lookup(tools.ID(harnessID))`).
-2. Append a `Spec` to `specs` (display order). Fields:
-   - `Executable`, `VersionArgs`, `HelpArgs`.
-   - `TestedFrom` (inclusive) and `TestedBefore` (exclusive): the range you
-     actually tested. Versions outside it produce a visible warning, not a
-     block. Set `Minimum` only when older versions are known not to work.
-   - `Capabilities`: one entry per option the adapter relies on, matched
-     against the help text. Required ones (`--session-id`, `--resume` for the
-     examples) make the tool unusable when missing. Mark features that only
-     gate UI as `Optional: true` (for example `--model`): an absent optional
-     capability never marks the tool unusable and never raises a warning.
-   - `Install`: `WingetID` + `Source: "winget"` and the official `VendorURL`
-     fallback. TauShell only installs after user confirmation.
-3. Leave `Required` unset: harnesses never block Home (only PowerShell 7 and
-   WebView2 are host prerequisites).
-
-Tests: `internal/tools/tools_test.go` has table tests over `Specs()`; extend
-the detection fixtures (fake executable output for version and help) so the
-new spec is covered, including a missing-capability case.
-
-## 3. Add the adapter
-
-File: `internal/harness/adapter.go`
-
-Add a `case session.<NewID>:` to `For`, returning a `cliAdapter` with:
-
-- `executable`: the PATH name (`FindExecutable` uses `exec.LookPath`).
-- `defaultArgs`: the editable template used to prefill new sessions
-  (`DefaultLaunchArgs`). These are user-editable defaults, never identity
-  arguments.
-- `resumeCheck` (optional): a `func(harnessSessionID string) error` that
-  returns a user-readable reason when the harness certainly cannot resume that
-  ID, and nil when it can or cannot be determined. Fail open if the harness's
-  storage is absent or its layout is undocumented. Copilot's
-  `checkCopilotResume` is the pattern (and keeps a `...In(root, id)` variant
-  so tests can use a temp directory).
-- `gracefulExit` (optional): ordered `ExitStep{Input, Pause}` writes that make
-  the harness quit by itself. Omit it when only a plain interrupt is known;
-  shutdown then falls back to interrupt and, after a short wait, visible
-  force-termination.
-
-If the harness needs different start/resume argument shapes than
-`--session-id <id>` / `--resume <id>`, do not special-case the manager:
-give `cliAdapter` a per-harness `startArgs`/`resumeArgs` function field
-(defaulting to the current behavior) and use it in `StartArgs`/`ResumeArgs`.
-Those two methods are the only source of launch/resume argv; the manager,
-the CLI `start`/`restore` commands, and the launch preview all call them.
-
-Tests: `internal/harness/adapter_test.go` (default args, start/resume argv,
-unknown harness error, graceful-exit steps) and `resume_test.go` if you add a
-resume check.
-
-## 4. Frontend wiring
-
-Files: `frontend/src/bridge.ts`, `frontend/src/main.tsx`,
-`frontend/src/attention.ts`
-
-1. `bridge.ts`: add the ID to the three unions (`Session["tool"]`,
-   `ToolStatus["id"]`, `SessionTemplate["tool"]`).
-2. `harnesses.ts`: add the ID, display and short labels to the shared harness
-  registry. Components use this registry for menus and labels; avoid adding
-  parallel harness-name ternaries to the launcher. The launch preview is
-  capability-driven and needs no change; a future model widget is gated on
-  the available `--model` capability.
-3. `attention.ts`: add a branch in `readHarnessSignal(tool, terminal, title)`
-   returning `"working"` or `"idle"` from tool-specific cues:
-   - Claude Code reads the terminal title (spinner glyph vs idle glyph).
-   - Copilot CLI reads only the last two buffer rows (status/footer text).
-   - Never compare whole-screen text. Return `undefined` when there is no cue;
-     the UI then falls back to output-silence timing, which is generic and
-     already correct for new harnesses. Unverified cues must be documented as
-     unverified in the handoff.
-
-After editing run `cd frontend; npm run build` (rebuilds the embedded
-`cmd/taushell/frontend/dist`).
-
-## 5. Check the CLI and desktop paths
-
-`cmd/taushell/desktop_windows.go` (`SessionTemplate`, launch preview,
-unsupported-argument probe) and `main_windows.go` (`list`/`start`/`restore`)
-resolve everything through `harness.For`, `tools.Lookup`, and the adapter. They
-should need no change. If you find yourself editing them for a harness-specific
-reason, move that behavior into the adapter instead.
-
-## 5b. Ecosystem hooks (full integration)
-
-Steps 1-5 give a launchable, restorable harness. TauShell also layers
-optional features on top. Each hook is independent: skipping one must degrade
-to "feature absent", never to an error or a guess. Decide per hook and record
-the decision (done / not supported / unverified) in the handoff.
-
-| Hook | What it gives users | Where | Notes / how to degrade |
-| --- | --- | --- | --- |
-| Widgets | Interrupt, Compact, Clear, Model quick actions, slash commands | `tools.Spec.Widgets` (`Commands`, `Models`, `InterruptKeys`, `CompactText`, `ClearText`) | Leave `Widgets` nil: terminal has no widgets. Model menu also needs an optional `--model` capability. Clear always asks for confirmation. Text is typed in, never confirmed by the harness. |
-| Prompt injection | Prompt presets and widget text typed into the live session | frontend only (generic) | Needs no code. Harness must accept pasted text at its prompt; verify existing-text and `". "` separation still behaves. |
-| Attention and state | Working/idle spinner, unseen glow, toast and taskbar flash | `frontend/src/attention.ts` `readHarnessSignal` | Return `undefined` without a verified cue; generic output-silence timing applies. |
-| Current model | Model shown for a session | `internal/harness/model.go` `CurrentModel` (reads the harness's own session log) | Return `""` when the log layout is unknown. Never guess. |
-| Usage and cost | Tokens and price on Home tiles and monthly totals | `internal/usage/parse.go` (`LogFiles`, `LineParser`), `parse_harnesses.go` (GSD/Codex parsers, OpenCode DB ingestion, `RecordsOwnCost`), `usage/prices.go` (Claude and OpenAI tables) | `LineParser` returns nil: no usage shown. Parsers must dedupe records and never fabricate cost; use the price table only for models it knows. |
-| Skills | TauShell skill library loaded into sessions | `internal/harness/skills.go` (`--plugin-dir` probe), `cmd/taushell/skills_windows.go` `personalSkillDirs` and the tool loop in `initSkills`, `internal/skills` (`Materialize` writes the plugin layout) | Only if the CLI has a plugin/skills-directory option; probe it from `--help`. List the user's personal skill dirs so a personal copy wins. Unsupported tools are surfaced on the Skills panel. |
-| Config file | Gear on the tool tile opens the harness's user settings | `cmd/taushell/presets_windows.go` `toolConfigPath`; condition in `main.tsx` tool row | Return an error with next steps when the file is absent. |
-| Install and update | Confirmed install; update check | `tools.Spec.Install` (`WingetID`, or `NpmPackage` for npm-distributed CLIs; `installCommand` picks it); `tools_windows.go` | npm installs run `npm install --global <package>` in a visible console after confirmation. Update checks are winget-only. Never silent, never elevated. |
-| Auto-resume | Per-session and global resume at startup | `session.Config` field, Home UI | Generic; relies on `ResumeArgs` and `resumeCheck` being honest. |
-| Graceful shutdown | Clean quit before forced termination | `cliAdapter.gracefulExit` | Optional; otherwise interrupt, short wait, visible force-termination. |
-| Visual identity | Icon and brand color | `frontend/src/harnessIcons.tsx`, `theme/theme.ts` `harnessMark`, `theme/tokens.css` `--brand-*` | Tokenize the color; no hard-coded colors (`npm run check:tokens`). |
-| Labels | Names in sidebar, create dialog, Home usage line, skills note | `frontend/src/harnesses.ts` (single registry: id, name, short name) | Keep text ASCII. Add the ID to `HarnessId` and `harnesses`. Without a bundled vendor mark, `harnessIcons.tsx` draws a tokenized monogram. |
-
-New tools that are not harnesses (for example a CLI dependency) only need the
-`tools.Spec` step; they are detected, version-checked, and installable but have
-no adapter, widgets, usage or skills.
-
-### Keeping adapters honest
-
-- Anything read from a harness's own files (model, usage, resume check) is an
-  undocumented internal: fail open, fail quiet, and pin the tested version
-  range in the spec.
-- Anything typed into the harness (widgets, presets) is unconfirmed: state it
-  as such in the UI and docs.
-- Do not put secrets in specs, presets, logs or skills.
-- Update the tested-version claims only after running the real CLI.
-
-## 6. Validate
-
-1. `go vet ./...` and `go test ./...`.
-2. Detection: launch the app; the harness row on Home shows the installed
-   version, "tested"/"untested" support, and no `missing:` warning. Temporarily
-   edit `TestedFrom`/`TestedBefore` to confirm the out-of-range warning path.
-3. Create dialog: choose the harness; the launch arguments prefill with the
-   defaults, the "Will run" preview shows `--session-id <new-session-id>`, and
-   typing a reserved arg (`--resume`) is rejected.
-4. Real session smoke test: create, start, type into it, quit it
-   (graceful-exit path: confirm it exits without "force-terminated", or that
-   the visible forced-termination notice appears if no exit steps exist),
-   close and reopen TauShell, then Restore. Confirm a conversation with at
-   least one turn actually resumes, and that a session with no turns shows
-   Start fresh instead of a false Resume.
-5. Hooks you implemented: widgets type the right text; model, usage and cost
-   appear after a real turn; with skills, the diagnostics log shows
-   "TauShell skills attached" and the CLI lists the skills; the gear opens the
-   settings file.
-6. State icons: working shows the spinner, quiet shows the dot, and the unseen
-   glow appears when the tab is not selected.
-7. Delete throwaway sessions through the UI delete action and remove the
-   test executable.
-
-## 7. Documentation
-
-- `docs/v2/05-plugin-system.md`: list the new built-in adapter.
-- `docs/v2/21-engineering-handoff.md`: record tested versions, the signals
-  used, and anything unverified (state it plainly).
-- `docs/v2/18-yaml-schema.md`: add the new `tool` value.
-- Update the Phase 1 scope text in `README.md`/`AGENTS.md` only if the
-  owner has agreed to widen the supported-harness list; the current agreed
-  Phase 1 set is Claude Code and GitHub Copilot CLI.
-
-## Touch-point checklist
-
-| Area | File |
+| Source | Reads |
 | --- | --- |
-| Harness ID, validation, reserved args | `internal/session/config.go` |
-| Tool spec: version range, capabilities, install | `internal/tools/tools.go` |
-| Adapter: executable, defaults, resume check, graceful exit | `internal/harness/adapter.go` |
-| Types and labels | `frontend/src/harnesses.ts`, `frontend/src/bridge.ts` |
-| Working/idle signals | `frontend/src/attention.ts` |
-| Widgets (optional) | `internal/tools/tools.go` `Spec.Widgets` |
-| Current model, usage and cost parsers (optional) | `internal/harness/model.go`, `internal/usage/parse.go`, `totals.go`, `ledger.go` |
-| Skills and config-file hooks (optional) | `internal/harness/skills.go`, `cmd/taushell/skills_windows.go`, `cmd/taushell/presets_windows.go` |
-| Icon and brand color (optional) | `frontend/src/harnessIcons.tsx`, `frontend/src/theme/*` |
-| Tests | `internal/session/config_test.go`, `internal/tools/tools_test.go`, `internal/harness/adapter_test.go` |
-| Docs | `05-plugin-system.md`, `18-yaml-schema.md`, `21-engineering-handoff.md` |
+| `title` | the terminal title |
+| `last-rows` (with `rows: N`) | the last N screen rows, including empty ones |
+| `last-text-rows` (with `rows: N`) | the last N non-empty rows within the bottom 6 |
 
-Quick audit: `grep -rn "copilot-cli" --include=*.go --include=*.ts --include=*.tsx .`
-(excluding `dist`) lists every place a harness ID is currently referenced.
+Patterns use the common subset of Go RE2 and JavaScript: no inline flags,
+named groups, lookaround or `\A \z \Z \x{...} [[:class:]] \Q \E`. Write
+non-ASCII as `\uXXXX`. Use `ignore_case: true` for case-insensitive matching.
+Never match against the whole screen.
+
+## Trust and safety for user manifests
+
+A user manifest decides what program TauShell starts, so it is treated as
+untrusted input:
+
+- Strict parsing: unknown fields are errors; the file must be one document and
+  at most 64 KB. A bad file is shown on Home and skipped; it never stops
+  TauShell from starting.
+- `executable` must be a bare name resolved on PATH. Home shows the resolved
+  path.
+- A user manifest cannot start sessions until you press **Confirm** on Home.
+  The confirmation is stored in `~/.tau_shell/harness-trust.json` against the
+  manifest's SHA-256, so editing the file asks again. The check is enforced in
+  the launch path, so the CLI `start` and `restore` commands are covered too.
+- User manifests may only declare a `vendor_url` (https). One-click winget/npm
+  installs exist for built-ins only.
+- Do not put secrets in a manifest.
+
+## Steps
+
+1. Run the real CLI and record: executable name, `--version`, `--help`
+   options, how to start and resume with a TauShell-chosen ID (or whether the
+   harness picks its own), safe default args, a clean quit sequence, and any
+   terminal title or footer text that distinguishes working, idle and
+   waiting-for-answer.
+2. Write `~/.tau_shell/harnesses/<id>.yaml` (or, for a built-in, add a file to
+   `internal/harness/manifest/builtin/`).
+3. Restart TauShell. Check Home: the harness shows its resolved path and any
+   load error. Confirm it.
+4. Create a session with it. The "Will run" preview shows the argv; reserved
+   arguments are rejected.
+5. Run a real session, quit it, restart and restore. Confirm a conversation
+   with at least one turn resumes, and that a harness without a resume reader
+   is labeled unverified rather than claimed resumed.
+
+## Adding a built-in harness
+
+1. Add `internal/harness/manifest/builtin/<id>.yaml`.
+2. Add a constant in `internal/session/config.go` and `internal/tools/tools.go`
+   only if Go code refers to the ID directly (the lists themselves come from
+   the manifests).
+3. Use the vendor mark or the monogram, and keep the brand color as a
+   `--brand-*` token in `frontend/src/theme/` for built-ins.
+4. Regenerate fixtures: `UPDATE_GOLDEN=1 go test ./internal/tools ./internal/harness/manifest`.
+   `internal/tools/testdata/harness_specs.golden.json` freezes the generated
+   tool specs and `frontend/test/fixtures/harnesses.json` is what the frontend
+   cue tests load; both must match the manifests.
+5. Extend `internal/harness/characterization_test.go` with the new harness's
+   start, resume, discover and exit behavior.
+6. Run `go vet ./...`, `go test ./...`, and in `frontend/`: `npx tsc --noEmit`,
+   `npm test`, `npm run build`.
+
+## Adding a reader
+
+Readers are the only per-harness Go code. Each is selected by name:
+
+| Kind | Where to add it |
+| --- | --- |
+| Resume check, discovery | `internal/harness/adapter.go` (`resumeCheckers`, `discoveryReaders`) |
+| Model | `internal/harness/model.go` `CurrentModel` |
+| Title | `internal/harness/titles.go` `ConversationTitle` |
+| Usage | `internal/usage/parse.go`, `parse_harnesses.go`, `ledger.go`, and `internal/sessionhost/usage_windows.go` (OpenCode DB ingest) |
+| Phone answer | `frontend/src/attention.ts` `answerPlan` (`internal/control` only reads the manifest field) |
+
+Then add the name to the matching set in `internal/harness/manifest/validate.go`
+so manifests can select it. Readers must fail open, never fabricate cost, and
+dedupe records.
+
+## Touch-point summary
+
+| Area | Where |
+| --- | --- |
+| Manifest schema, validation, loading | `internal/harness/manifest/` |
+| Built-in harnesses | `internal/harness/manifest/builtin/*.yaml` |
+| Launch/resume argv, discovery, graceful exit | `internal/harness/adapter.go` (generic, reads the manifest) |
+| Tool specs (detection, install) | `internal/tools/tools.go` `harnessSpecs()` (generated) |
+| Supported IDs, reserved args | `internal/session/config.go` |
+| Trust and launch gate | `internal/harness/manifest/trust.go`, `manifest.Allowed` |
+| Host binding for the UI | `cmd/taushell/harnesses_windows.go` (`GetHarnesses`, `ConfirmHarness`) |
+| Cue engine, answer plans | `frontend/src/attention.ts` |
+| Registry, icons, user-harness panel | `frontend/src/harnesses.ts`, `harnessIcons.tsx`, `userHarnesses.tsx` |
+
+Known limits: manifests load at startup only; user manifests cannot supply new
+log parsers, vendor marks or one-click installs.

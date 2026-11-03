@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/ma99us/tau-shell/internal/agentstate"
+	"github.com/ma99us/tau-shell/internal/harness/manifest"
 )
 
 // Sessions serves the session-addressed operations. It holds no terminal
@@ -21,6 +22,9 @@ type Sessions struct {
 	Deliver func(sessionID, text string, submit bool) error
 	// Launch asks the window to start or restore a stopped session.
 	Launch func(sessionID, mode string) error
+	// Stop starts a graceful stop of a running session and returns without
+	// waiting for it; callers poll the session list.
+	Stop func(sessionID string) error
 	// Screen returns the last rows of a running session's terminal text from
 	// the window. Nil or an error means it is not available.
 	Screen func(sessionID string, rows int) ([]string, error)
@@ -147,12 +151,19 @@ func (sessions Sessions) HandleAnswer(raw json.RawMessage) Response {
 	return OK(nil)
 }
 
+// phoneAnswerSupported reports whether the harness manifest declares a
+// verified phone-answer reader.
+func phoneAnswerSupported(tool string) bool {
+	item, ok := manifest.Get(tool)
+	return ok && item.PhoneAnswer != ""
+}
+
 // AnswerRefusal returns why a prompt must not be answered remotely, or "".
 func AnswerRefusal(item SessionInfo) string {
 	switch {
 	case !item.RunningHere:
 		return "the session is not running"
-	case item.Tool != "claude-code" && item.Tool != "copilot-cli":
+	case !phoneAnswerSupported(item.Tool):
 		return "answering from the phone is only verified for Claude Code and Copilot CLI"
 	case item.Activity.State != agentstate.Input || !item.Activity.Confirmed || item.Activity.Source != agentstate.Cue:
 		return "the harness is not confirmed to be waiting for an answer"
@@ -179,6 +190,29 @@ func (sessions Sessions) HandleStart(raw json.RawMessage) Response {
 	}
 	if err := sessions.Launch(item.ID, args.Mode); err != nil {
 		return Failure(CodeInternal, "the window could not accept the request")
+	}
+	return OK(nil)
+}
+
+// HandleStop begins a graceful stop of a running session. It never forces: the
+// manager interrupts, waits and only then force-terminates, visibly.
+func (sessions Sessions) HandleStop(raw json.RawMessage) Response {
+	var args SessionArg
+	if err := json.Unmarshal(raw, &args); err != nil || args.Session == "" {
+		return Failure(CodeBadRequest, "stop needs a session")
+	}
+	item, failure := sessions.find(args.Session)
+	if failure != nil {
+		return Response{Error: failure}
+	}
+	if !item.RunningHere {
+		return Failure(CodeRefused, "the session is not running")
+	}
+	if sessions.Stop == nil {
+		return Failure(CodeDisabled, "stopping is not available")
+	}
+	if err := sessions.Stop(item.ID); err != nil {
+		return Failure(CodeInternal, "the stop could not be started")
 	}
 	return OK(nil)
 }

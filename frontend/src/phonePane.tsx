@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { app, MobileStatus, PairingOffer } from "./bridge";
+import { app, MobileInterface, MobileStatus, PairingOffer } from "./bridge";
 
 const pollMs = 1000;
 
@@ -9,6 +9,7 @@ const pollMs = 1000;
 // only while the window is open and is never logged.
 export function PhonePane({ onError }: { onError: (source: string, error: unknown) => void }) {
   const [status, setStatus] = useState<MobileStatus | null>(null);
+  const [interfaces, setInterfaces] = useState<MobileInterface[]>([]);
   const [offer, setOffer] = useState<PairingOffer | null>(null);
   const [busy, setBusy] = useState(false);
   const offerRef = useRef(offer);
@@ -21,6 +22,7 @@ export function PhonePane({ onError }: { onError: (source: string, error: unknow
 
   useEffect(() => {
     void refresh();
+    app().GetMobileInterfaces().then(setInterfaces).catch((err) => onError("ui.phone-interfaces", err));
     const timer = window.setInterval(() => void refresh(), pollMs);
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -36,8 +38,16 @@ export function PhonePane({ onError }: { onError: (source: string, error: unknow
 
   return <div className="tools-panel phone-pane">
     <div className="tools-header">
-      <div><h2>Phone</h2><p className="muted">{enabled ? `On: paired Android phones can reach TauShell on your network at ${status?.address}.` : "Off: no phone can reach TauShell."} The choice is saved to settings; set <code>mobile.interface</code> in config.yaml first.</p></div>
+      <div><h2>Phone</h2><p className="muted">{enabled ? `On: paired Android phones can reach TauShell on your network at ${status?.address}.` : "Off: no phone can reach TauShell."}       The choice is saved to settings.</p></div>
       <div className="refresh-group">
+              <label className="check-option">Address
+                <select value={status?.interface ?? ""} disabled={busy || !status}
+                  onChange={(event) => run("ui.phone-interface", () => app().SetMobileInterface(event.target.value))}>
+                  {!status?.interface && <option value="">Choose this PC's address</option>}
+                  {status?.interface && !interfaces.some((item) => item.address === status.interface) && <option value={status.interface}>{status.interface} (not found)</option>}
+                  {interfaces.map((item) => <option key={`${item.name}-${item.address}`} value={item.address}>{item.address} ({item.name})</option>)}
+                </select>
+              </label>
         {busy && <span className="spinner" role="status" aria-label="Updating phone server" />}
         <label className="check-option"><input type="checkbox" role="switch" checked={enabled} disabled={busy || !status}
           onChange={(event) => run("ui.phone-toggle", () => app().SetMobileEnabled(event.target.checked))} />{enabled ? "On" : "Off"}</label>

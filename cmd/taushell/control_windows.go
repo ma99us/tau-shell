@@ -42,6 +42,8 @@ func (handler controlHandler) Handle(_ control.Caller, request control.Request) 
 		return handler.sessions.HandleSend(request.Args)
 	case control.OpStart:
 		return handler.sessions.HandleStart(request.Args)
+	case control.OpStop:
+		return handler.sessions.HandleStop(request.Args)
 	default:
 		return control.Failure(control.CodeUnknownOp, "unknown operation")
 	}
@@ -153,6 +155,11 @@ func (application *App) controlSessions() control.Sessions {
 			return nil
 		},
 		Screen: application.requestScreen,
+		Stop: func(id string) error {
+			// A graceful stop can outlast the pipe timeout, so it runs on its own.
+			go func() { _ = application.StopSession(id) }()
+			return nil
+		},
 		Answer: func(id, answer string) error {
 			application.emit("control-answer", map[string]any{"id": id, "answer": answer})
 			return nil

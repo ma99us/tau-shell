@@ -68,8 +68,8 @@ func TestCtlExitCodes(t *testing.T) {
 
 func TestControlHandlerRejectsUnknownOps(t *testing.T) {
 	handler := controlHandler{}
-	if response := handler.Handle(control.Caller{}, control.Request{Op: "stop"}); response.Error == nil || response.Error.Code != control.CodeUnknownOp {
-		t.Fatalf("stop is not available yet: %+v", response)
+	if response := handler.Handle(control.Caller{}, control.Request{Op: "delete"}); response.Error == nil || response.Error.Code != control.CodeUnknownOp {
+		t.Fatalf("delete must stay unavailable: %+v", response)
 	}
 }
 

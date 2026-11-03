@@ -86,8 +86,8 @@ func (manager *Manager) ingestSession(ctx context.Context, id string, force bool
 	if err != nil || runtime.HarnessSessionID == "" {
 		return
 	}
-	if config.Tool == session.OpenCode {
-		if err := manager.ledger.IngestOpenCode(id, runtime.HarnessSessionID); err != nil {
+	if usage.Reader(config.Tool) == "opencode-db" {
+		if err := manager.ledger.IngestOpenCode(id, config.Tool, runtime.HarnessSessionID); err != nil {
 			diagnostics.Warn("usage ingest failed", err, "session_id", id)
 		}
 		return

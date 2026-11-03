@@ -10,6 +10,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/ma99us/tau-shell/internal/harness/manifest"
 	"github.com/ma99us/tau-shell/internal/session"
 )
 
@@ -22,8 +23,12 @@ func ConversationTitle(tool session.Harness, harnessSessionID string) string {
 	if harnessSessionID == "" {
 		return ""
 	}
-	switch tool {
-	case session.ClaudeCode:
+	item, ok := manifest.Get(string(tool))
+	if !ok {
+		return ""
+	}
+	switch item.Title {
+	case "claude-ai-title":
 		root := os.Getenv("CLAUDE_CONFIG_DIR")
 		if root == "" {
 			home, err := os.UserHomeDir()
@@ -33,7 +38,7 @@ func ConversationTitle(tool session.Harness, harnessSessionID string) string {
 			root = filepath.Join(home, ".claude")
 		}
 		return claudeTitleIn(filepath.Join(root, "projects"), harnessSessionID)
-	case session.CopilotCLI:
+	case "copilot-workspace":
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return ""

@@ -12,18 +12,23 @@ import (
 	"strings"
 
 	"github.com/ma99us/tau-shell/internal/harness"
+	"github.com/ma99us/tau-shell/internal/harness/manifest"
 	"github.com/ma99us/tau-shell/internal/session"
 )
 
 // RecordsOwnCost reports whether a harness logs its own USD cost per call, so
 // the ledger stores that cost instead of pricing tokens from a table.
 func RecordsOwnCost(tool session.Harness) bool {
-	switch tool {
-	case session.CopilotCLI, session.GSD, session.OpenCode:
-		return true
-	default:
-		return false
+	item, ok := manifest.Get(string(tool))
+	return ok && item.Usage.RecordsOwnCost
+}
+
+// Reader names the usage reader a harness's manifest selected, or "".
+func Reader(tool session.Harness) string {
+	if item, ok := manifest.Get(string(tool)); ok {
+		return item.Usage.Reader
 	}
+	return ""
 }
 
 // ParseGSDLine reads usage from one GSD session JSONL line. GSD records an
@@ -159,10 +164,10 @@ func codexModelBefore(path string, offset int64) string {
 
 func harnessLogFiles(tool session.Harness, harnessSessionID string) []string {
 	var path string
-	switch tool {
-	case session.GSD:
+	switch Reader(tool) {
+	case "gsd-jsonl":
 		path = harness.GSDSessionPath(harnessSessionID)
-	case session.Codex:
+	case "codex-rollout":
 		path = harness.CodexRolloutFile(harnessSessionID)
 	default:
 		return nil
@@ -185,7 +190,7 @@ func openCodeSource(harnessSessionID string) string {
 // IngestOpenCode replaces the stored usage of one OpenCode conversation when
 // its message version changed. OpenCode edits messages in place, so the rows
 // are recomputed from all finished assistant messages.
-func (ledger *Ledger) IngestOpenCode(sessionID, harnessSessionID string) error {
+func (ledger *Ledger) IngestOpenCode(sessionID string, tool session.Harness, harnessSessionID string) error {
 	messages, version, err := harness.OpenCodeMessages(harnessSessionID)
 	if err != nil {
 		return err
@@ -223,5 +228,5 @@ func (ledger *Ledger) IngestOpenCode(sessionID, harnessSessionID string) error {
 		current.records++
 		current.usd += message.USD
 	}
-	return ledger.commit(source, sessionID, session.OpenCode, harnessSessionID, version, "", true, deltas, days, models)
+	return ledger.commit(source, sessionID, tool, harnessSessionID, version, "", true, deltas, days, models)
 }

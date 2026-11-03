@@ -570,6 +570,20 @@ Verified on Copilot CLI 1.0.104 through the real session manager and ConPTY
 the model and the footer, and bare `/model` opened the picker. Claude Code's
 `/model` was not exercised because its provider returns 401 on this PC.
 
+## Declarative harness manifests (implemented)
+
+Harnesses are YAML manifests (`internal/harness/manifest/builtin/*.yaml`
+embedded; user ones in `~/.tau_shell/harnesses/`, confirmed once per content
+hash in `~/.tau_shell/harness-trust.json`, enforced at launch including the
+CLI). Log parsing stays in named Go readers chosen by plain string. See
+[`23-adding-a-harness.md`](23-adding-a-harness.md).
+
+Verified: `go test ./...`, frontend tests and build; characterization and
+golden tests freeze the old adapter behavior; live GSD and OpenCode launch,
+resume and restore; a user manifest loads, is refused until confirmed, then
+passes the trust gate (CLI). Not verified: the Home Confirm button in the live
+UI, Codex live (no signed-in session), and manifests load at startup only.
+
 ## Harness widgets (implemented)
 
 Terminal toolbar for running sessions: **Prompts**, **Commands**, **Model**,

@@ -1,8 +1,22 @@
 // Run with `npm test` (Node runs this TypeScript directly; no test framework).
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import type { Terminal } from "@xterm/xterm";
-import { answerPlan, attentionEdge, composeInjection, controlSendPlan, copilotPermission, highlightedIsYes, nextActivity, readHarnessSignal, reportedState, staleWorkingMs, workingWindowMs } from "../src/attention.ts";
+import { answerPlan, attentionEdge, composeInjection, controlSendPlan, copilotPermission, hasCueSignal, highlightedIsYes, nextActivity, readHarnessSignal, reportedState, staleWorkingMs, workingWindowMs } from "../src/attention.ts";
+import { setHarnesses, type HarnessInfo } from "../src/harnesses.ts";
+
+// The same JSON the host serves; a Go test keeps it equal to the built-in manifests.
+setHarnesses(JSON.parse(readFileSync(new URL("./fixtures/harnesses.json", import.meta.url), "utf8")) as HarnessInfo[]);
+
+test("cues and phone answers come from the manifests", () => {
+  assert.equal(hasCueSignal("claude-code"), true);
+  assert.equal(hasCueSignal("copilot-cli"), true);
+  assert.equal(hasCueSignal("gsd"), false);
+  assert.equal(hasCueSignal("unknown-harness"), false);
+  assert.equal(readHarnessSignal("gsd", fakeTerminal(["", "? help"]), "\u2733"), undefined);
+  assert.match(answerPlan("gsd", undefined, "", "yes").reason, /only verified/);
+});
 
 test("Yes is sent only when the highlighted choice is Yes", () => {
   assert.equal(highlightedIsYes(["Enter to confirm · Esc to cancel", "  Yes, I trust this folder", "❯ No, exit"]), false);

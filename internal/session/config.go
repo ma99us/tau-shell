@@ -17,6 +17,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/ma99us/tau-shell/internal/fsutil"
+	"github.com/ma99us/tau-shell/internal/harness/manifest"
 	"github.com/ma99us/tau-shell/internal/presets"
 	"github.com/ma99us/tau-shell/internal/vault"
 )
@@ -31,16 +32,20 @@ const (
 	OpenCode   Harness = "opencode"
 )
 
-// SupportedHarnesses lists every harness ID in display order.
-var SupportedHarnesses = []Harness{ClaudeCode, CopilotCLI, GSD, Codex, OpenCode}
+// SupportedHarnesses lists every harness ID in display order: the built-in
+// harnesses, then any the user declared with a manifest.
+func SupportedHarnesses() []Harness {
+	items := manifest.All()
+	ids := make([]Harness, len(items))
+	for index, item := range items {
+		ids[index] = Harness(item.ID)
+	}
+	return ids
+}
 
 func (harness Harness) Supported() bool {
-	for _, candidate := range SupportedHarnesses {
-		if candidate == harness {
-			return true
-		}
-	}
-	return false
+	_, ok := manifest.Get(string(harness))
+	return ok
 }
 
 var (
@@ -179,8 +184,9 @@ func (config Config) Validate() error {
 		return fmt.Errorf("powershell.utf8 cannot be disabled in the Windows 10 Phase 1 runtime")
 	}
 	if !config.Tool.Supported() {
-		names := make([]string, len(SupportedHarnesses))
-		for index, supported := range SupportedHarnesses {
+		supportedHarnesses := SupportedHarnesses()
+		names := make([]string, len(supportedHarnesses))
+		for index, supported := range supportedHarnesses {
 			names[index] = string(supported)
 		}
 		return fmt.Errorf("unsupported tool %q (supported: %s)", config.Tool, strings.Join(names, ", "))
@@ -234,37 +240,17 @@ func LockConfig(directory, id string) (func(), error) {
 // Exported so callers (such as a launch-command preview) can reuse the same
 // check without a full, filesystem-backed Config.Validate.
 func ValidateLaunchArgs(tool Harness, launchArgs []string) error {
-	reservedArgs := map[Harness]map[string]struct{}{
-		ClaudeCode: {
-			"--session-id": {},
-			"--resume":     {},
-		},
-		CopilotCLI: {
-			"--session-id": {},
-			"--resume":     {},
-		},
-		GSD: {
-			"--session":     {},
-			"--session-dir": {},
-			"--continue":    {},
-			"-c":            {},
-			"--no-session":  {},
-		},
-		Codex: {
-			"resume": {},
-			"fork":   {},
-		},
-		OpenCode: {
-			"--session":  {},
-			"-s":         {},
-			"--continue": {},
-			"-c":         {},
-			"--fork":     {},
-		},
+	item, known := manifest.Get(string(tool))
+	if !known {
+		return nil
+	}
+	reserved := make(map[string]struct{}, len(item.Launch.ReservedArgs))
+	for _, name := range item.Launch.ReservedArgs {
+		reserved[strings.ToLower(name)] = struct{}{}
 	}
 	for _, arg := range launchArgs {
 		name, _, _ := strings.Cut(arg, "=")
-		if _, reserved := reservedArgs[tool][strings.ToLower(name)]; reserved {
+		if _, isReserved := reserved[strings.ToLower(name)]; isReserved {
 			return fmt.Errorf("launch_args cannot override TauShell-managed %s arguments", name)
 		}
 	}

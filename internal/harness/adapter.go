@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ma99us/tau-shell/internal/harness/manifest"
 	"github.com/ma99us/tau-shell/internal/session"
 )
 
@@ -71,66 +72,39 @@ type ExitStep struct {
 	Pause time.Duration
 }
 
+// cliAdapter is the manifest-backed adapter: every per-harness fact comes
+// from the manifest, and every private-format reader is chosen by name.
 type cliAdapter struct {
-	id           session.Harness
-	executable   string
-	defaultArgs  []string
-	resumeCheck  func(harnessSessionID string) error
-	gracefulExit []ExitStep
-	startArgs    func(harnessSessionID string) []string
-	resumeArgs   func(harnessSessionID string) []string
-	// resumeFirst places the resume arguments before launch_args, for
-	// harnesses whose resume is a subcommand.
-	resumeFirst bool
-	discover    func(workingDir string, since time.Time, taken map[string]bool) (string, error)
-	existingIDs func(workingDir string) (map[string]bool, error)
-	skillDir    bool
+	manifest *manifest.Manifest
 }
 
+// For returns the adapter for a harness declared by a built-in or user manifest.
 func For(id session.Harness) (Adapter, error) {
-	switch id {
-	case session.ClaudeCode:
-		return cliAdapter{id: id, executable: "claude", defaultArgs: []string{"--dangerously-skip-permissions"}, resumeCheck: checkClaudeResume, skillDir: true, gracefulExit: []ExitStep{
-			{Input: "\x03", Pause: 400 * time.Millisecond},
-			{Input: "/exit", Pause: 400 * time.Millisecond},
-			{Input: "\r"},
-		}}, nil
-	case session.CopilotCLI:
-		return cliAdapter{id: id, executable: "copilot", defaultArgs: []string{"--yolo"}, resumeCheck: checkCopilotResume, skillDir: true, gracefulExit: []ExitStep{
-			{Input: "\x03", Pause: 400 * time.Millisecond},
-			{Input: "/exit", Pause: 200 * time.Millisecond},
-			{Input: "\r"},
-		}}, nil
-	case session.GSD:
-		return cliAdapter{id: id, executable: "gsd", resumeCheck: checkGSDResume,
-			startArgs: gsdSessionArgs, resumeArgs: gsdSessionArgs,
-			gracefulExit: []ExitStep{
-				{Input: "\x1b", Pause: 400 * time.Millisecond},
-				{Input: "/quit", Pause: 300 * time.Millisecond},
-				{Input: "\r"},
-			}}, nil
-	case session.Codex:
-		return cliAdapter{id: id, executable: "codex", defaultArgs: []string{"--dangerously-bypass-approvals-and-sandbox"}, resumeCheck: checkCodexResume,
-			resumeArgs: func(id string) []string { return []string{"resume", id} }, resumeFirst: true,
-			discover: discoverCodexSession, existingIDs: existingCodexSessionIDs,
-			gracefulExit: []ExitStep{
-				{Input: "\x1b", Pause: 400 * time.Millisecond},
-				{Input: "/exit", Pause: 300 * time.Millisecond},
-				{Input: "\r"},
-			}}, nil
-	case session.OpenCode:
-		return cliAdapter{id: id, executable: "opencode", defaultArgs: []string{"--auto"}, resumeCheck: checkOpenCodeResume,
-			resumeArgs: func(id string) []string { return []string{"--session", id} },
-			discover:   discoverOpenCodeSession, existingIDs: existingOpenCodeSessionIDs,
-			gracefulExit: []ExitStep{
-				{Input: "\x1b", Pause: 300 * time.Millisecond},
-				{Input: "\x1b", Pause: 400 * time.Millisecond},
-				{Input: "/exit", Pause: 300 * time.Millisecond},
-				{Input: "\r"},
-			}}, nil
-	default:
+	item, ok := manifest.Get(string(id))
+	if !ok {
 		return nil, fmt.Errorf("unsupported harness %q", id)
 	}
+	return cliAdapter{manifest: item}, nil
+}
+
+// resumeCheckers maps manifest resume_check names to their readers.
+var resumeCheckers = map[string]func(harnessSessionID string) error{
+	"claude-transcript":     checkClaudeResume,
+	"copilot-session-state": checkCopilotResume,
+	"gsd-session-file":      checkGSDResume,
+	"codex-rollout":         checkCodexResume,
+	"opencode-db":           checkOpenCodeResume,
+}
+
+type discoveryReader struct {
+	discover func(workingDir string, since time.Time, taken map[string]bool) (string, error)
+	existing func(workingDir string) (map[string]bool, error)
+}
+
+// discoveryReaders maps manifest session.discovery names to their readers.
+var discoveryReaders = map[string]discoveryReader{
+	"codex-rollout": {discoverCodexSession, existingCodexSessionIDs},
+	"opencode-db":   {discoverOpenCodeSession, existingOpenCodeSessionIDs},
 }
 
 // checkCopilotResume relies on Copilot CLI's own session store: a session that
@@ -184,50 +158,62 @@ func checkClaudeResumeIn(projectsRoot, harnessSessionID string) error {
 }
 
 func (adapter cliAdapter) CheckResume(harnessSessionID string) error {
-	if adapter.resumeCheck == nil {
+	check, ok := resumeCheckers[adapter.manifest.ResumeCheck]
+	if !ok {
 		return nil
 	}
-	return adapter.resumeCheck(harnessSessionID)
+	return check(harnessSessionID)
 }
 
 func (adapter cliAdapter) HasSkillDirectoryRoute() bool {
-	return adapter.skillDir
+	return adapter.manifest.Skills.PluginDirOption != ""
 }
 
 func (adapter cliAdapter) ID() session.Harness {
-	return adapter.id
+	return session.Harness(adapter.manifest.ID)
 }
 
 func (adapter cliAdapter) FindExecutable() (string, error) {
-	path, err := exec.LookPath(adapter.executable)
+	path, err := exec.LookPath(adapter.manifest.Executable)
 	if err != nil {
-		return "", fmt.Errorf("%s executable not found on PATH: %w", adapter.id, err)
+		return "", fmt.Errorf("%s executable not found on PATH: %w", adapter.manifest.ID, err)
 	}
 	return path, nil
 }
 
-func (adapter cliAdapter) StartArgs(harnessSessionID string) []string {
-	if adapter.startArgs != nil {
-		return adapter.startArgs(harnessSessionID)
-	}
-	if adapter.discover != nil {
+// expandArgs fills {id} and {session_file}. The session file's folder is
+// created best effort, because some harnesses do not create it themselves.
+func (adapter cliAdapter) expandArgs(args []string, harnessSessionID string) []string {
+	if len(args) == 0 {
 		return nil
 	}
-	return []string{"--session-id", harnessSessionID}
+	sessionFile := ""
+	if template := adapter.manifest.Session.File; template != "" {
+		if path, err := manifest.ExpandPath(template, harnessSessionID); err == nil {
+			sessionFile = path
+			_ = os.MkdirAll(filepath.Dir(path), 0o700)
+		}
+	}
+	expanded := make([]string, len(args))
+	for index, arg := range args {
+		expanded[index] = manifest.ExpandArg(arg, harnessSessionID, sessionFile)
+	}
+	return expanded
+}
+
+func (adapter cliAdapter) StartArgs(harnessSessionID string) []string {
+	return adapter.expandArgs(adapter.manifest.Session.StartArgs, harnessSessionID)
 }
 
 func (adapter cliAdapter) ResumeArgs(harnessSessionID string) []string {
-	if adapter.resumeArgs != nil {
-		return adapter.resumeArgs(harnessSessionID)
-	}
-	return []string{"--resume", harnessSessionID}
+	return adapter.expandArgs(adapter.manifest.Session.ResumeArgs, harnessSessionID)
 }
 
 func (adapter cliAdapter) Argv(launchArgs []string, resuming bool, harnessSessionID string) []string {
 	args := make([]string, 0, len(launchArgs)+3)
 	if resuming {
 		managed := adapter.ResumeArgs(harnessSessionID)
-		if adapter.resumeFirst {
+		if adapter.manifest.Session.ResumePos == "before" {
 			return append(append(args, managed...), launchArgs...)
 		}
 		return append(append(args, launchArgs...), managed...)
@@ -236,32 +222,38 @@ func (adapter cliAdapter) Argv(launchArgs []string, resuming bool, harnessSessio
 }
 
 func (adapter cliAdapter) DiscoversSessionID() bool {
-	return adapter.discover != nil
+	return adapter.manifest.Session.ID == "discover"
 }
 
 func (adapter cliAdapter) ExistingSessionIDs(workingDir string) (map[string]bool, error) {
-	if adapter.discover == nil {
+	if !adapter.DiscoversSessionID() {
 		return nil, nil
 	}
-	if adapter.existingIDs == nil {
-		return nil, fmt.Errorf("%s session discovery cannot snapshot existing conversations", adapter.id)
+	reader, ok := discoveryReaders[adapter.manifest.Session.Discovery]
+	if !ok {
+		return nil, fmt.Errorf("%s session discovery cannot snapshot existing conversations", adapter.manifest.ID)
 	}
-	return adapter.existingIDs(workingDir)
+	return reader.existing(workingDir)
 }
 
 func (adapter cliAdapter) DiscoverSessionID(workingDir string, since time.Time, taken map[string]bool) (string, error) {
-	if adapter.discover == nil {
+	reader, ok := discoveryReaders[adapter.manifest.Session.Discovery]
+	if !adapter.DiscoversSessionID() || !ok {
 		return "", nil
 	}
-	return adapter.discover(workingDir, since, taken)
+	return reader.discover(workingDir, since, taken)
 }
 
 func (adapter cliAdapter) GracefulExit() []ExitStep {
-	return append([]ExitStep(nil), adapter.gracefulExit...)
+	var steps []ExitStep
+	for _, step := range adapter.manifest.GracefulExit {
+		steps = append(steps, ExitStep{Input: step.Input, Pause: step.Pause()})
+	}
+	return steps
 }
 
 func (adapter cliAdapter) DefaultLaunchArgs() []string {
-	return append([]string(nil), adapter.defaultArgs...)
+	return append([]string(nil), adapter.manifest.Launch.DefaultArgs...)
 }
 
 // PowerShellInvocation builds the -Command script. Session environment values

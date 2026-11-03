@@ -46,6 +46,40 @@ func TestSetControlEnabledEditsInPlace(t *testing.T) {
 	}
 }
 
+func TestSetMobileInterfaceEditsInPlace(t *testing.T) {
+	dir := t.TempDir()
+	cases := map[string]string{
+		"missing":   "",
+		"example":   exampleFile,
+		"no block":  "# mine\nversion: 1\nusage:\n  month_start_day: 3\n",
+		"existing":  "version: 1\nmobile:\n  enabled: true # keep\n  interface: 10.0.0.9\n  port: 5000\n",
+		"no iface":  "version: 1\nmobile:\n  enabled: true\n",
+	}
+	for name, content := range cases {
+		path := filepath.Join(dir, name+".yaml")
+		if content != "" {
+			if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		for _, address := range []string{"192.168.1.20", "127.0.0.1"} {
+			if err := SetMobileInterface(path, address); err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
+			if config, err := Load(path); err != nil || config.Mobile.Interface != address {
+				t.Fatalf("%s: interface=%q err=%v", name, config.Mobile.Interface, err)
+			}
+		}
+	}
+	kept, _ := os.ReadFile(filepath.Join(dir, "existing.yaml"))
+	if !strings.Contains(string(kept), "# keep") || !strings.Contains(string(kept), "port: 5000") || strings.Count(string(kept), "interface:") != 1 {
+		t.Fatalf("comments and other keys must survive:\n%s", kept)
+	}
+	if err := SetMobileInterface(filepath.Join(dir, "existing.yaml"), "0.0.0.0"); err == nil {
+		t.Fatal("all interfaces must be refused")
+	}
+}
+
 func TestSetControlEnabledLeavesInvalidFileAlone(t *testing.T) {
 	path := filepath.Join(t.TempDir(), FileName)
 	bad := "version: 1\nbogus: true\n"

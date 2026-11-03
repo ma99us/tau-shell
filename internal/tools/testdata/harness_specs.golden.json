@@ -1,0 +1,316 @@
+[
+  {
+    "ID": "claude-code",
+    "Name": "Claude Code",
+    "Executable": "claude",
+    "Required": false,
+    "VersionArgs": [
+      "--version"
+    ],
+    "HelpArgs": [
+      "--help"
+    ],
+    "Minimum": "",
+    "TestedFrom": "2.1.133",
+    "TestedBefore": "2.2.0",
+    "Capabilities": [
+      {
+        "name": "Start with a TauShell session ID",
+        "option": "--session-id"
+      },
+      {
+        "name": "Resume a conversation",
+        "option": "--resume"
+      },
+      {
+        "name": "Select a model",
+        "option": "--model",
+        "optional": true
+      }
+    ],
+    "Widgets": {
+      "commands": [
+        {
+          "label": "Compact conversation",
+          "text": "/compact"
+        },
+        {
+          "label": "Clear conversation",
+          "text": "/clear"
+        },
+        {
+          "label": "Show context usage",
+          "text": "/context"
+        },
+        {
+          "label": "Show cost",
+          "text": "/cost"
+        },
+        {
+          "label": "Help",
+          "text": "/help"
+        }
+      ],
+      "models": [
+        "default",
+        "sonnet",
+        "opus",
+        "haiku"
+      ],
+      "interruptKeys": [
+        "\u001b"
+      ],
+      "compactText": "/compact",
+      "clearText": "/clear"
+    },
+    "Companions": null,
+    "Install": {
+      "wingetId": "Anthropic.ClaudeCode",
+      "source": "winget",
+      "vendorUrl": "https://code.claude.com/docs/en/setup"
+    }
+  },
+  {
+    "ID": "codex",
+    "Name": "OpenAI Codex CLI",
+    "Executable": "codex",
+    "Required": false,
+    "VersionArgs": [
+      "--version"
+    ],
+    "HelpArgs": [
+      "--help"
+    ],
+    "Minimum": "",
+    "TestedFrom": "0.165.0",
+    "TestedBefore": "0.166.0",
+    "Capabilities": [
+      {
+        "name": "Resume a conversation",
+        "option": "resume"
+      },
+      {
+        "name": "Select a model",
+        "option": "--model",
+        "optional": true
+      }
+    ],
+    "Widgets": {
+      "commands": [
+        {
+          "label": "Compact conversation",
+          "text": "/compact"
+        },
+        {
+          "label": "New conversation",
+          "text": "/new"
+        },
+        {
+          "label": "Show status",
+          "text": "/status"
+        },
+        {
+          "label": "Help",
+          "text": "/help"
+        }
+      ],
+      "models": [],
+      "interruptKeys": [
+        "\u001b"
+      ],
+      "compactText": "/compact",
+      "clearText": "/new"
+    },
+    "Companions": null,
+    "Install": {
+      "npmPackage": "@openai/codex",
+      "source": "npm",
+      "vendorUrl": "https://github.com/openai/codex#installing-and-running-codex-cli"
+    }
+  },
+  {
+    "ID": "copilot-cli",
+    "Name": "GitHub Copilot CLI",
+    "Executable": "copilot",
+    "Required": false,
+    "VersionArgs": [
+      "--version"
+    ],
+    "HelpArgs": [
+      "--help"
+    ],
+    "Minimum": "",
+    "TestedFrom": "1.0.100",
+    "TestedBefore": "1.1.0",
+    "Capabilities": [
+      {
+        "name": "Start with a TauShell session ID",
+        "option": "--session-id"
+      },
+      {
+        "name": "Resume a conversation",
+        "option": "--resume"
+      },
+      {
+        "name": "Select a model",
+        "option": "--model",
+        "optional": true
+      }
+    ],
+    "Widgets": {
+      "commands": [
+        {
+          "label": "Compact conversation",
+          "text": "/compact"
+        },
+        {
+          "label": "Clear conversation",
+          "text": "/clear"
+        },
+        {
+          "label": "Show context usage",
+          "text": "/context"
+        },
+        {
+          "label": "Show usage",
+          "text": "/usage"
+        },
+        {
+          "label": "Help",
+          "text": "/help"
+        }
+      ],
+      "models": [
+        "auto",
+        "claude-sonnet-5.5",
+        "claude-opus-5.5",
+        "claude-haiku-5.5"
+      ],
+      "interruptKeys": [
+        "\u001b",
+        "\u001b"
+      ],
+      "compactText": "/compact",
+      "clearText": "/clear"
+    },
+    "Companions": null,
+    "Install": {
+      "wingetId": "GitHub.Copilot",
+      "source": "winget",
+      "vendorUrl": "https://docs.github.com/copilot/how-tos/set-up/install-copilot-cli"
+    }
+  },
+  {
+    "ID": "gsd",
+    "Name": "GSD",
+    "Executable": "gsd",
+    "Required": false,
+    "VersionArgs": [
+      "--version"
+    ],
+    "HelpArgs": [
+      "--help"
+    ],
+    "Minimum": "1.12.0",
+    "TestedFrom": "1.22.0",
+    "TestedBefore": "1.23.0",
+    "Capabilities": [
+      {
+        "name": "Start and resume a TauShell session file",
+        "option": "--session"
+      },
+      {
+        "name": "Select a model",
+        "option": "--model",
+        "optional": true
+      }
+    ],
+    "Widgets": {
+      "commands": [
+        {
+          "label": "Compact conversation",
+          "text": "/compact"
+        },
+        {
+          "label": "New conversation",
+          "text": "/new"
+        },
+        {
+          "label": "Choose model",
+          "text": "/model"
+        }
+      ],
+      "models": [],
+      "interruptKeys": [
+        "\u001b"
+      ],
+      "compactText": "/compact",
+      "clearText": "/new"
+    },
+    "Companions": null,
+    "Install": {
+      "npmPackage": "@opengsd/gsd-pi",
+      "source": "npm",
+      "vendorUrl": "https://github.com/open-gsd/gsd-pi#install"
+    }
+  },
+  {
+    "ID": "opencode",
+    "Name": "OpenCode",
+    "Executable": "opencode",
+    "Required": false,
+    "VersionArgs": [
+      "--version"
+    ],
+    "HelpArgs": [
+      "--help"
+    ],
+    "Minimum": "",
+    "TestedFrom": "1.19.5",
+    "TestedBefore": "1.20.0",
+    "Capabilities": [
+      {
+        "name": "Resume a conversation",
+        "option": "--session"
+      },
+      {
+        "name": "Select a model",
+        "option": "--model",
+        "optional": true
+      }
+    ],
+    "Widgets": {
+      "commands": [
+        {
+          "label": "Compact conversation",
+          "text": "/compact"
+        },
+        {
+          "label": "New conversation",
+          "text": "/new"
+        },
+        {
+          "label": "Choose model",
+          "text": "/models"
+        },
+        {
+          "label": "Help",
+          "text": "/help"
+        }
+      ],
+      "models": [],
+      "interruptKeys": [
+        "\u001b",
+        "\u001b"
+      ],
+      "compactText": "/compact",
+      "clearText": "/new"
+    },
+    "Companions": null,
+    "Install": {
+      "npmPackage": "opencode-ai",
+      "source": "npm",
+      "vendorUrl": "https://opencode.ai/docs/"
+    }
+  }
+]

@@ -1,0 +1,51 @@
+schema: 1
+id: codex
+name: OpenAI Codex CLI
+short: Codex
+executable: codex
+order: 30
+probes:
+  version_args: ["--version"]
+  help_args: ["--help"]
+  tested_from: "0.165.0"
+  tested_before: "0.166.0"
+capabilities:
+  - { name: Resume a conversation, option: resume }
+  - { name: Select a model, option: "--model", optional: true }
+launch:
+  default_args: ["--dangerously-bypass-approvals-and-sandbox"]
+  reserved_args: [resume, fork]
+# Codex picks its own conversation ID; TauShell finds the rollout file after
+# launch. Resume is a subcommand, so it goes before the user's launch_args.
+session:
+  id: discover
+  discovery: codex-rollout
+  resume_args: [resume, "{id}"]
+  resume_position: before
+resume_check: codex-rollout
+graceful_exit:
+  - { input: "\x1b", pause_ms: 400 }
+  - { input: "/exit", pause_ms: 300 }
+  - { input: "\r" }
+widgets:
+  commands:
+    - { label: Compact conversation, text: "/compact" }
+    - { label: New conversation, text: "/new" }
+    - { label: Show status, text: "/status" }
+    - { label: Help, text: "/help" }
+  interrupt_keys: ["\x1b"]
+  compact_text: "/compact"
+  clear_text: "/new"
+model: codex-rollout
+usage:
+  reader: codex-rollout
+config_file:
+  paths: ["{env:CODEX_HOME|~/.codex}/config.toml"]
+  create: true
+install:
+  vendor_url: https://github.com/openai/codex#installing-and-running-codex-cli
+  npm_package: "@openai/codex"
+brand:
+  mark: monogram
+  text: Cx
+  color: "#10a37f"

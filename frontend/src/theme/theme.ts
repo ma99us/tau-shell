@@ -19,6 +19,7 @@ export const theme = {
     fontSize: Number.parseInt(token("terminal-font-size"), 10),
   }),
   // Brand marks keep the vendor colors; used as CSS values (SVG fill style).
+  // User harnesses use the color in their manifest instead.
   harnessMark: {
     "claude-code": "var(--brand-claude)",
     "copilot-cli": "var(--brand-copilot)",

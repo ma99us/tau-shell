@@ -15,6 +15,7 @@ import (
 	"github.com/ma99us/tau-shell/internal/conpty"
 	"github.com/ma99us/tau-shell/internal/diagnostics"
 	"github.com/ma99us/tau-shell/internal/harness"
+	"github.com/ma99us/tau-shell/internal/harness/manifest"
 	"github.com/ma99us/tau-shell/internal/session"
 	"github.com/ma99us/tau-shell/internal/terminal"
 	"github.com/ma99us/tau-shell/internal/tools"
@@ -59,6 +60,7 @@ func runMain() (exitCode int) {
 	}
 
 	command := "desktop"
+	loadHarnessManifests()
 	if len(os.Args) > 1 {
 		command = os.Args[1]
 	}
@@ -128,6 +130,7 @@ Usage:
   taushell ctl wait <session> [--for idle|input|working] [--timeout 10m]
   taushell ctl send [--insert-only] [--stdin] <session> <text...>
   taushell ctl start [--restore|--fresh] <session>
+  taushell ctl stop <session>
 
 Session definitions: <user-home>\.tau_shell\sessions\<session-id>.yaml
 No-argument launch opens the TauShell desktop application.
@@ -244,6 +247,9 @@ func runSession(id string, restoring bool) (returnErr error) {
 	}
 	adapter, err := harness.For(config.Tool)
 	if err != nil {
+		return err
+	}
+	if err := manifest.Allowed(string(config.Tool)); err != nil {
 		return err
 	}
 	executable, err := adapter.FindExecutable()

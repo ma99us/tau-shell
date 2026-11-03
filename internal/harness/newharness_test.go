@@ -65,8 +65,8 @@ func TestSkillDirectoryRoutesOnlyForVerifiedAdapters(t *testing.T) {
 }
 
 func TestHarnessRegistriesStayAligned(t *testing.T) {
-	registered := make(map[session.Harness]bool, len(session.SupportedHarnesses))
-	for _, id := range session.SupportedHarnesses {
+	registered := make(map[session.Harness]bool, len(session.SupportedHarnesses()))
+	for _, id := range session.SupportedHarnesses() {
 		registered[id] = true
 		if _, err := For(id); err != nil {
 			t.Errorf("session harness %q has no adapter: %v", id, err)

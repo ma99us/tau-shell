@@ -171,8 +171,8 @@ func LogFiles(tool session.Harness, harnessSessionID string) []string {
 	if harnessSessionID == "" {
 		return nil
 	}
-	switch tool {
-	case session.ClaudeCode:
+	switch Reader(tool) {
+	case "claude-jsonl":
 		root := claudeRoot()
 		if root == "" {
 			return nil
@@ -181,7 +181,7 @@ func LogFiles(tool session.Harness, harnessSessionID string) []string {
 		main, _ := filepath.Glob(filepath.Join(projects, "*", harnessSessionID+".jsonl"))
 		sub, _ := filepath.Glob(filepath.Join(projects, "*", harnessSessionID, "subagents", "*.jsonl"))
 		return append(main, sub...)
-	case session.CopilotCLI:
+	case "copilot-events":
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return nil
@@ -198,12 +198,12 @@ func LogFiles(tool session.Harness, harnessSessionID string) []string {
 
 // LineParser returns the record parser for a harness.
 func LineParser(tool session.Harness) func([]byte) (Record, bool) {
-	switch tool {
-	case session.ClaudeCode:
+	switch Reader(tool) {
+	case "claude-jsonl":
 		return ParseClaudeLine
-	case session.CopilotCLI:
+	case "copilot-events":
 		return ParseCopilotLine
-	case session.GSD:
+	case "gsd-jsonl":
 		return ParseGSDLine
 	default:
 		return nil

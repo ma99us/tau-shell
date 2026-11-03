@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { app, LaunchPreview, Session } from "./bridge";
 import { HarnessIcon } from "./harnessIcons";
-import { harnesses } from "./harnesses";
+import { getHarnesses } from "./harnesses";
 
 function parseLaunchArgs(text: string): string[] {
   return text.split(/\r?\n/).map((arg) => arg.trim()).filter(Boolean);
@@ -107,7 +107,7 @@ export function CreateSession({ recentFolders, clone, onClose, onCreated, onErro
         : <label>Project folder<div className="folder-row"><input autoFocus required list="recent-project-folders" value={workingDir} onChange={(event) => { setWorkingDir(event.target.value); setFormError(""); }} placeholder="Choose a local project folder" /><datalist id="recent-project-folders">{recentFolders.map((folder) => <option key={folder} value={folder} />)}</datalist><button type="button" className="secondary-button" onClick={() => void chooseDirectory()}>Browse</button></div></label>}
       <div className="harness-field"><span className="harness-label" id="harness-label">AI harness</span>
         <div className="harness-picker" role="radiogroup" aria-labelledby="harness-label">
-          {harnesses.map(({ id, name }) =>
+          {getHarnesses().filter((item) => item.trusted).map(({ id, name }) =>
             <button key={id} type="button" role="radio" aria-checked={tool === id} className={`harness-option ${tool === id ? "selected" : ""}`} onClick={() => { toolChosen.current = true; setTool(id); }}>
               <HarnessIcon tool={id} /><span className="harness-name">{name}</span>
             </button>)}

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { app, CopilotQuota, InstallResult, Session, SkillsView, SystemStatus, ToolStatus } from "./bridge";
 import { UsageSummary, hasUsage, monthTooltip, usageText } from "./usage";
 import { GearIcon } from "./harnessIcons";
-import { harnesses, harnessIds, harnessShort, isHarness } from "./harnesses";
+import { getHarnesses, harnessIds, harnessShort, isHarness } from "./harnesses";
+import { UserHarnesses } from "./userHarnesses";
 import { ProjectIcon, statusLabel } from "./sessionVisuals";
 import { clearPollFailure, shouldReportPollFailure } from "./polling";
 import { ControlAudit } from "./controlAudit";
@@ -106,7 +107,7 @@ export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAl
       </div>
       <div className="section-title"><div><h2>Your sessions</h2></div>{!loaded && <span className="spinner" role="status" aria-label="Loading sessions" />}</div>
       {quota && !quota.unlimited && <p className={`home-usage home-quota${quota.canProject && quota.projected > quota.entitlement ? " warn" : ""}`} title={`Copilot plan: ${quota.plan}. Read through your GitHub CLI sign-in. ${quota.daysLeft} days left in the cycle.`}>Copilot: <b className="kv">{Math.round(quota.used)} / {Math.round(quota.entitlement)} credits ({Math.round(quota.percentUsed)}%)</b>, resets {quota.resetDate}{quota.canProject ? <>, on pace for <b className="kv">~{Math.round(quota.projected)}</b></> : ""}</p>}
-      {summary && hasUsage(summary.month) && <p className="home-usage" title={monthTooltip(summary)}>This month: <b className="kv">{usageText(summary.month)}</b>{harnessIds.map((tool) => hasUsage(summary.monthByTool?.[tool]) ? <span key={tool}> | {harnessShort(tool)} <b className="kv">{usageText(summary.monthByTool![tool])}</b></span> : null)}</p>}
+      {summary && hasUsage(summary.month) && <p className="home-usage" title={monthTooltip(summary)}>This month: <b className="kv">{usageText(summary.month)}</b>{harnessIds().map((tool) => hasUsage(summary.monthByTool?.[tool]) ? <span key={tool}> | {harnessShort(tool)} <b className="kv">{usageText(summary.monthByTool![tool])}</b></span> : null)}</p>}
       {sessions.length === 0 ? (!loaded ? <div className="loading-card" role="status"><span className="spinner" aria-hidden="true" /><span className="muted">Loading sessions...</span></div> : <div className="empty-card"><div className="empty-icon">+</div><h3>No sessions yet</h3><p>Create a session to connect a project folder to an AI harness such as Claude Code or GitHub Copilot CLI.</p>      <button className="primary-button" onClick={onNew}>New session</button></div>) :
         <>{workspaces.map((workspace) => <div className="home-group" key={workspace.group.key}>
         <GroupHeader workspace={workspace} controls={groupControls} variant="home" />
@@ -128,9 +129,9 @@ export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAl
       </div></div>
       <div className="tools-panel"><div className="tools-header"><h2>AI Harnesses</h2></div><div className="tool-list">
         {status?.tools.filter((tool) => isHarness(tool.id))
-          .sort((left, right) => harnesses.findIndex(({ id }) => id === left.id) - harnesses.findIndex(({ id }) => id === right.id))
+          .sort((left, right) => getHarnesses().findIndex(({ id }) => id === left.id) - getHarnesses().findIndex(({ id }) => id === right.id))
           .map((tool) => <ToolRow key={tool.id} tool={tool} actions={tools} />) ?? <div className="loading-card" role="status"><span className="spinner" aria-hidden="true" /><span className="muted">Detecting harnesses...</span></div>}
-      </div></div>
+      </div><UserHarnesses onError={onError} /></div>
       <SkillsPanel skills={skills} unsupportedNote={skills.view?.unsupported} />
       {toolNoticeBanner(tools)}
       <ControlAudit onError={onError} />

@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ma99us/tau-shell/internal/harness/manifest"
 )
 
 type ID string
@@ -158,174 +160,63 @@ var specs = []Spec{
 		VersionArgs: []string{"--version"},
 		Install:     InstallSource{ManagedStrategy: ManagedPortableGit, VendorURL: "https://gitforwindows.org/"},
 	},
-	{
-		ID:           ClaudeCode,
-		Name:         "Claude Code",
-		Executable:   "claude",
-		VersionArgs:  []string{"--version"},
-		HelpArgs:     []string{"--help"},
-		TestedFrom:   "2.1.133",
-		TestedBefore: "2.2.0",
-		Capabilities: []Capability{
-			{Name: "Start with a TauShell session ID", Option: "--session-id"},
-			{Name: "Resume a conversation", Option: "--resume"},
-			{Name: "Select a model", Option: "--model", Optional: true},
-		},
-		Widgets: &Widgets{
-			Commands: []Command{
-				{Label: "Compact conversation", Text: "/compact"},
-				{Label: "Clear conversation", Text: "/clear"},
-				{Label: "Show context usage", Text: "/context"},
-				{Label: "Show cost", Text: "/cost"},
-				{Label: "Help", Text: "/help"},
-			},
-			Models:        []string{"default", "sonnet", "opus", "haiku"},
-			InterruptKeys: []string{"\x1b"},
-			CompactText:   "/compact",
-			ClearText:     "/clear",
-		},
-		Install: InstallSource{
-			WingetID:  "Anthropic.ClaudeCode",
-			Source:    "winget",
-			VendorURL: "https://code.claude.com/docs/en/setup",
-		},
-	},
-	{
-		ID:           CopilotCLI,
-		Name:         "GitHub Copilot CLI",
-		Executable:   "copilot",
-		VersionArgs:  []string{"--version"},
-		HelpArgs:     []string{"--help"},
-		TestedFrom:   "1.0.100",
-		TestedBefore: "1.1.0",
-		Capabilities: []Capability{
-			{Name: "Start with a TauShell session ID", Option: "--session-id"},
-			{Name: "Resume a conversation", Option: "--resume"},
-			{Name: "Select a model", Option: "--model", Optional: true},
-		},
-		Widgets: &Widgets{
-			Commands: []Command{
-				{Label: "Compact conversation", Text: "/compact"},
-				{Label: "Clear conversation", Text: "/clear"},
-				{Label: "Show context usage", Text: "/context"},
-				{Label: "Show usage", Text: "/usage"},
-				{Label: "Help", Text: "/help"},
-			},
-			Models:        []string{"auto", "claude-sonnet-5.5", "claude-opus-5.5", "claude-haiku-5.5"},
-			InterruptKeys: []string{"\x1b", "\x1b"},
-			CompactText:   "/compact",
-			ClearText:     "/clear",
-		},
-		Install: InstallSource{
-			WingetID:  "GitHub.Copilot",
-			Source:    "winget",
-			VendorURL: "https://docs.github.com/copilot/how-tos/set-up/install-copilot-cli",
-		},
-	},
-	{
-		ID:           GSD,
-		Name:         "GSD",
-		Executable:   "gsd",
-		VersionArgs:  []string{"--version"},
-		HelpArgs:     []string{"--help"},
-		Minimum:      "1.12.0",
-		TestedFrom:   "1.22.0",
-		TestedBefore: "1.23.0",
-		Capabilities: []Capability{
-			{Name: "Start and resume a TauShell session file", Option: "--session"},
-			{Name: "Select a model", Option: "--model", Optional: true},
-		},
-		Widgets: &Widgets{
-			Commands: []Command{
-				{Label: "Compact conversation", Text: "/compact"},
-				{Label: "New conversation", Text: "/new"},
-				{Label: "Choose model", Text: "/model"},
-			},
-			Models:        []string{},
-			InterruptKeys: []string{"\x1b"},
-			CompactText:   "/compact",
-			ClearText:     "/new",
-		},
-		Install: InstallSource{
-			NpmPackage: "@opengsd/gsd-pi",
-			Source:     "npm",
-			VendorURL:  "https://github.com/open-gsd/gsd-pi#install",
-		},
-	},
-	{
-		ID:           Codex,
-		Name:         "OpenAI Codex CLI",
-		Executable:   "codex",
-		VersionArgs:  []string{"--version"},
-		HelpArgs:     []string{"--help"},
-		TestedFrom:   "0.165.0",
-		TestedBefore: "0.166.0",
-		Capabilities: []Capability{
-			{Name: "Resume a conversation", Option: "resume"},
-			{Name: "Select a model", Option: "--model", Optional: true},
-		},
-		Widgets: &Widgets{
-			Commands: []Command{
-				{Label: "Compact conversation", Text: "/compact"},
-				{Label: "New conversation", Text: "/new"},
-				{Label: "Show status", Text: "/status"},
-				{Label: "Help", Text: "/help"},
-			},
-			Models:        []string{},
-			InterruptKeys: []string{"\x1b"},
-			CompactText:   "/compact",
-			ClearText:     "/new",
-		},
-		Install: InstallSource{
-			NpmPackage: "@openai/codex",
-			Source:     "npm",
-			VendorURL:  "https://github.com/openai/codex#installing-and-running-codex-cli",
-		},
-	},
-	{
-		ID:           OpenCode,
-		Name:         "OpenCode",
-		Executable:   "opencode",
-		VersionArgs:  []string{"--version"},
-		HelpArgs:     []string{"--help"},
-		TestedFrom:   "1.19.5",
-		TestedBefore: "1.20.0",
-		Capabilities: []Capability{
-			{Name: "Resume a conversation", Option: "--session"},
-			{Name: "Select a model", Option: "--model", Optional: true},
-		},
-		Widgets: &Widgets{
-			Commands: []Command{
-				{Label: "Compact conversation", Text: "/compact"},
-				{Label: "New conversation", Text: "/new"},
-				{Label: "Choose model", Text: "/models"},
-				{Label: "Help", Text: "/help"},
-			},
-			Models:        []string{},
-			InterruptKeys: []string{"\x1b", "\x1b"},
-			CompactText:   "/compact",
-			ClearText:     "/new",
-		},
-		Install: InstallSource{
-			NpmPackage: "opencode-ai",
-			Source:     "npm",
-			VendorURL:  "https://opencode.ai/docs/",
-		},
-	},
 }
 
-// Specs returns the declared tools in display order.
+// Specs returns the declared tools in display order: the host prerequisites,
+// then every harness manifest (built-in first, then the user's).
 func Specs() []Spec {
-	return append([]Spec(nil), specs...)
+	return append(append([]Spec(nil), specs...), harnessSpecs()...)
 }
 
 func Lookup(id ID) (Spec, bool) {
-	for _, spec := range specs {
+	for _, spec := range Specs() {
 		if spec.ID == id {
 			return spec, true
 		}
 	}
 	return Spec{}, false
+}
+
+// harnessSpecs turns harness manifests into tool specs.
+func harnessSpecs() []Spec {
+	var out []Spec
+	for _, item := range manifest.All() {
+		spec := Spec{
+			ID:           ID(item.ID),
+			Name:         item.Name,
+			Executable:   item.Executable,
+			VersionArgs:  item.Probes.VersionArgs,
+			HelpArgs:     item.Probes.HelpArgs,
+			Minimum:      item.Probes.Minimum,
+			TestedFrom:   item.Probes.TestedFrom,
+			TestedBefore: item.Probes.TestedBefore,
+			Install:      InstallSource{VendorURL: item.Install.VendorURL},
+		}
+		for _, capability := range item.Capabilities {
+			spec.Capabilities = append(spec.Capabilities, Capability{Name: capability.Name, Option: capability.Option, Optional: capability.Optional})
+		}
+		if item.Widgets != nil {
+			widgets := &Widgets{
+				Commands:      []Command{},
+				Models:        append([]string{}, item.Widgets.Models...),
+				InterruptKeys: append([]string{}, item.Widgets.InterruptKeys...),
+				CompactText:   item.Widgets.CompactText,
+				ClearText:     item.Widgets.ClearText,
+			}
+			for _, command := range item.Widgets.Commands {
+				widgets.Commands = append(widgets.Commands, Command{Label: command.Label, Text: command.Text})
+			}
+			spec.Widgets = widgets
+		}
+		switch {
+		case item.Install.WingetID != "":
+			spec.Install.WingetID, spec.Install.Source = item.Install.WingetID, "winget"
+		case item.Install.NpmPackage != "":
+			spec.Install.NpmPackage, spec.Install.Source = item.Install.NpmPackage, "npm"
+		}
+		out = append(out, spec)
+	}
+	return out
 }
 
 type Version struct {

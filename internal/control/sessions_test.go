@@ -154,6 +154,28 @@ func TestAnswerOnlyConfirmedClaudePrompts(t *testing.T) {
 	}
 }
 
+func TestStopOnlyStopsRunningSessions(t *testing.T) {
+	for _, running := range []bool{false, true} {
+		sessions, _, _ := sessionsWith(running)
+		var stopped []string
+		sessions.Stop = func(id string) error { stopped = append(stopped, id); return nil }
+		response := sessions.HandleStop(json.RawMessage(`{"session":"s1"}`))
+		if !running && (response.OK || response.Error.Code != CodeRefused || len(stopped) != 0) {
+			t.Fatalf("a stopped session must be refused: %+v", response)
+		}
+		if running && (!response.OK || len(stopped) != 1 || stopped[0] != "s1") {
+			t.Fatalf("a running session must stop: %+v %v", response, stopped)
+		}
+	}
+	sessions, _, _ := sessionsWith(true)
+	if response := sessions.HandleStop(json.RawMessage(`{"session":"s1"}`)); response.OK || response.Error.Code != CodeDisabled {
+		t.Fatalf("no stop hook must report disabled: %+v", response)
+	}
+	if response := sessions.HandleStop(json.RawMessage(`{}`)); response.OK || response.Error.Code != CodeBadRequest {
+		t.Fatalf("missing session: %+v", response)
+	}
+}
+
 func TestStartLaunchesOnlyStoppedSessions(t *testing.T) {
 	for _, running := range []bool{false, true} {
 		sessions, _, _ := sessionsWith(running)

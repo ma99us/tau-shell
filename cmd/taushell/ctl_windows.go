@@ -28,7 +28,7 @@ const (
 
 const (
 	ctlTimeout = 5 * time.Second
-	ctlUsage   = "usage: taushell ctl list [--json] [--instance <pid>]\n       taushell ctl wait <session> [--for idle|input|working] [--timeout 10m] [--instance <pid>]\n       taushell ctl start [--restore|--fresh] [--instance <pid>] <session>\n       taushell ctl send [--insert-only] [--stdin] [--instance <pid>] <session> <text...>"
+	ctlUsage   = "usage: taushell ctl list [--json] [--instance <pid>]\n       taushell ctl wait <session> [--for idle|input|working] [--timeout 10m] [--instance <pid>]\n       taushell ctl start [--restore|--fresh] [--instance <pid>] <session>\n       taushell ctl stop [--instance <pid>] <session>\n       taushell ctl send [--insert-only] [--stdin] [--instance <pid>] <session> <text...>"
 )
 
 type ctlError struct {
@@ -87,8 +87,34 @@ func runCtlWith(args []string, stdout io.Writer, backend ctlBackend) error {
 		return runCtlSend(args[1:], stdout, backend)
 	case "start":
 		return runCtlStart(args[1:], stdout, backend)
+	case "stop":
+		return runCtlStop(args[1:], stdout, backend)
 	}
 	return &ctlError{exitCtlUsage, ctlUsage}
+}
+
+func runCtlStop(args []string, stdout io.Writer, backend ctlBackend) error {
+	flags := flag.NewFlagSet("ctl stop", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	instance := flags.Int("instance", 0, "target instance process ID")
+	if err := flags.Parse(reorderFlags(args)); err != nil || flags.NArg() != 1 {
+		return &ctlError{exitCtlUsage, ctlUsage}
+	}
+	target, err := pickInstance(backend, *instance)
+	if err != nil {
+		return err
+	}
+	arguments, _ := json.Marshal(control.SessionArg{Session: flags.Arg(0)})
+	response, err := backend.call(target.PipeName, control.Request{Op: control.OpStop, Args: arguments})
+	if err != nil {
+		return fmt.Errorf("stop: %w", err)
+	}
+	if !response.OK {
+		return ctlFailure("stop", response)
+	}
+	// The stop is graceful and may take a while; poll "ctl list" for the stopped state.
+	_, err = fmt.Fprintln(stdout, "stop requested; the session is stopping gracefully")
+	return err
 }
 
 func runCtlStart(args []string, stdout io.Writer, backend ctlBackend) error {

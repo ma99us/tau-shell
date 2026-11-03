@@ -1,0 +1,75 @@
+schema: 1
+id: copilot-cli
+name: GitHub Copilot CLI
+short: Copilot
+executable: copilot
+order: 10
+probes:
+  version_args: ["--version"]
+  help_args: ["--help"]
+  tested_from: "1.0.100"
+  tested_before: "1.1.0"
+capabilities:
+  - { name: Start with a TauShell session ID, option: "--session-id" }
+  - { name: Resume a conversation, option: "--resume" }
+  - { name: Select a model, option: "--model", optional: true }
+launch:
+  default_args: ["--yolo"]
+  reserved_args: ["--session-id", "--resume"]
+session:
+  id: tau
+  start_args: ["--session-id", "{id}"]
+  resume_args: ["--resume", "{id}"]
+resume_check: copilot-session-state
+graceful_exit:
+  - { input: "\x03", pause_ms: 400 }
+  - { input: "/exit", pause_ms: 200 }
+  - { input: "\r" }
+widgets:
+  commands:
+    - { label: Compact conversation, text: "/compact" }
+    - { label: Clear conversation, text: "/clear" }
+    - { label: Show context usage, text: "/context" }
+    - { label: Show usage, text: "/usage" }
+    - { label: Help, text: "/help" }
+  models: ["auto", "claude-sonnet-5.5", "claude-opus-5.5", "claude-haiku-5.5"]
+  # A single Esc was verified not to stop Copilot CLI; it needs Esc twice.
+  interrupt_keys: ["\x1b", "\x1b"]
+  compact_text: "/compact"
+  clear_text: "/clear"
+# Read from the last two screen rows only, never the whole screen. The
+# selection-prompt footer was observed on Copilot CLI 1.0.103 as
+# "navigate / enter to select / esc to cancel".
+cues:
+  - state: input
+    source: last-rows
+    rows: 2
+    ignore_case: true
+    pattern: '\benter to select\b.*\besc to cancel\b'
+  - state: working
+    source: last-rows
+    rows: 2
+    ignore_case: true
+    pattern: '^\S{0,2}\s*Working\b.*\besc\b'
+  - state: idle
+    source: last-rows
+    rows: 2
+    pattern: '\? help'
+model: copilot-events
+title: copilot-workspace
+usage:
+  reader: copilot-events
+  records_own_cost: true
+skills:
+  plugin_dir_option: "--plugin-dir"
+  personal_dirs: ["~/.copilot/skills", "~/.agents/skills"]
+config_file:
+  paths: ["~/.copilot/settings.json", "~/.copilot/config.json"]
+  missing_hint: no Copilot CLI settings file found in ~/.copilot yet; run copilot once to create it
+phone_answer: copilot-permission
+install:
+  vendor_url: https://docs.github.com/copilot/how-tos/set-up/install-copilot-cli
+  winget_id: GitHub.Copilot
+brand:
+  mark: copilot
+  color: "#f4f6fa"

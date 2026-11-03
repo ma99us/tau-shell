@@ -270,9 +270,62 @@ func (application *App) RevokePhone(id string) error {
 	return registry.Revoke(id)
 }
 
+// MobileInterface is one local address the phone server could listen on.
+type MobileInterface struct {
+	Name    string `json:"name"`
+	Address string `json:"address"`
+}
+
+// GetMobileInterfaces lists this PC's up IPv4 addresses. Loopback is included
+// for USB-forwarded phones; the server never listens on all interfaces.
+func (application *App) GetMobileInterfaces() ([]MobileInterface, error) {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return nil, fmt.Errorf("list network interfaces: %w", err)
+	}
+	items := []MobileInterface{}
+	for _, adapter := range interfaces {
+		if adapter.Flags&net.FlagUp == 0 {
+			continue
+		}
+		addresses, err := adapter.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, address := range addresses {
+			if ip, _, err := net.ParseCIDR(address.String()); err == nil && ip.To4() != nil {
+				items = append(items, MobileInterface{Name: adapter.Name, Address: ip.String()})
+			}
+		}
+	}
+	return items, nil
+}
+
+// SetMobileInterface stores the listen address and, when the server is on,
+// restarts it there. A phone paired to another address must pair again.
+func (application *App) SetMobileInterface(address string) error {
+	if !localAddress(address) {
+		return fmt.Errorf("%s is not an address of this PC", address)
+	}
+	if err := appconfig.SetMobileInterface(application.settingsPath(), address); err != nil {
+		return err
+	}
+	application.mobile.mu.Lock()
+	running := application.mobile.runtime != nil
+	application.mobile.mu.Unlock()
+	if !running {
+		return nil
+	}
+	if err := application.applyMobile(false); err != nil {
+		return err
+	}
+	return application.applyMobile(true)
+}
+
 // MobileStatus is the phone section of the Home/Settings UI.
 type MobileStatus struct {
 	Enabled     bool                 `json:"enabled"`
+	Interface   string               `json:"interface,omitempty"`
 	Address     string               `json:"address,omitempty"`
 	Pairing     string               `json:"pairing"`
 	PendingName string               `json:"pendingName,omitempty"`
@@ -285,6 +338,9 @@ func (application *App) GetMobileStatus() (MobileStatus, error) {
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	status := MobileStatus{Pairing: string(pairing.StateIdle), Devices: []pairing.Device{}, Audit: []control.AuditEntry{}}
+	if settings, err := appconfig.Load(application.settingsPath()); err == nil {
+		status.Interface = settings.Mobile.Interface
+	}
 	if registry, err := application.mobileRegistryLocked(); err == nil {
 		if devices := registry.List(); devices != nil {
 			status.Devices = devices

@@ -1,6 +1,6 @@
 # 03 - Prompt Dispatch (Queue and Broadcast)
 
-Status: **first slice built** (Claude Code and Copilot CLI only). Rank 3. Sources: Orca parallel agents and automations (adapted); user decision.
+Status: **first slice built** (Claude Code and Copilot CLI only; gating is now data-driven: any harness whose manifest declares verified `cues` gets dispatch, so GSD, OpenCode and Codex only need cues probed live, no code). Rank 3. Sources: Orca parallel agents and automations (adapted); user decision.
 
 **Built:** a per-session **Queue** menu in the harness toolbar (`frontend/src/queuePanel.tsx`, scheduler and rules in `frontend/src/promptQueue.ts`, unit tested). A prompt is typed only when the harness shows a confirmed idle cue, the input line is empty, and the previous prompt has been seen working (or a 10 s grace passed). The same menu broadcasts a prompt into the queues of other running sessions and warns when selected sessions share a folder. A stopped session pauses its queue until "Resume queue"; items are never dropped silently. The queue is memory-only (decision: cleared on restart, so a stale prompt never fires); closing TauShell with queued prompts warns and says they are discarded. Each automatic send is logged by session only (`RecordQueueSend`; it appears in the control audit when the control channel is on).
 

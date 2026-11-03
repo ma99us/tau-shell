@@ -1,4 +1,5 @@
 import type { Terminal } from "@xterm/xterm";
+import { cuePattern, findHarness } from "./harnesses.ts";
 
 // "working" / "idle" / "input" (waiting for the user to answer a prompt) when
 // the harness itself says so; undefined when the harness gives no usable cue
@@ -41,26 +42,19 @@ export function attentionEdge(
   return undefined;
 }
 
-const brailleSpinner = /^[\u2800-\u28FF\u25D0-\u25D3]/;
-// Claude Code 2.1.316 animates the title prefix with U+25D0-25D3 (half circles)
-// while working and shows U+2733 when idle (also while a permission prompt is
-// open, so the title cannot signal input). Prompt footers: the trust-folder
-// prompt shows "Enter to confirm · Esc to cancel"; shell-command and file-edit
-// permission prompts show "Esc to cancel · Tab to amend".
-// Question and plan-approval prompts (2.1.316) show "Enter to select · ↑/↓ to navigate ·
-// Esc to cancel" and "ctrl+g to edit in Notepad · <plan path> · /plan to preview".
-const claudePromptFooter =
-  /\bEnter to (?:confirm|select)\b.*\bEsc to cancel\b|\bEsc to cancel\b.*\bTab to amend\b|\bctrl\+g to edit\b.*\/plan to preview/i;
-// Answering a harness prompt from the phone is allowed only for Claude Code's trust
-// and permission prompts, where Enter takes the default "Yes" and Esc declines. Question
-// and plan-approval prompts are excluded: their first choice is not a plain yes.
+// Cue rules live in the harness manifests (see builtin claude-code.yaml for the
+// observed Claude Code title and footer behavior). Answering a harness prompt from
+// the phone is allowed only for Claude Code's trust and permission prompts, where
+// Enter takes the default "Yes" and Esc declines. Question and plan-approval
+// prompts are excluded: their first choice is not a plain yes.
 const claudePermissionFooter = /\bEnter to confirm\b.*\bEsc to cancel\b|\bEsc to cancel\b.*\bTab to amend\b/i;
 
 export type AnswerPlan = { keys: string[]; reason: "" } | { keys: []; reason: string };
 
 export function answerPlan(tool: string, terminal: Terminal | undefined, title: string, answer: string): AnswerPlan {
-  if (tool === "copilot-cli") return copilotAnswerPlan(terminal, title, answer);
-  if (tool !== "claude-code") return { keys: [], reason: "answering from the phone is only verified for Claude Code and Copilot CLI" };
+  const reader = findHarness(tool)?.phoneAnswer;
+  if (reader === "copilot-permission") return copilotAnswerPlan(terminal, title, answer);
+  if (reader !== "claude-permission") return { keys: [], reason: "answering from the phone is only verified for Claude Code and Copilot CLI" };
   if (!terminal || readHarnessSignal(tool, terminal, title) !== "input") return { keys: [], reason: "the harness is not waiting for an answer" };
   if (!lastTextRows(terminal, 2).some((row) => claudePermissionFooter.test(row))) return { keys: [], reason: "this prompt is a question or plan; answer it on the PC" };
   if (answer !== "yes") return { keys: ["\u001b"], reason: "" };
@@ -95,12 +89,6 @@ function copilotAnswerPlan(terminal: Terminal | undefined, title: string, answer
   if (!found.yesHighlighted) return { keys: [], reason: "the highlighted choice is not a plain Yes; answer it on the PC" };
   return { keys: ["\r"], reason: "" };
 }
-
-const copilotWorkingStatus = /^\S{0,2}\s*Working\b.*\besc\b/i;
-const copilotIdleFooter = /\? help/;
-// Footer of Copilot CLI's selection prompts (permission requests, pickers),
-// observed on Copilot CLI 1.0.103 as "navigate · enter to select · esc to cancel".
-const copilotPromptFooter = /\benter to select\b.*\besc to cancel\b/i;
 
 function lastRows(terminal: Terminal, count: number): string[] {
   const buffer = terminal.buffer.active;
@@ -183,7 +171,7 @@ export function composeInjection(draft: string, text: string, submit: boolean): 
   return out;
 }
 
-export const hasCueSignal = (tool: string) => tool === "claude-code" || tool === "copilot-cli";
+export const hasCueSignal = (tool: string) => (findHarness(tool)?.cues?.length ?? 0) > 0;
 
 export type ControlSendPlan = { allowed: true } | { allowed: false; reason: string };
 
@@ -210,20 +198,19 @@ export function reportedState(signal: HarnessSignal, activity: Activity): Report
   return { state: activity.working ? "working" : "idle", source: "heuristic" };
 }
 
-// Harness-specific cues only: terminal title for Claude Code, the status/footer
-// row (last two rows, never the whole screen) for Copilot CLI.
+// Cues come from the harness manifest: ordered rules, first match wins. Sources:
+// the terminal title, the last N screen rows (never the whole screen), or the last
+// N non-empty rows within the bottom six.
 export function readHarnessSignal(tool: string, terminal: Terminal | undefined, title: string): HarnessSignal {
-  if (tool === "claude-code") {
-    if (terminal && lastTextRows(terminal, 2).some((row) => claudePromptFooter.test(row))) return "input";
-    if (brailleSpinner.test(title)) return "working";
-    if (title.startsWith("\u2733")) return "idle";
-    return undefined;
-  }
-  if (tool === "copilot-cli" && terminal) {
-    const rows = lastRows(terminal, 2);
-    if (rows.some((row) => copilotPromptFooter.test(row))) return "input";
-    if (rows.some((row) => copilotWorkingStatus.test(row))) return "working";
-    if (rows.some((row) => copilotIdleFooter.test(row))) return "idle";
+  for (const cue of findHarness(tool)?.cues ?? []) {
+    const pattern = cuePattern(cue);
+    if (!pattern) continue;
+    let candidates: string[];
+    if (cue.source === "title") candidates = [title];
+    else if (!terminal) continue;
+    else if (cue.source === "last-rows") candidates = lastRows(terminal, cue.rows ?? 1);
+    else candidates = lastTextRows(terminal, cue.rows ?? 1);
+    if (candidates.some((candidate) => pattern.test(candidate))) return cue.state;
   }
   return undefined;
 }

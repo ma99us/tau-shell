@@ -10,9 +10,10 @@ import (
 )
 
 // PluginDirArgs returns the arguments that load a plugin folder for one
-// launch. Both supported harnesses take the folder as a separate value.
-func PluginDirArgs(dir string) []string {
-	return []string{"--plugin-dir", dir}
+// launch. The option comes from the harness manifest; the folder is a
+// separate value.
+func PluginDirArgs(option, dir string) []string {
+	return []string{option, dir}
 }
 
 var (
@@ -20,11 +21,11 @@ var (
 	pluginProbeCache = map[string]bool{}
 )
 
-// SupportsPluginDir reports whether the harness executable lists --plugin-dir
-// in its help output. The answer is cached per executable file version so an
-// upgrade is probed again.
-func SupportsPluginDir(ctx context.Context, executable string) bool {
-	key := executable
+// SupportsPluginDir reports whether the harness executable lists the option
+// in its help output. The answer is cached per executable file version and
+// option so an upgrade is probed again.
+func SupportsPluginDir(ctx context.Context, executable, option string) bool {
+	key := executable + "|" + option
 	if info, err := os.Stat(executable); err == nil {
 		key += "|" + info.ModTime().UTC().Format(time.RFC3339Nano)
 	}
@@ -42,7 +43,7 @@ func SupportsPluginDir(ctx context.Context, executable string) bool {
 	if err != nil && len(output) == 0 {
 		return false
 	}
-	supported = strings.Contains(string(output), "--plugin-dir")
+	supported = strings.Contains(string(output), option)
 	pluginProbeMu.Lock()
 	pluginProbeCache[key] = supported
 	pluginProbeMu.Unlock()

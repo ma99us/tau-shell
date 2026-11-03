@@ -11,9 +11,9 @@ import (
 	"path/filepath"
 
 	"github.com/ma99us/tau-shell/internal/diagnostics"
+	"github.com/ma99us/tau-shell/internal/harness/manifest"
 	"github.com/ma99us/tau-shell/internal/presets"
 	"github.com/ma99us/tau-shell/internal/session"
-	"github.com/ma99us/tau-shell/internal/tools"
 	"github.com/ma99us/tau-shell/internal/usage"
 	"golang.org/x/sys/windows"
 )
@@ -142,37 +142,29 @@ func shellOpen(path string) error {
 // toolConfigPath returns the tool's user-level config file and whether it may
 // be created empty when missing.
 func toolConfigPath(tool string) (path string, create bool, err error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", false, err
+	item, ok := manifest.Get(tool)
+	if !ok || item.ConfigFile == nil {
+		return "", false, fmt.Errorf("no config file known for tool %q", tool)
 	}
-	switch tools.ID(tool) {
-	case tools.ClaudeCode:
-		return filepath.Join(home, ".claude", "settings.json"), true, nil
-	case tools.CopilotCLI:
-		for _, name := range []string{"settings.json", "config.json"} {
-			candidate := filepath.Join(home, ".copilot", name)
+	var first string
+	for _, template := range item.ConfigFile.Paths {
+		candidate, expandErr := manifest.ExpandPath(template, "")
+		if expandErr != nil {
+			return "", false, expandErr
+		}
+		if first == "" {
+			first = candidate
+		}
+		if item.ConfigFile.MissingHint != "" {
 			if _, statErr := os.Stat(candidate); statErr == nil {
 				return candidate, false, nil
 			}
 		}
-		return "", false, errors.New("no Copilot CLI settings file found in ~/.copilot yet; run copilot once to create it")
-	case tools.GSD:
-		gsdHome := os.Getenv("GSD_HOME")
-		if gsdHome == "" {
-			gsdHome = filepath.Join(home, ".gsd")
-		}
-		return filepath.Join(gsdHome, "agent", "settings.json"), true, nil
-	case tools.Codex:
-		codexHome := os.Getenv("CODEX_HOME")
-		if codexHome == "" {
-			codexHome = filepath.Join(home, ".codex")
-		}
-		return filepath.Join(codexHome, "config.toml"), true, nil
-	case tools.OpenCode:
-		return filepath.Join(home, ".config", "opencode", "opencode.json"), true, nil
 	}
-	return "", false, fmt.Errorf("no config file known for tool %q", tool)
+	if item.ConfigFile.MissingHint != "" {
+		return "", false, errors.New(item.ConfigFile.MissingHint)
+	}
+	return first, item.ConfigFile.Create, nil
 }
 
 // OpenToolConfig opens a tool's user-level config file in the default editor.

@@ -80,6 +80,14 @@ library < global < session, by name.
 
 The isolated [`spikes/session-config/`](../../spikes/session-config/) prototype records the earlier validation of strict YAML parsing and the separate runtime-state boundary.
 
+## Harness manifests (`~/.tau_shell/harnesses/*.yaml`)
+
+User-added harnesses are declarative YAML manifests; the schema, readers and
+trust model are in [`23-adding-a-harness.md`](23-adding-a-harness.md). A
+session's `tool:` may name any loaded harness. Confirmation of user manifests
+is runtime state in `~/.tau_shell/harness-trust.json` (content hash), not in
+session YAML.
+
 ## Cloning a session
 
 "Clone" opens the New session dialog with the original's project folder shown

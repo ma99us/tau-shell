@@ -1,0 +1,52 @@
+schema: 1
+id: opencode
+name: OpenCode
+short: OpenCode
+executable: opencode
+order: 40
+probes:
+  version_args: ["--version"]
+  help_args: ["--help"]
+  tested_from: "1.19.5"
+  tested_before: "1.20.0"
+capabilities:
+  - { name: Resume a conversation, option: "--session" }
+  - { name: Select a model, option: "--model", optional: true }
+launch:
+  default_args: ["--auto"]
+  reserved_args: ["--session", "-s", "--continue", "-c", "--fork"]
+# OpenCode keeps conversations in a SQLite database; TauShell finds the new
+# one after launch.
+session:
+  id: discover
+  discovery: opencode-db
+  resume_args: ["--session", "{id}"]
+resume_check: opencode-db
+graceful_exit:
+  - { input: "\x1b", pause_ms: 300 }
+  - { input: "\x1b", pause_ms: 400 }
+  - { input: "/exit", pause_ms: 300 }
+  - { input: "\r" }
+widgets:
+  commands:
+    - { label: Compact conversation, text: "/compact" }
+    - { label: New conversation, text: "/new" }
+    - { label: Choose model, text: "/models" }
+    - { label: Help, text: "/help" }
+  interrupt_keys: ["\x1b", "\x1b"]
+  compact_text: "/compact"
+  clear_text: "/new"
+model: opencode-db
+usage:
+  reader: opencode-db
+  records_own_cost: true
+config_file:
+  paths: ["~/.config/opencode/opencode.json"]
+  create: true
+install:
+  vendor_url: https://opencode.ai/docs/
+  npm_package: opencode-ai
+brand:
+  mark: monogram
+  text: Oc
+  color: "#6ea8fe"

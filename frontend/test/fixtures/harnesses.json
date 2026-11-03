@@ -1,0 +1,116 @@
+[
+  {
+    "id": "copilot-cli",
+    "name": "GitHub Copilot CLI",
+    "short": "Copilot",
+    "executable": "copilot",
+    "cues": [
+      {
+        "state": "input",
+        "source": "last-rows",
+        "rows": 2,
+        "pattern": "\\benter to select\\b.*\\besc to cancel\\b",
+        "ignoreCase": true
+      },
+      {
+        "state": "working",
+        "source": "last-rows",
+        "rows": 2,
+        "pattern": "^\\S{0,2}\\s*Working\\b.*\\besc\\b",
+        "ignoreCase": true
+      },
+      {
+        "state": "idle",
+        "source": "last-rows",
+        "rows": 2,
+        "pattern": "\\? help"
+      }
+    ],
+    "phoneAnswer": "copilot-permission",
+    "brand": {
+      "mark": "copilot",
+      "color": "#f4f6fa"
+    },
+    "builtin": true,
+    "path": "builtin/copilot-cli.yaml",
+    "hash": "0e3cc809f5257e939683554a46014ab4821baa6c624fa3b304b79c58b7c4d339"
+  },
+  {
+    "id": "claude-code",
+    "name": "Claude Code",
+    "short": "Claude",
+    "executable": "claude",
+    "cues": [
+      {
+        "state": "input",
+        "source": "last-text-rows",
+        "rows": 2,
+        "pattern": "\\bEnter to (?:confirm|select)\\b.*\\bEsc to cancel\\b|\\bEsc to cancel\\b.*\\bTab to amend\\b|\\bctrl\\+g to edit\\b.*/plan to preview",
+        "ignoreCase": true
+      },
+      {
+        "state": "working",
+        "source": "title",
+        "pattern": "^[\\u2800-\\u28FF\\u25D0-\\u25D3]"
+      },
+      {
+        "state": "idle",
+        "source": "title",
+        "pattern": "^\\u2733"
+      }
+    ],
+    "phoneAnswer": "claude-permission",
+    "brand": {
+      "mark": "claude",
+      "color": "#d97757"
+    },
+    "builtin": true,
+    "path": "builtin/claude-code.yaml",
+    "hash": "01e138e25e192757c410760777beacc6b1e0566a124c4132410f82e3012af7fb"
+  },
+  {
+    "id": "codex",
+    "name": "OpenAI Codex CLI",
+    "short": "Codex",
+    "executable": "codex",
+    "cues": null,
+    "brand": {
+      "mark": "monogram",
+      "text": "Cx",
+      "color": "#10a37f"
+    },
+    "builtin": true,
+    "path": "builtin/codex.yaml",
+    "hash": "1b9dd4d782d6e0fdde3b8a3255613d886234e15bcc5c65432e0c187081d2b2bc"
+  },
+  {
+    "id": "opencode",
+    "name": "OpenCode",
+    "short": "OpenCode",
+    "executable": "opencode",
+    "cues": null,
+    "brand": {
+      "mark": "monogram",
+      "text": "Oc",
+      "color": "#6ea8fe"
+    },
+    "builtin": true,
+    "path": "builtin/opencode.yaml",
+    "hash": "94345ad64c7429ff486f6bf776fae5f2da10c607166e787d1c7eefb79c1fb814"
+  },
+  {
+    "id": "gsd",
+    "name": "GSD",
+    "short": "GSD",
+    "executable": "gsd",
+    "cues": null,
+    "brand": {
+      "mark": "monogram",
+      "text": "G",
+      "color": "#f0b429"
+    },
+    "builtin": true,
+    "path": "builtin/gsd.yaml",
+    "hash": "7a2c505a8a6f21a8f459cc7e961f4a64269372e69fd48db15f9c4b6fc375425d"
+  }
+]

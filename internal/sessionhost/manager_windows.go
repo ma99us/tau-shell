@@ -19,6 +19,7 @@ import (
 	"github.com/ma99us/tau-shell/internal/conpty"
 	"github.com/ma99us/tau-shell/internal/diagnostics"
 	"github.com/ma99us/tau-shell/internal/harness"
+	"github.com/ma99us/tau-shell/internal/harness/manifest"
 	"github.com/ma99us/tau-shell/internal/session"
 	"github.com/ma99us/tau-shell/internal/usage"
 	"github.com/ma99us/tau-shell/internal/vault"
@@ -155,7 +156,12 @@ func (manager *Manager) skillArgs(ctx context.Context, adapter harness.Adapter, 
 	if !adapter.HasSkillDirectoryRoute() {
 		return nil
 	}
-	if !harness.SupportsPluginDir(ctx, executable) {
+	item, ok := manifest.Get(string(config.Tool))
+	if !ok {
+		return nil
+	}
+	option := item.Skills.PluginDirOption
+	if !harness.SupportsPluginDir(ctx, executable, option) {
 		diagnostics.Warn("harness does not support --plugin-dir; launching without TauShell skills", errors.New("unsupported flag"), "tool", config.Tool)
 		return nil
 	}
@@ -171,7 +177,7 @@ func (manager *Manager) skillArgs(ctx context.Context, adapter harness.Adapter, 
 		return nil
 	}
 	diagnostics.Info("TauShell skills attached", "session_id", config.ID, "tool", config.Tool, "plugin_dir", dir, "skills", strings.Join(names, ","))
-	return harness.PluginDirArgs(dir)
+	return harness.PluginDirArgs(option, dir)
 }
 
 func New(configDirectory, databasePath string, emit func(Event)) (*Manager, error) {
@@ -450,6 +456,9 @@ func (manager *Manager) start(ctx context.Context, id string, restoring, fresh b
 	}
 	adapter, err := harness.For(config.Tool)
 	if err != nil {
+		return Snapshot{}, err
+	}
+	if err := manifest.Allowed(string(config.Tool)); err != nil {
 		return Snapshot{}, err
 	}
 	harnessExecutable, err := adapter.FindExecutable()

@@ -1,6 +1,6 @@
 # 10 - Declarative Harness Adapters
 
-Status: **future planning**. Rank 10. Sources: V3 ideas (plugin SDK); Orca ("any CLI agent"). User decision: full manifest including resume.
+Status: **implemented**. Rank 10. Sources: V3 ideas (plugin SDK); Orca ("any CLI agent"). User decision: full manifest including resume. Built-ins are embedded manifests and user manifests live in `~/.tau_shell/harnesses/`; see [`23-adding-a-harness.md`](../../v2/23-adding-a-harness.md) for the schema and trust model. Deviation from the plan below: readers are selected by plain string name, and each reader owns its store layout.
 
 ## Problem
 

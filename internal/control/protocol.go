@@ -31,6 +31,8 @@ const (
 	OpSend = "send"
 	// OpStart launches a stopped session through the window.
 	OpStart = "start"
+	// OpStop asks a running session to stop gracefully (the same path as the Stop button).
+	OpStop = "stop"
 )
 
 // StartArgs are the arguments of OpStart. Mode is "start", "restore" or "fresh".

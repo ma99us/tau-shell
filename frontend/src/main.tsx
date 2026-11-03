@@ -8,7 +8,7 @@ import { Activity, AttentionKind, answerPlan, attentionEdge, hasCueSignal, nextA
 import { moveId } from "./order";
 import { CommandPalette, PaletteItem } from "./harnessActions";
 import { GearIcon, HomeIcon } from "./harnessIcons";
-import { harnessName } from "./harnesses";
+import { harnessName, setHarnesses } from "./harnesses";
 import appIcon from "./assets/appicon.png";
 import { errorDetails, reportFrontendFailure, isStoppedSessionError } from "./errors";
 import { AppDialog, ShutdownPopup, RenameDialog } from "./dialogs";
@@ -832,4 +832,15 @@ async function fitTerminalNow(id: string) {
   }
 }
 
-createRoot(document.getElementById("root")!).render(<AppErrorBoundary><App /></AppErrorBoundary>);
+// The harness list (cues, brand marks, names) comes from the host, so load it
+// before the first render.
+async function boot() {
+  try {
+    const catalog = await app().GetHarnesses();
+    setHarnesses(catalog.harnesses ?? []);
+  } catch (error) {
+    console.error("load harnesses failed", error);
+  }
+  createRoot(document.getElementById("root")!).render(<AppErrorBoundary><App /></AppErrorBoundary>);
+}
+void boot();

@@ -1,0 +1,51 @@
+schema: 1
+id: gsd
+name: GSD
+short: GSD
+executable: gsd
+order: 50
+probes:
+  version_args: ["--version"]
+  help_args: ["--help"]
+  minimum: "1.12.0"
+  tested_from: "1.22.0"
+  tested_before: "1.23.0"
+capabilities:
+  - { name: Start and resume a TauShell session file, option: "--session" }
+  - { name: Select a model, option: "--model", optional: true }
+launch:
+  reserved_args: ["--session", "--session-dir", "--continue", "-c", "--no-session"]
+# GSD 1.12.0 added --session: TauShell names the session file and reopens it.
+session:
+  id: tau
+  file: "{env:GSD_HOME|~/.gsd}/sessions/tau/{id}.jsonl"
+  start_args: ["--session", "{session_file}"]
+  resume_args: ["--session", "{session_file}"]
+# GSD writes its session file only after the first assistant reply.
+resume_check: gsd-session-file
+graceful_exit:
+  - { input: "\x1b", pause_ms: 400 }
+  - { input: "/quit", pause_ms: 300 }
+  - { input: "\r" }
+widgets:
+  commands:
+    - { label: Compact conversation, text: "/compact" }
+    - { label: New conversation, text: "/new" }
+    - { label: Choose model, text: "/model" }
+  interrupt_keys: ["\x1b"]
+  compact_text: "/compact"
+  clear_text: "/new"
+model: gsd-jsonl
+usage:
+  reader: gsd-jsonl
+  records_own_cost: true
+config_file:
+  paths: ["{env:GSD_HOME|~/.gsd}/agent/settings.json"]
+  create: true
+install:
+  vendor_url: https://github.com/open-gsd/gsd-pi#install
+  npm_package: "@opengsd/gsd-pi"
+brand:
+  mark: monogram
+  text: G
+  color: "#f0b429"
