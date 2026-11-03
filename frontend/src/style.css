@@ -2041,6 +2041,8 @@ h3 {
 
 .shutdown-modal {
   width: min(100%, 440px);
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
 }
 
 .shutdown-heading {
@@ -2082,15 +2084,23 @@ h3 {
 .shutdown-list {
   display: grid;
   gap: 6px;
-  max-height: 220px;
-  overflow: auto;
 }
 
 .shutdown-row {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-height: 20px;
   font-size: var(--fs-13);
+}
+
+.shutdown-marker {
+  display: inline-flex;
+  flex: 0 0 16px;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
 }
 
 .shutdown-row strong {

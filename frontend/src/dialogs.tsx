@@ -34,7 +34,7 @@ export function ShutdownPopup({ progress }: { progress: ShutdownProgress }) {
     <div className="shutdown-bar" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={finished}><div className="shutdown-bar-fill" style={{ width: `${total ? (finished / total) * 100 : 0}%` }} /></div>
     <p className="muted shutdown-count">{finished} of {total} stopped - {progress.elapsedSeconds}s</p>
     <div className="shutdown-list">{progress.sessions.map((session, index) => <div key={`${session.name}-${index}`} className="shutdown-row">
-      {session.state === "stopping" ? <span className="spinner" aria-hidden="true" /> : <span className={`status-dot ${session.state === "stopped" ? "online" : "warn"}`} />}
+      <span className="shutdown-marker">{session.state === "stopping" ? <span className="spinner" aria-hidden="true" /> : <span className={`status-dot ${session.state === "stopped" ? "online" : "warn"}`} />}</span>
       <strong>{session.name}</strong><span className={`shutdown-state ${session.state === "force-stopped" ? "status-warn-text" : ""}`}>{shutdownStateLabel[session.state]}</span>
     </div>)}</div>
   </div></div>;
