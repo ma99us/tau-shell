@@ -19,7 +19,23 @@ appear on any process command line. Tests confirm a real child receives the
 value and that its `Win32_Process.CommandLine` does not contain it. Values are
 still stored as plaintext in the session YAML and are visible to the session's
 own process tree (and to same-user tools that read process environments), so
-secrets should wait for the planned secret vault.
+put real secrets in the vault instead.
+
+## Secret vault
+
+`secrets:` entries map an environment variable to a vault secret name
+(`docs/v2/10-environment-management.md`). Values are stored as generic
+credentials in the current user's Windows Credential Manager
+(`internal/vault`), so Windows protects them with the user's login. They are
+read only at launch, by `Config.LaunchEnvironment`, and go only into the child
+environment block; they are not in YAML, `state.db`, diagnostics (only the
+secret *name* is logged on failure), toasts, the command line or any bridge
+payload: `ListSecrets` returns names and the sessions using them, and
+`SetSecret` is write-only. A missing secret stops the launch and names the
+secret. Honest limit: any process running as the same user can read the
+credential store and the injected child environment, and the harness's own
+child processes inherit the variable; the vault removes plaintext from YAML,
+not trust in same-user code.
 
 ## Tool installation
 

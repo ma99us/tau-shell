@@ -55,6 +55,14 @@ func (manager *closeTestManager) StartFresh(context.Context, string, int, int) (
 	return sessionhost.Snapshot{}, errors.New("unexpected StartFresh call")
 }
 
+func (manager *closeTestManager) Conversations(context.Context, string) ([]sessionhost.Conversation, error) {
+	return nil, nil
+}
+
+func (manager *closeTestManager) ResumeConversation(context.Context, string, string, int, int) (sessionhost.Snapshot, error) {
+	return sessionhost.Snapshot{}, errors.New("unexpected ResumeConversation call")
+}
+
 func (manager *closeTestManager) Write(string, []byte) error {
 	return errors.New("unexpected Write call")
 }

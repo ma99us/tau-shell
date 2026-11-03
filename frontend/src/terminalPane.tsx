@@ -10,6 +10,7 @@ import { SessionUsage, formatTokens, formatUSD, hasUsage, usageTooltip } from ".
 import { HarnessToolbar, InterruptButton, planSend, sendNotice } from "./harnessActions";
 import type { QueueHooks } from "./promptQueue";
 import { FileDrawer } from "./fileDrawer";
+import { ConversationsDrawer } from "./conversationsDrawer";
 import { reportFrontendFailure, isStoppedSessionError } from "./errors";
 import { Sep, statusLabel } from "./sessionVisuals";
 import { clearPollFailure, shouldReportPollFailure } from "./polling";
@@ -138,7 +139,7 @@ export function interruptSession(session: Session, keys: string[]) {
   terminal.focus();
 }
 
-export function TerminalPane({ session, peers, visible, busy, harness, onSend, onInterrupt, onLaunch, onError }: {
+export function TerminalPane({ session, peers, visible, busy, harness, onSend, onInterrupt, onLaunch, onResumeConversation, onError }: {
   session?: Session;
   peers?: Session[];
   visible: boolean;
@@ -147,6 +148,7 @@ export function TerminalPane({ session, peers, visible, busy, harness, onSend, o
   onSend?: (text: string, submit: boolean, label: string) => void;
   onInterrupt: () => void;
   onLaunch: (session: Session, mode: "start" | "restore" | "fresh") => void;
+  onResumeConversation: (session: Session, harnessSessionId: string) => void;
   onError: (error: unknown) => void;
 }) {
   const container = useRef<HTMLDivElement>(null);
@@ -155,7 +157,8 @@ export function TerminalPane({ session, peers, visible, busy, harness, onSend, o
   const [git, setGit] = useState<GitStatus | null>(null);
   const [model, setModel] = useState("");
   const [usage, setUsage] = useState<SessionUsage | null>(null);
-  const [filesOpen, setFilesOpen] = useState(false);
+  const [drawer, setDrawer] = useState<"files" | "history" | null>(null);
+  const filesOpen = drawer === "files";
   const pollFailures = useRef(new Set<string>());
   const sessionId = session?.id;
   useEffect(() => {
@@ -286,5 +289,5 @@ export function TerminalPane({ session, peers, visible, busy, harness, onSend, o
     return () => window.clearTimeout(timer);
   }, [visible, session?.id, session?.runningHere]);
   if (!session) return <div className="terminal-missing">Session configuration is unavailable.</div>;
-  return <div className="terminal-view"><div className="terminal-toolbar"><span className={`status-dot ${session.runningHere ? "online" : ""}`} />{session.tool}{harness && onSend && <InterruptButton interrupt={onInterrupt} />}<Sep /><span className="toolbar-path">{session.workingDir}</span>{git?.branch && <><Sep /><span className="toolbar-branch" title={gitTooltip(git)}>{gitLabel(git)}</span></>}{model && <><Sep /><span className="toolbar-model" title="Model last recorded by the harness">{model}</span></>}{hasUsage(usage?.total) && <><Sep /><span className="toolbar-usage" title={usageTooltip(usage!)}>{formatTokens(usage!.total.tokens)}</span>{(usage!.total.usd > 0 || usage!.total.unpriced) && <><Sep /><span className="toolbar-usage" title={usageTooltip(usage!)}>{formatUSD(usage!.total)}</span></>}</>}<span className={`terminal-status ${!session.runningHere && session.status === "failed" ? "status-warn-text" : ""}`}>{session.runningHere ? "" : statusLabel(session.status) || "Not started"}</span>{!session.runningHere && (session.hasResumeId && session.resumeNote ? <button className="secondary-button terminal-action" disabled={busy} title={session.resumeNote} onClick={() => onLaunch(session, "fresh")}>Start fresh</button> : <button className="primary-button terminal-action" disabled={busy} onClick={() => onLaunch(session, session.hasResumeId ? "restore" : "start")}>{session.hasResumeId ? "Resume" : "Start"}</button>)}</div><div className="terminal-body"><div className="terminal-container" ref={container} /><div className="side-rail"><button className="text-button terminal-action icon-button" aria-pressed={filesOpen} title="Files: browse the project files (read-only)" aria-label="Files: browse the project files (read-only)" onClick={() => setFilesOpen(!filesOpen)}><Icon name="files" /></button>{harness && onSend && <HarnessToolbar session={session} peers={peers ?? []} widgets={harness.widgets} modelSupported={harness.modelSupported} send={onSend} onError={onError} />}</div>{filesOpen && <FileDrawer session={session} onClose={() => setFilesOpen(false)} onError={onError} />}</div></div>;
+  return <div className="terminal-view"><div className="terminal-toolbar"><span className={`status-dot ${session.runningHere ? "online" : ""}`} />{session.tool}{harness && onSend && <InterruptButton interrupt={onInterrupt} />}<Sep /><span className="toolbar-path">{session.workingDir}</span>{git?.branch && <><Sep /><span className="toolbar-branch" title={gitTooltip(git)}>{gitLabel(git)}</span></>}{model && <><Sep /><span className="toolbar-model" title="Model last recorded by the harness">{model}</span></>}{hasUsage(usage?.total) && <><Sep /><span className="toolbar-usage" title={usageTooltip(usage!)}>{formatTokens(usage!.total.tokens)}</span>{(usage!.total.usd > 0 || usage!.total.unpriced) && <><Sep /><span className="toolbar-usage" title={usageTooltip(usage!)}>{formatUSD(usage!.total)}</span></>}</>}<span className={`terminal-status ${!session.runningHere && session.status === "failed" ? "status-warn-text" : ""}`}>{session.runningHere ? "" : statusLabel(session.status) || "Not started"}</span>{!session.runningHere && (session.hasResumeId && session.resumeNote ? <button className="secondary-button terminal-action" disabled={busy} title={session.resumeNote} onClick={() => onLaunch(session, "fresh")}>Start fresh</button> : <button className="primary-button terminal-action" disabled={busy} onClick={() => onLaunch(session, session.hasResumeId ? "restore" : "start")}>{session.hasResumeId ? "Resume" : "Start"}</button>)}</div><div className="terminal-body"><div className="terminal-container" ref={container} /><div className="side-rail"><button className="text-button terminal-action icon-button" aria-pressed={filesOpen} title="Files: browse the project files (read-only)" aria-label="Files: browse the project files (read-only)" onClick={() => setDrawer(filesOpen ? null : "files")}><Icon name="files" /></button><button className="text-button terminal-action icon-button" aria-pressed={drawer === "history"} title="History: past conversations of this session" aria-label="History: past conversations of this session" onClick={() => setDrawer(drawer === "history" ? null : "history")}><Icon name="history" /></button>{harness && onSend && <HarnessToolbar session={session} peers={peers ?? []} widgets={harness.widgets} modelSupported={harness.modelSupported} send={onSend} onError={onError} />}</div>{filesOpen && <FileDrawer session={session} onClose={() => setDrawer(null)} onError={onError} />}{drawer === "history" && <ConversationsDrawer session={session} busy={busy} onResume={onResumeConversation} onClose={() => setDrawer(null)} onError={onError} />}</div></div>;
 }

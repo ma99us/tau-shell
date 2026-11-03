@@ -1,6 +1,8 @@
 # 07 - Conversation History Browser
 
-Status: **future planning**. Rank 7. Sources: Orca (conversation names in tabs); user value from existing log parsing.
+Status: **built for Claude Code and Copilot CLI titles; resume of a chosen conversation works for every harness with a resume ID**. Rank 7. Sources: Orca (conversation names in tabs); user value from existing log parsing.
+
+**Built:** a History icon in the side rail opens a drawer listing a session's conversations (from the usage ledger plus the current resume ID): title, days, model, tokens, ID, a "cannot resume" reason when the harness check fails, a filter box (title, ID, model) and copy ID. Titles come from the harness's own files: Claude Code `ai-title` lines in the transcript, Copilot CLI `workspace.yaml` `name`; other harnesses show "(untitled)". Resume asks for confirmation, is disabled while the session runs, and calls `Manager.ResumeConversation`: it accepts only a conversation the session has had, runs the harness resume check, ingests the outgoing conversation's usage, swaps the saved ID (`Store.SetHarnessSessionID`, refused when running or when another session owns the ID) and restores; on a failed launch the previous ID is put back and the error is shown. Tested by `TestSetHarnessSessionIDChoosesConversationSafely`, `TestConversationTitlesFromHarnessLogs`, `TestManagerResumeConversationRefusesForeignConversation`, `conversations.test.ts`. Not clicked through live. **Not built:** full-content search, titles for GSD/Codex/OpenCode, conversations that predate the ledger.
 
 ## Problem
 

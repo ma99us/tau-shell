@@ -111,6 +111,46 @@ func TestTwoTauShellProcessesCannotStartSameSession(t *testing.T) {
 	}
 }
 
+func TestSetHarnessSessionIDChoosesConversationSafely(t *testing.T) {
+	ctx := context.Background()
+	store, err := OpenStore(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	first, err := store.Begin(ctx, "agent", ClaudeCode, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SetHarnessSessionID(ctx, "agent", ClaudeCode, "older"); err == nil {
+		t.Fatal("expected a starting session to refuse a conversation change")
+	}
+	if err := store.Finish(ctx, "agent", StatusStopped, ""); err != nil {
+		t.Fatal(err)
+	}
+	previous, err := store.SetHarnessSessionID(ctx, "agent", ClaudeCode, "older")
+	if err != nil || previous != first.HarnessSessionID {
+		t.Fatalf("previous = %q, err = %v", previous, err)
+	}
+	runtime, _ := store.Runtime(ctx, "agent")
+	if runtime.HarnessSessionID != "older" {
+		t.Fatalf("saved ID = %q", runtime.HarnessSessionID)
+	}
+	if _, err := store.SetHarnessSessionID(ctx, "agent", CopilotCLI, "x"); err == nil {
+		t.Fatal("expected a different harness to be refused")
+	}
+	other, err := store.Begin(ctx, "other", ClaudeCode, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Finish(ctx, "other", StatusStopped, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SetHarnessSessionID(ctx, "agent", ClaudeCode, other.HarnessSessionID); !errors.Is(err, ErrHarnessSessionIDClaimed) {
+		t.Fatalf("expected a claimed conversation to be refused, got %v", err)
+	}
+}
+
 func TestBeginFreshReplacesSavedHarnessID(t *testing.T) {
 	store, err := OpenStore(filepath.Join(t.TempDir(), "state.db"))
 	if err != nil {

@@ -55,6 +55,12 @@ func (application *App) DuplicateSession(id string) (snapshot sessionhost.Snapsh
 		}
 	}
 	copied.Presets = append(copied.Presets[:0:0], source.Presets...)
+	if source.Secrets != nil {
+		copied.Secrets = make(map[string]string, len(source.Secrets))
+		for key, value := range source.Secrets {
+			copied.Secrets[key] = value // the vault name, never the value
+		}
+	}
 	for n := 2; ; n++ {
 		copied.Name = fmt.Sprintf("%s (%d)", source.Name, n)
 		copied.ID = sessionIDFromName(copied.Name)

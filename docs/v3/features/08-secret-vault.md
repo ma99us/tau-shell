@@ -1,6 +1,8 @@
 # 08 - Secret Vault
 
-Status: **future planning**. Rank 8. Sources: V3 ideas #3.
+Status: **built (Credential Manager)**. Rank 8. Sources: V3 ideas #3.
+
+**Built:** `internal/vault` (a `Store` interface, an in-memory test store, and a Windows Credential Manager store, targets `TauShell/secret/<name>`, 2560-byte limit); a `secrets:` block in session YAML mapping `ENV_VAR: secret-name` (validated; may not clash with `environment:`); `Config.LaunchEnvironment` resolves them for both the desktop manager and the `start`/`restore` CLI, failing before any state change with a message naming the missing secret; Home **Secrets** pane (add/replace, delete with a list of sessions that use it, "not stored" marker for referenced-but-missing names; write-only values); Duplicate copies names only. Tested by `vault_test.go` (including a real Credential Manager round trip with a disposable entry), config validation cases and `TestManagerInjectsVaultSecretsAndFailsWhenMissing`. Not clicked through live. **Decision:** a separate `secrets:` map instead of `environment: {X: {secret: name}}` keeps `environment:` a plain string map. **Not built:** master password (rely on the Windows login), sharing between machines, import from password managers, an in-UI editor for a session's `secrets:` (edit the YAML).
 
 ## Problem
 

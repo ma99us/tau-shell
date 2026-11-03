@@ -21,6 +21,7 @@ import (
 	"github.com/ma99us/tau-shell/internal/harness"
 	"github.com/ma99us/tau-shell/internal/session"
 	"github.com/ma99us/tau-shell/internal/usage"
+	"github.com/ma99us/tau-shell/internal/vault"
 )
 
 const (
@@ -106,6 +107,23 @@ type Manager struct {
 	lastIngest      map[string]time.Time
 	cancelPrices    context.CancelFunc
 	skills          SkillProvider
+	vault           vault.Store
+}
+
+// SetVault supplies the secret store sessions' `secrets:` entries resolve against.
+func (manager *Manager) SetVault(store vault.Store) {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	manager.vault = store
+}
+
+// launchEnvironment returns the session's literal environment plus its vault
+// secrets. A missing secret fails the launch, naming the secret and never a value.
+func (manager *Manager) launchEnvironment(config session.Config) (map[string]string, error) {
+	manager.mu.Lock()
+	store := manager.vault
+	manager.mu.Unlock()
+	return config.LaunchEnvironment(store)
 }
 
 // SkillProvider supplies the plugin folder holding TauShell's skills for a
@@ -440,6 +458,10 @@ func (manager *Manager) start(ctx context.Context, id string, restoring, fresh b
 	if err != nil {
 		return Snapshot{}, fmt.Errorf("PowerShell 7 (pwsh.exe) is required and must be on PATH: %w", err)
 	}
+	launchEnv, err := manager.launchEnvironment(config)
+	if err != nil {
+		return Snapshot{}, err
+	}
 	runtime, err := session.RecoverRuntime(ctx, manager.store, id)
 	if err != nil {
 		return Snapshot{}, err
@@ -490,7 +512,7 @@ func (manager *Manager) start(ctx context.Context, id string, restoring, fresh b
 		err := errors.New("session manager is shutting down")
 		return Snapshot{}, errors.Join(err, manager.store.Finish(ctx, id, session.StatusFailed, err.Error()))
 	}
-	process, err := manager.startProcess(columns, rows, powershell, config.WorkingDir, conpty.ChildEnvironment(config.Environment),
+	process, err := manager.startProcess(columns, rows, powershell, config.WorkingDir, conpty.ChildEnvironment(launchEnv),
 		"-NoLogo", "-NoProfile", "-Command", command)
 	if err != nil {
 		finishErr := manager.store.Finish(ctx, id, session.StatusFailed, err.Error())

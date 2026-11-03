@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"unicode"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/ma99us/tau-shell/internal/fsutil"
 	"github.com/ma99us/tau-shell/internal/presets"
+	"github.com/ma99us/tau-shell/internal/vault"
 )
 
 type Harness string
@@ -63,12 +65,47 @@ type Config struct {
 	WorkingDir  string            `yaml:"working_dir"`
 	LaunchArgs  []string          `yaml:"launch_args,omitempty"`
 	Environment map[string]string `yaml:"environment,omitempty"`
-	PowerShell  struct {
+	// Secrets maps an environment variable name to the name of a vault secret.
+	// The value is looked up at launch and goes only into the process environment.
+	Secrets    map[string]string `yaml:"secrets,omitempty"`
+	PowerShell struct {
 		UTF8 *bool `yaml:"utf8"`
 	} `yaml:"powershell,omitempty"`
 	// Presets are session-level prompt presets merged over the global
 	// prompts.yaml entries by name.
 	Presets []presets.Preset `yaml:"presets,omitempty"`
+}
+
+// LaunchEnvironment returns the session's literal environment plus its vault
+// secrets. A missing secret is an error naming the secret, never a value.
+func (config Config) LaunchEnvironment(store vault.Store) (map[string]string, error) {
+	if len(config.Secrets) == 0 {
+		return config.Environment, nil
+	}
+	environment := make(map[string]string, len(config.Environment)+len(config.Secrets))
+	for name, value := range config.Environment {
+		environment[name] = value
+	}
+	variables := make([]string, 0, len(config.Secrets))
+	for variable := range config.Secrets {
+		variables = append(variables, variable)
+	}
+	sort.Strings(variables)
+	for _, variable := range variables {
+		name := config.Secrets[variable]
+		if store == nil {
+			return nil, fmt.Errorf("session %q uses secret %q for %s, but the secret vault is unavailable", config.ID, name, variable)
+		}
+		value, err := store.Get(name)
+		if errors.Is(err, vault.ErrNotFound) {
+			return nil, fmt.Errorf("session %q needs secret %q for %s, which is not in the vault; add it on Home under Secrets", config.ID, name, variable)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("session %q: read secret %q: %w", config.ID, name, err)
+		}
+		environment[variable] = value
+	}
+	return environment, nil
 }
 
 func (config Config) SkillsEnabled() bool {
@@ -161,6 +198,17 @@ func (config Config) Validate() error {
 	for name := range config.Environment {
 		if !environmentPattern.MatchString(name) {
 			return fmt.Errorf("invalid environment variable name %q", name)
+		}
+	}
+	for variable, secret := range config.Secrets {
+		if !environmentPattern.MatchString(variable) {
+			return fmt.Errorf("invalid environment variable name %q in secrets", variable)
+		}
+		if _, duplicate := config.Environment[variable]; duplicate {
+			return fmt.Errorf("%s is set in both environment and secrets", variable)
+		}
+		if err := vault.ValidateName(secret); err != nil {
+			return fmt.Errorf("secrets.%s: %w", variable, err)
 		}
 	}
 	if err := presets.Validate(config.Presets); err != nil {

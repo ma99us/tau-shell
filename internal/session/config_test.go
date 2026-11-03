@@ -45,6 +45,9 @@ func TestLoadConfigRejectsUnknownFieldsAndInvalidEnvironmentName(t *testing.T) {
 	}{
 		{"unknown field", "resume_latest: true\n", "field resume_latest not found"},
 		{"invalid environment variable", "environment:\n  BAD=NAME: value\n", "invalid environment variable name"},
+		{"invalid secret variable", "secrets:\n  BAD=NAME: key\n", "invalid environment variable name"},
+		{"invalid secret name", "secrets:\n  API_KEY: \"bad name\"\n", "secrets.API_KEY"},
+		{"secret and literal clash", "environment:\n  API_KEY: x\nsecrets:\n  API_KEY: key\n", "both environment and secrets"},
 		{"invalid ID", "environment:\n  VALID: value\n", ""},
 	} {
 		t.Run(test.name, func(t *testing.T) {

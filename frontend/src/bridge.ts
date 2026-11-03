@@ -80,6 +80,8 @@ export type GitStatus = { branch: string; dirty: boolean; ahead: number; behind:
 export type ProjectEntry = { name: string; path: string; dir: boolean; size: number };
 export type ProjectListing = { entries: ProjectEntry[]; truncated: boolean };
 export type ProjectFile = { path: string; text: string; truncated: boolean };
+export type SecretInfo = { name: string; usedBy: string[]; missing: boolean };
+export type Conversation = { harnessSessionId: string; title: string; model: string; firstDay: string; lastDay: string; tokens: number; usd: number; unpriced: boolean; current: boolean; unavailable: string };
 
 export type ResolvedPreset = {
   name: string;
@@ -230,6 +232,11 @@ type WailsApp = {
   GetGitStatus(sessionId: string): Promise<GitStatus | null>;
   ListProjectDir(sessionId: string, rel: string, showAll: boolean): Promise<ProjectListing>;
   ReadProjectFile(sessionId: string, rel: string): Promise<ProjectFile>;
+  ListConversations(sessionId: string): Promise<Conversation[]>;
+  ListSecrets(): Promise<SecretInfo[]>;
+  SetSecret(name: string, value: string): Promise<void>;
+  DeleteSecret(name: string): Promise<void>;
+  ResumeConversation(sessionId: string, harnessSessionId: string, columns: number, rows: number): Promise<Session>;
   RevealProjectFile(sessionId: string, rel: string): Promise<void>;
   ProjectFullPath(sessionId: string, rel: string): Promise<string>;
   GetSessionModel(sessionId: string): Promise<string>;

@@ -7,6 +7,7 @@ import { ProjectIcon, statusLabel } from "./sessionVisuals";
 import { clearPollFailure, shouldReportPollFailure } from "./polling";
 import { ControlAudit } from "./controlAudit";
 import { PhonePane } from "./phonePane";
+import { SecretsPane } from "./secretsPane";
 
 export function Home({ sessions, loaded, autoResumeAll, onAutoResumeAll, onAutoResume, status, busy, tools, skills, onNew, onRefresh, onHome, onLaunch, onDelete, onDuplicate, onError, dragProps, dropClass, dragId }: {
   skills: SkillsActions;
@@ -128,6 +129,7 @@ export function Home({ sessions, loaded, autoResumeAll, onAutoResumeAll, onAutoR
       {toolNoticeBanner(tools)}
       <ControlAudit onError={onError} />
       <PhonePane onError={onError} />
+      <SecretsPane onError={onError} />
       <div className="home-footer">
         {appUpdate && <button className="link-button home-update" title="Open the TauShell releases page" onClick={() => void app().OpenReleasePage()}>{appUpdate.tag} available</button>}
         {appVersion && <span className="home-version" title="TauShell version">{appVersion === "dev" ? "dev build" : `v${appVersion.replace(/^v/, "")}`}</span>}

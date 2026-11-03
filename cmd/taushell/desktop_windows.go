@@ -30,6 +30,7 @@ import (
 	"github.com/ma99us/tau-shell/internal/skills"
 	"github.com/ma99us/tau-shell/internal/tools"
 	"github.com/ma99us/tau-shell/internal/usage"
+	"github.com/ma99us/tau-shell/internal/vault"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/logger"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -54,6 +55,7 @@ type App struct {
 	states                 *agentstate.Registry
 	statesOnce             sync.Once
 	manager                desktopSessionManager
+	vault                  vault.Store
 	ctx                    context.Context
 	configDirectory        string
 	webViewVersion         string
@@ -91,6 +93,8 @@ type desktopSessionManager interface {
 	StartPriceUpdates(context.Context)
 	Start(context.Context, string, bool, int, int) (sessionhost.Snapshot, error)
 	StartFresh(context.Context, string, int, int) (sessionhost.Snapshot, error)
+	Conversations(context.Context, string) ([]sessionhost.Conversation, error)
+	ResumeConversation(context.Context, string, string, int, int) (sessionhost.Snapshot, error)
 	Write(string, []byte) error
 	Resize(string, int, int) error
 	Stop(context.Context, string) error
@@ -135,12 +139,13 @@ func runDesktop() error {
 		diagnostics.Error("load embedded desktop assets failed", err)
 		return fmt.Errorf("load embedded desktop assets: %w", err)
 	}
-	application := &App{configDirectory: configDirectory, webViewVersion: version}
+	application := &App{configDirectory: configDirectory, webViewVersion: version, vault: vault.NewCredentialManager()}
 	manager, err := sessionhost.New(configDirectory, databasePath, application.publish)
 	if err != nil {
 		diagnostics.Error("initialize session manager failed", err)
 		return fmt.Errorf("initialize session manager: %w", err)
 	}
+	manager.SetVault(application.vault)
 	application.manager = manager
 	application.initSkills(manager)
 	diagnostics.Info("desktop window starting", "webview2_version", version)
@@ -541,6 +546,15 @@ func (application *App) RestoreSession(id string, columns, rows int) (snapshot s
 func (application *App) StartFresh(id string, columns, rows int) (snapshot sessionhost.Snapshot, err error) {
 	defer logSessionOperation("start fresh session", id, &snapshot, &err)
 	return application.manager.StartFresh(context.Background(), id, columns, rows)
+}
+
+func (application *App) ListConversations(id string) ([]sessionhost.Conversation, error) {
+	return application.manager.Conversations(context.Background(), id)
+}
+
+func (application *App) ResumeConversation(id, harnessSessionID string, columns, rows int) (snapshot sessionhost.Snapshot, err error) {
+	defer logSessionOperation("resume conversation", id, &snapshot, &err)
+	return application.manager.ResumeConversation(context.Background(), id, harnessSessionID, columns, rows)
 }
 
 func (application *App) WriteTerminal(id, input string) (err error) {

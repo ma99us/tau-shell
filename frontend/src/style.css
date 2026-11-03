@@ -1553,6 +1553,77 @@ h3 {
   background: var(--bg-control-hover);
 }
 
+.secret-list {
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.secret-list li,
+.secret-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.secret-list li {
+  padding: 4px 0;
+}
+
+.secret-list li .muted {
+  flex: 1;
+}
+
+.secret-form input {
+  min-width: 0;
+  flex: 1;
+}
+
+.conversation-search {
+  margin: 0 8px 6px;
+  padding: 4px 6px;
+}
+
+.conversation-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-hover);
+}
+
+.conversation-title,
+.conversation-meta,
+.conversation-id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-meta,
+.conversation-id {
+  color: var(--text-8);
+  font-size: var(--fs-12);
+}
+
+.conversation-badge {
+  margin-left: 6px;
+  color: var(--text-3);
+  font-size: var(--fs-12);
+}
+
+.conversation-warn {
+  color: var(--warning, #d6a85c);
+  font-size: var(--fs-12);
+}
+
+.conversation-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 .file-act {
   padding: 1px 5px;
   border: 0;

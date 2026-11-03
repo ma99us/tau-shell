@@ -13,6 +13,10 @@ working_dir: D:/Projects/App
 environment:
   NODE_NO_WARNINGS: "1"
 
+# Optional: ENV_VAR -> name of a secret in the vault (Home > Secrets).
+secrets:
+  OPENAI_API_KEY: openai-main
+
 powershell:
   utf8: true
 

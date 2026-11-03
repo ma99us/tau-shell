@@ -42,8 +42,8 @@ against the current code.
 | 4 | [Mobile companion MVP](features/04-mobile-companion.md) | Gap | 1, 2; LAN spikes |
 | 5 | [Project file drawer](features/05-project-file-drawer.md) | Partial | none |
 | 6 | [Status insights (quota and git chips)](features/06-status-insights.md) | Partial | none |
-| 7 | [Conversation history browser](features/07-conversation-history.md) | Partial | none |
-| 8 | [Secret vault](features/08-secret-vault.md) | Gap | Phase 1 env-leak fix |
+| 7 | [Conversation history browser](features/07-conversation-history.md) | Built (titles: Claude Code, Copilot CLI) | none |
+| 8 | [Secret vault](features/08-secret-vault.md) | Built (Credential Manager; YAML edit) | Phase 1 env-leak fix (done) |
 | 9 | [Lightweight workspaces](features/09-lightweight-workspaces.md) | Partial | none |
 | 10 | [Declarative harness adapters](features/10-declarative-adapters.md) | Partial | 2 (cue schema) |
 

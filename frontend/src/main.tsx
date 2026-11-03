@@ -313,14 +313,16 @@ function App() {
     setSelected(session.id);
   };
 
-  const launch = async (session: Session, mode: "start" | "restore" | "fresh") => {
+  const launch = async (session: Session, mode: "start" | "restore" | "fresh" | "conversation", conversationId = "") => {
     setBusy(true);
     setError("");
     try {
       openTab(session);
       const terminal = await waitForTerminal(session.id);
       await fitTerminalNow(session.id);
-      const started = mode === "restore"
+      const started = mode === "conversation"
+        ? await app().ResumeConversation(session.id, conversationId, terminal.cols, terminal.rows)
+        : mode === "restore"
         ? await app().RestoreSession(session.id, terminal.cols, terminal.rows)
         : mode === "fresh"
           ? await app().StartFresh(session.id, terminal.cols, terminal.rows)
@@ -701,7 +703,7 @@ function App() {
               if (!tab && !session?.runningHere) return null;
               return (
                 <div id={`panel-${id}`} className={`terminal-tab-content ${tab && selected === id ? "" : "hidden"}`} role="tabpanel" aria-labelledby={`tab-${id}`} tabIndex={0} key={id}>
-                  <TerminalPane session={session} peers={sessions} visible={Boolean(tab && selected === id)} busy={busy} harness={session ? harnessFor(session) : undefined} onSend={session ? sendFor(session) : undefined} onInterrupt={() => { const harness = session && harnessFor(session); if (session && harness) interruptSession(session, harness.widgets.interruptKeys); }} onLaunch={launch} onError={(failure) => showError("ui.terminal", failure)} />
+                  <TerminalPane session={session} peers={sessions} visible={Boolean(tab && selected === id)} busy={busy} harness={session ? harnessFor(session) : undefined} onSend={session ? sendFor(session) : undefined} onInterrupt={() => { const harness = session && harnessFor(session); if (session && harness) interruptSession(session, harness.widgets.interruptKeys); }} onLaunch={launch} onResumeConversation={(target, conversationId) => void launch(target, "conversation", conversationId)} onError={(failure) => showError("ui.terminal", failure)} />
                 </div>
               );
             })}

@@ -407,6 +407,63 @@ func (store *Store) ClaimHarnessSessionID(ctx context.Context, sessionID string,
 	return true, nil
 }
 
+// SetHarnessSessionID replaces the saved conversation ID of a session that is
+// not running and returns the ID it replaced. It refuses an ID that another
+// session of the same harness has claimed.
+func (store *Store) SetHarnessSessionID(ctx context.Context, sessionID string, harness Harness, harnessSessionID string) (string, error) {
+	if harnessSessionID == "" {
+		return "", errors.New("harness session ID is empty")
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	conn, err := store.db.Conn(ctx)
+	if err != nil {
+		return "", fmt.Errorf("select conversation for %q: %w", sessionID, err)
+	}
+	defer conn.Close()
+	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
+		return "", fmt.Errorf("lock conversation selection for %q: %w", sessionID, err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_, _ = conn.ExecContext(context.Background(), "ROLLBACK")
+		}
+	}()
+	runtime, err := readRuntime(ctx, conn, sessionID)
+	if err != nil {
+		return "", err
+	}
+	if runtime.Harness != harness {
+		return "", fmt.Errorf("session %q has no conversations recorded for harness %q", sessionID, harness)
+	}
+	if runtime.Status == StatusRunning || runtime.Status == StatusStarting {
+		return "", fmt.Errorf("session %q is running; stop it before choosing another conversation", sessionID)
+	}
+	var claimed bool
+	if err := conn.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM session_runtime
+			WHERE harness = ? AND harness_session_id = ? AND session_id <> ?
+		)
+	`, harness, harnessSessionID, sessionID).Scan(&claimed); err != nil {
+		return "", fmt.Errorf("check conversation claim for %q: %w", sessionID, err)
+	}
+	if claimed {
+		return "", ErrHarnessSessionIDClaimed
+	}
+	if _, err := conn.ExecContext(ctx, `
+		UPDATE session_runtime SET harness_session_id = ?, updated_at = ? WHERE session_id = ?
+	`, harnessSessionID, time.Now().UTC().Format(time.RFC3339Nano), sessionID); err != nil {
+		return "", fmt.Errorf("save chosen conversation for %q: %w", sessionID, err)
+	}
+	if _, err := conn.ExecContext(ctx, "COMMIT"); err != nil {
+		return "", fmt.Errorf("commit chosen conversation for %q: %w", sessionID, err)
+	}
+	committed = true
+	return runtime.HarnessSessionID, nil
+}
+
 // HarnessSessionIDs returns every recorded harness conversation ID for tool.
 func (store *Store) HarnessSessionIDs(ctx context.Context, harness Harness) (map[string]bool, error) {
 	store.mu.Lock()

@@ -22,6 +22,17 @@ The locally installed Claude Code 2.1.263 and GitHub Copilot CLI 1.0.96-2 help o
 
 The initial implementation passes `--session-id <uuid>` on start and `--resume <uuid>` on restore for Claude Code, and `--session-id <uuid>` for both new and resumed Copilot CLI sessions. An interactive smoke test with a fake executable verified that start and restore use the same persisted UUID and that session environment values reach the child process. A separate disposable provider-backed test with Copilot CLI 1.0.100-1 confirmed that TauShell's `restore` command reopened the exact session: after a no-tools prompt returned `TAUSHELL_RESTORE_SMOKE_OK`, the resumed conversation returned the same token when asked about its prior response. The test used a temporary working directory and made no file changes. Claude Code provider-backed restoration remains unverified.
 
+## Choosing an earlier conversation
+
+A session that has had several conversations (Start fresh rotates the ID) lists
+them under the History icon in the side rail. Resuming a chosen one runs the
+harness resume check, records the outgoing conversation's usage, swaps the saved
+`harness_session_id` (refused while running or when another session owns that
+ID) and restores. If the launch fails the previous ID is put back and the error
+is shown; success is still only claimed as far as the harness confirms it. Only
+conversations the usage ledger or the saved ID already knows are offered, and
+titles come from the harness's own files (Claude Code, Copilot CLI).
+
 ## Limits
 
 - A clean Ctrl+C and process shutdown may improve the harness's ability to persist its session but cannot guarantee that in-progress work or uncheckpointed state is saved.

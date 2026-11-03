@@ -18,6 +18,7 @@ import (
 	"github.com/ma99us/tau-shell/internal/session"
 	"github.com/ma99us/tau-shell/internal/terminal"
 	"github.com/ma99us/tau-shell/internal/tools"
+	"github.com/ma99us/tau-shell/internal/vault"
 	"golang.org/x/sys/windows"
 )
 
@@ -253,6 +254,10 @@ func runSession(id string, restoring bool) (returnErr error) {
 	if err != nil {
 		return fmt.Errorf("PowerShell 7 (pwsh.exe) is required and must be on PATH: %w", err)
 	}
+	launchEnv, err := config.LaunchEnvironment(vault.NewCredentialManager())
+	if err != nil {
+		return err
+	}
 	runtime, err := session.RecoverRuntime(context.Background(), store, id)
 	if err != nil {
 		return err
@@ -309,7 +314,7 @@ func runSession(id string, restoring bool) (returnErr error) {
 			"-NoLogo", "-NoProfile", "-Command",
 			harness.PowerShellInvocation(executable, args, config.UTF8Enabled()),
 		},
-		Env: conpty.ChildEnvironment(config.Environment),
+		Env: conpty.ChildEnvironment(launchEnv),
 		OnStart: func(processID int) error {
 			if err := store.MarkRunning(context.Background(), id, processID); err != nil {
 				return err

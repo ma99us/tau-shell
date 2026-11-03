@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/ma99us/tau-shell/internal/session"
+	"github.com/ma99us/tau-shell/internal/vault"
 )
 
 func TestSessionOutputWriterPreservesRawTerminalBytes(t *testing.T) {
@@ -282,6 +283,43 @@ func TestManagerPassesSessionEnvironmentOutsideTheCommandLine(t *testing.T) {
 	for _, arg := range factory.lastArgs {
 		if strings.Contains(arg, "s3cret") {
 			t.Fatalf("session value leaked into the command line: %q", arg)
+		}
+	}
+}
+
+func TestManagerInjectsVaultSecretsAndFailsWhenMissing(t *testing.T) {
+	manager, factory, _ := newLifecycleTestManager(t)
+	workingDir := filepath.Join(t.TempDir(), "vault")
+	if err := os.MkdirAll(workingDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.SaveConfig(manager.configDirectory, session.Config{
+		ID: "vault", Name: "vault", Tool: session.ClaudeCode, WorkingDir: workingDir,
+		Secrets: map[string]string{"API_KEY": "my-key"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	store := vault.NewMemory()
+	manager.SetVault(store)
+	_, err := manager.Start(context.Background(), "vault", false, 80, 24)
+	if err == nil || !strings.Contains(err.Error(), `"my-key"`) {
+		t.Fatalf("expected an error naming the missing secret, got %v", err)
+	}
+	if runtime, _ := manager.store.Runtime(context.Background(), "vault"); runtime.Status != session.StatusNeverStarted {
+		t.Fatalf("a failed secret lookup changed session state: %+v", runtime)
+	}
+	if err := store.Set("my-key", "v4ult-value"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Start(context.Background(), "vault", false, 80, 24); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(factory.lastEnv, "API_KEY=v4ult-value") {
+		t.Fatal("child environment is missing the vault secret")
+	}
+	for _, arg := range factory.lastArgs {
+		if strings.Contains(arg, "v4ult") {
+			t.Fatalf("secret leaked into the command line: %q", arg)
 		}
 	}
 }
@@ -779,6 +817,28 @@ func TestManagerDeleteRestoresConfigWhenUsageTombstoneFails(t *testing.T) {
 	}
 	if _, err := os.Stat(configPath); err != nil {
 		t.Fatalf("original config path missing: %v", err)
+	}
+}
+
+func TestManagerResumeConversationRefusesForeignConversation(t *testing.T) {
+	manager, _, _ := newLifecycleTestManager(t, "history")
+	ctx := context.Background()
+	if _, err := manager.Start(ctx, "history", false, 80, 24); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Stop(ctx, "history"); err != nil {
+		t.Fatal(err)
+	}
+	list, err := manager.Conversations(ctx, "history")
+	if err != nil || len(list) != 1 || !list[0].Current {
+		t.Fatalf("conversations = %+v, %v", list, err)
+	}
+	if _, err := manager.ResumeConversation(ctx, "history", "not-this-sessions", 80, 24); err == nil {
+		t.Fatal("expected a conversation from elsewhere to be refused")
+	}
+	runtime, _ := manager.store.Runtime(ctx, "history")
+	if runtime.HarnessSessionID != list[0].HarnessSessionID {
+		t.Fatalf("saved conversation changed to %q", runtime.HarnessSessionID)
 	}
 }
 
