@@ -44,7 +44,7 @@ against the current code.
 | 6 | [Status insights (quota and git chips)](features/06-status-insights.md) | Partial | none |
 | 7 | [Conversation history browser](features/07-conversation-history.md) | Built (titles: Claude Code, Copilot CLI) | none |
 | 8 | [Secret vault](features/08-secret-vault.md) | Built (Credential Manager; YAML edit) | Phase 1 env-leak fix (done) |
-| 9 | [Lightweight workspaces](features/09-lightweight-workspaces.md) | Partial | none |
+| 9 | [Lightweight workspaces](features/09-lightweight-workspaces.md) | Built | none |
 | 10 | [Declarative harness adapters](features/10-declarative-adapters.md) | Partial | 2 (cue schema) |
 
 Already implemented and therefore not ranked: fleet restore (Resume All and auto resume),

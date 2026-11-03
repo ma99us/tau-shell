@@ -11,7 +11,7 @@ export type Inline =
 export type Block =
   | { kind: "heading"; level: number; inline: Inline[] }
   | { kind: "paragraph"; inline: Inline[] }
-  | { kind: "code"; text: string }
+  | { kind: "code"; text: string; lang?: string }
   | { kind: "list"; ordered: boolean; items: Inline[][] }
   | { kind: "quote"; inline: Inline[] }
   | { kind: "rule" };
@@ -45,13 +45,13 @@ export function parseMarkdown(source: string): Block[] {
   };
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const fence = /^\s{0,3}(```|~~~)/.exec(line);
+    const fence = /^\s{0,3}(```|~~~)\s*([^\s`]*)/.exec(line);
     if (fence) {
       flush();
       const body: string[] = [];
       i++;
       while (i < lines.length && !lines[i].trimStart().startsWith(fence[1])) body.push(lines[i++]);
-      blocks.push({ kind: "code", text: body.join("\n") });
+      blocks.push(fence[2] ? { kind: "code", text: body.join("\n"), lang: fence[2] } : { kind: "code", text: body.join("\n") });
       continue;
     }
     const heading = /^(#{1,6})\s+(.*?)\s*#*\s*$/.exec(line);

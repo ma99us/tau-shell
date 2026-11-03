@@ -38,6 +38,10 @@ SOFTWARE.
 The Claude and GitHub Copilot marks in rontend/src/harnessIcons.tsx come from Simple Icons (<https://simpleicons.org>, CC0 1.0). The logos remain trademarks of their owners (Anthropic; GitHub/Microsoft) and are used only to identify the tools.
 
 
+## highlight.js
+
+The file preview colors code with highlight.js (BSD-3-Clause License, Copyright (c) 2006 Josh Goebel and contributors), <https://highlightjs.org>.
+
 ## go-qrcode
 
 The pairing QR code is drawn with github.com/skip2/go-qrcode (MIT License, Copyright (c) 2014 Tom Harwood), <https://github.com/skip2/go-qrcode>.

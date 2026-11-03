@@ -3,7 +3,11 @@
 package main
 
 import (
+	"errors"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 
 	"github.com/ma99us/tau-shell/internal/diagnostics"
 	"github.com/ma99us/tau-shell/internal/projectfiles"
@@ -56,6 +60,32 @@ func (application *App) RevealProjectFile(sessionID, rel string) error {
 		return err
 	}
 	return exec.Command("explorer.exe", "/select,"+path).Start()
+}
+
+// executableExtensions are never launched through "open", so a file that runs code is not started by one click.
+var executableExtensions = map[string]bool{".exe": true, ".com": true, ".bat": true, ".cmd": true, ".ps1": true, ".psm1": true, ".vbs": true, ".vbe": true, ".jse": true, ".wsf": true, ".msi": true, ".scr": true, ".lnk": true, ".reg": true, ".hta": true, ".cpl": true, ".dll": true}
+
+// OpenProjectFile opens one project file in the user's default application.
+func (application *App) OpenProjectFile(sessionID, rel string) error {
+	root, err := application.projectRoot(sessionID)
+	if err != nil {
+		return err
+	}
+	path, err := projectfiles.Resolve(root, rel)
+	if err != nil {
+		return err
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return errors.New("only files can be opened")
+	}
+	if executableExtensions[strings.ToLower(filepath.Ext(path))] {
+		return errors.New("programs and scripts are not opened from here; use Open in File Explorer")
+	}
+	return exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", path).Start()
 }
 
 // ProjectFullPath returns the absolute path of a project file, confined to the working directory.

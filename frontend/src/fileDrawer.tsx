@@ -1,4 +1,5 @@
-import { Fragment, ReactNode, useCallback, useEffect, useState } from "react";
+import { Fragment, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { highlightCode, languageFor, languageForFence } from "./highlight";
 import { app, ProjectEntry, ProjectFile, Session } from "./bridge";
 import { Block, Inline, parseMarkdown } from "./markdown";
 import { Icon } from "./icons";
@@ -20,7 +21,7 @@ function renderInline(nodes: Inline[]): ReactNode {
 function renderBlock(block: Block, index: number): ReactNode {
   switch (block.kind) {
     case "heading": return <div className={`md-heading md-h${Math.min(block.level, 3)}`} key={index}>{renderInline(block.inline)}</div>;
-    case "code": return <pre className="md-code" key={index}>{block.text}</pre>;
+    case "code": return <CodeView key={index} language={block.lang ? languageForFence(block.lang) : null} text={block.text} />;
     case "rule": return <hr key={index} />;
     case "quote": return <blockquote key={index}>{renderInline(block.inline)}</blockquote>;
     case "list": {
@@ -33,10 +34,15 @@ function renderBlock(block: Block, index: number): ReactNode {
 
 const isMarkdown = (path: string) => /\.(md|markdown)$/i.test(path);
 
-export function FileDrawer({ session, onClose, onError }: { session: Session; onClose: () => void; onError: (error: unknown) => void }) {
+function CodeView({ language, text }: { language: string | null; text: string }) {
+  const html = useMemo(() => highlightCode(language, text), [language, text]);
+  // The markup comes from highlight.js, which escapes the file's text.
+  return html === null ? <pre className="md-code">{text}</pre> : <pre className="md-code"><code className="hljs" dangerouslySetInnerHTML={{ __html: html }} /></pre>;
+}
+
+export function FileDrawer({ session, onClose, onError, onInsert }: { session: Session; onClose: () => void; onError: (error: unknown) => void; onInsert: (path: string) => void }) {
   const [tree, setTree] = useState<Record<string, ProjectEntry[]>>({});
   const [open, setOpen] = useState<string[]>([]);
-  const [showAll, setShowAll] = useState(false);
   const [file, setFile] = useState<ProjectFile | null>(null);
   const [note, setNote] = useState("");
   const [menu, setMenu] = useState<{ x: number; y: number; entry: ProjectEntry } | null>(null);
@@ -49,20 +55,20 @@ export function FileDrawer({ session, onClose, onError }: { session: Session; on
     window.addEventListener("keydown", onKey);
     return () => { window.removeEventListener("pointerdown", close); window.removeEventListener("blur", close); window.removeEventListener("keydown", onKey); };
   }, [menu]);
-  const load = useCallback((dir: string, all: boolean) => {
-    app().ListProjectDir(session.id, dir, all)
+  const load = useCallback((dir: string) => {
+    app().ListProjectDir(session.id, dir, true)
       .then((listing) => setTree((current) => ({ ...current, [dir]: listing.entries ?? [] })))
       .catch(onError);
   }, [session.id, onError]);
-  useEffect(() => { setTree({}); setOpen([]); setFile(null); load("", showAll); }, [session.id, showAll, load]);
+  useEffect(() => { setTree({}); setOpen([]); setFile(null); load(""); }, [session.id, load]);
   const toggle = (entry: ProjectEntry) => {
     if (open.includes(entry.path)) { setOpen(open.filter((path) => path !== entry.path)); return; }
     setOpen([...open, entry.path]);
-    if (!tree[entry.path]) load(entry.path, showAll);
+    if (!tree[entry.path]) load(entry.path);
   };
   const view = (entry: ProjectEntry) => app().ReadProjectFile(session.id, entry.path).then(setFile).catch((error) => { setFile(null); onError(error); });
   const copy = (text: string, what: string) => window.runtime.ClipboardSetText(text).then(() => setNote(`Copied ${what}.`)).catch(onError);
-  const copyFull = (entry: ProjectEntry) => app().ProjectFullPath(session.id, entry.path).then((full) => copy(full, "the full path")).catch(onError);
+  const copyFull = (entry: { path: string }) => app().ProjectFullPath(session.id, entry.path).then((full) => copy(full, "the full path")).catch(onError);
   const rows = (dir: string, depth: number): ReactNode => (tree[dir] ?? []).map((entry) => {
     const expanded = open.includes(entry.path);
     const kind = fileIconFor(entry.name);
@@ -79,20 +85,26 @@ export function FileDrawer({ session, onClose, onError }: { session: Session; on
   return <aside className="file-drawer" aria-label="Project files">
     <div className="file-drawer-head">
       <strong>Files</strong>
-      <label title="Also show .git, node_modules and similar folders"><input type="checkbox" checked={showAll} onChange={(event) => setShowAll(event.target.checked)} /> all</label>
       <button className="file-act" onClick={onClose} aria-label="Close the file drawer">x</button>
     </div>
     <div className="file-tree">{tree[""] ? (tree[""].length ? rows("", 0) : <div className="toolbar-popover-note">Empty folder.</div>) : <div className="toolbar-popover-note">Loading...</div>}</div>
     {note && <div className="toolbar-popover-note">{note}</div>}
     {menu && <div className="file-menu" role="menu" style={{ left: menu.x, top: menu.y }} onPointerDown={(event) => event.stopPropagation()}>
+      <button role="menuitem" onClick={() => { onInsert(menu.entry.path); setMenu(null); }}><Icon name="commands" size={14} />Insert path in prompt</button>
       <button role="menuitem" onClick={() => { void copy(menu.entry.path, "the relative path"); setMenu(null); }}><Icon name="copy" size={14} />Copy relative name</button>
       <button role="menuitem" onClick={() => { void copyFull(menu.entry); setMenu(null); }}><Icon name="copy" size={14} />Copy full name</button>
       <button role="menuitem" onClick={() => { app().RevealProjectFile(session.id, menu.entry.path).catch(onError); setMenu(null); }}><Icon name="reveal" size={14} />Open in File Explorer</button>
     </div>}
     {file && <div className="file-view">
-      <div className="file-view-head"><span title={file.path}>{file.path}</span><button className="file-act" onClick={() => setFile(null)} aria-label="Close the file">x</button></div>
+      <div className="file-view-head"><span title={file.path}>{file.path}</span>
+        <button className="file-act" onClick={() => onInsert(file.path)} title="Insert the relative path into the prompt" aria-label="Insert the relative path into the prompt"><Icon name="commands" size={14} /></button>
+        <button className="file-act" onClick={() => void copy(file.path, "the relative path")} title="Copy relative name" aria-label="Copy the relative name"><Icon name="copy" size={14} /></button>
+        <button className="file-act" onClick={() => void copyFull(file)} title="Copy full name" aria-label="Copy the full name"><Icon name="copy" size={14} /></button>
+        <button className="file-act" onClick={() => app().RevealProjectFile(session.id, file.path).catch(onError)} title="Open location in File Explorer" aria-label="Open the location in File Explorer"><Icon name="reveal" size={14} /></button>
+        <button className="file-act" onClick={() => app().OpenProjectFile(session.id, file.path).catch(onError)} title="Open in the default application" aria-label="Open the file in its default application"><Icon name="external" size={14} /></button>
+        <button className="file-act" onClick={() => setFile(null)} aria-label="Close the file">x</button></div>
       {file.truncated && <div className="toolbar-popover-note">Only the first part of this file is shown.</div>}
-      {isMarkdown(file.path) ? <div className="md">{parseMarkdown(file.text).map(renderBlock)}</div> : <pre className="md-code">{file.text}</pre>}
+      {isMarkdown(file.path) ? <div className="md">{parseMarkdown(file.text).map(renderBlock)}</div> : <CodeView language={languageFor(file.path)} text={file.text} />}
     </div>}
   </aside>;
 }

@@ -16,6 +16,7 @@ export type CopilotQuota = {
   canProject: boolean;
 };
 import type { HarnessId } from "./harnesses";
+import type { WorkspaceGroup } from "./workspaces";
 
 export type Session = {
   id: string;
@@ -29,6 +30,7 @@ export type Session = {
   hasResumeId: boolean;
   autoResume: boolean;
   resumeNote?: string;
+  launchNote?: string;
 };
 
 export type DialogRequest = {
@@ -233,11 +235,13 @@ type WailsApp = {
   ListProjectDir(sessionId: string, rel: string, showAll: boolean): Promise<ProjectListing>;
   ReadProjectFile(sessionId: string, rel: string): Promise<ProjectFile>;
   ListConversations(sessionId: string): Promise<Conversation[]>;
+  GetWorkspaces(): Promise<Record<string, WorkspaceGroup>>;
   ListSecrets(): Promise<SecretInfo[]>;
   SetSecret(name: string, value: string): Promise<void>;
   DeleteSecret(name: string): Promise<void>;
   ResumeConversation(sessionId: string, harnessSessionId: string, columns: number, rows: number): Promise<Session>;
   RevealProjectFile(sessionId: string, rel: string): Promise<void>;
+  OpenProjectFile(sessionId: string, rel: string): Promise<void>;
   ProjectFullPath(sessionId: string, rel: string): Promise<string>;
   GetSessionModel(sessionId: string): Promise<string>;
   GetSessionUsage(sessionId: string): Promise<SessionUsage>;
@@ -246,7 +250,8 @@ type WailsApp = {
   GetAppVersion(): Promise<string>;
   CheckAppUpdate(): Promise<{ tag: string; url: string } | null>;
   OpenReleasePage(): Promise<void>;
-  DuplicateSession(id: string): Promise<Session>;
+  DuplicateSession(id: string, tool: string, launchArgs: string[]): Promise<Session>;
+  GetSessionLaunchArgs(id: string): Promise<string[]>;
   DialogHostReady(): Promise<DialogRequest[]>;
   AnswerDialog(id: string, choice: string): Promise<void>;
 };

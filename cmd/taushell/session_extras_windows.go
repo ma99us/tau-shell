@@ -31,10 +31,22 @@ func (application *App) SetSessionOrder(ids []string) (err error) {
 	return application.manager.SetOrder(context.Background(), ids)
 }
 
+// GetSessionLaunchArgs returns a session's configured launch arguments, to
+// prefill the clone dialog.
+func (application *App) GetSessionLaunchArgs(id string) ([]string, error) {
+	config, err := session.FindConfig(application.configDirectory, id)
+	if err != nil {
+		return nil, err
+	}
+	return append([]string{}, config.LaunchArgs...), nil
+}
+
 // DuplicateSession saves a copy of a session definition under a new unique
-// name and ID, placed right after the source. Runtime state (resume IDs,
+// name and ID, placed right after the source. The working folder is always
+// inherited; the harness and launch arguments may be overridden (an empty
+// toolName or nil launchArgs keeps the source's). Runtime state (resume IDs,
 // restore outcomes) is never copied.
-func (application *App) DuplicateSession(id string) (snapshot sessionhost.Snapshot, err error) {
+func (application *App) DuplicateSession(id, toolName string, launchArgs []string) (snapshot sessionhost.Snapshot, err error) {
 	defer func() {
 		if err != nil {
 			diagnostics.Error("duplicate session failed", err, "session_id", id)
@@ -47,7 +59,13 @@ func (application *App) DuplicateSession(id string) (snapshot sessionhost.Snapsh
 		return sessionhost.Snapshot{}, err
 	}
 	copied := source
+	if toolName != "" {
+		copied.Tool = session.Harness(toolName)
+	}
 	copied.LaunchArgs = append([]string(nil), source.LaunchArgs...)
+	if launchArgs != nil {
+		copied.LaunchArgs = append([]string(nil), launchArgs...)
+	}
 	if source.Environment != nil {
 		copied.Environment = make(map[string]string, len(source.Environment))
 		for key, value := range source.Environment {

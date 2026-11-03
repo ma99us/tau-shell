@@ -2,7 +2,9 @@
 
 Status: **first slice built**. Rank 5. Sources: user decision; Orca file explorer and quick open.
 
-**Built:** a **Files** button in the terminal toolbar opens a read-only drawer (`frontend/src/fileDrawer.tsx`) with a lazily loaded tree of the session's working directory, an "all" toggle for `.git`/`node_modules` and similar, file-type icons, a right-click menu (Copy relative name, Copy full name, Open in File Explorer), and a viewer for text files, with Markdown rendered by `frontend/src/markdown.ts`. The renderer builds plain nodes (no HTML is inserted, links show as text and are never followed, images are not loaded). File access goes through `internal/projectfiles`: every path is resolved with symlinks and must stay inside the working directory (`..`, absolute paths and links out of the folder are refused; lists are capped at 2000 entries and reads at 512 KB; binary files are refused). Relative paths always use `/`. Verified by Go and frontend unit tests, `tsc` and the build; the drawer was not clicked through live.
+**Built:** a **Files** button in the terminal toolbar opens a read-only drawer (`frontend/src/fileDrawer.tsx`) with a lazily loaded tree of the session's working directory, always lists every file and folder including `.git`/`node_modules` (the earlier "all" toggle was removed), file-type icons, a right-click menu (Copy relative name, Copy full name, Open in File Explorer), and a viewer for text files, with Markdown rendered by `frontend/src/markdown.ts`. The renderer builds plain nodes (no HTML is inserted, links show as text and are never followed, images are not loaded). File access goes through `internal/projectfiles`: every path is resolved with symlinks and must stay inside the working directory (`..`, absolute paths and links out of the folder are refused; lists are capped at 2000 entries and reads at 512 KB; binary files are refused). Relative paths always use `/`. Verified by Go and frontend unit tests, `tsc` and the build; the drawer was not clicked through live.
+
+**Syntax highlighting:** non-Markdown files are colored with highlight.js (`frontend/src/highlight.ts`, about 20 common languages chosen by extension; files over 200,000 characters stay plain). For `.md` files the Markdown viewer takes over, and only its fenced code blocks with a known language label are highlighted. highlight.js escapes the text, so file content is never inserted as HTML.
 
 **Not built yet:** drag a file onto the terminal to paste its path (needs the WebView2 spike), file names in quick open, per-harness `@path` syntax, git markers.
 
@@ -41,7 +43,7 @@ Slick and simple. This is **not an IDE**: no editing, no tabs of code, no langua
 ## Out of scope
 
 - Editing, saving or creating files.
-- Syntax-highlighted code viewing beyond plain text (candidate for later).
+- Editing, and highlighting of file types beyond the bundled ~20 languages (built-in highlighting is described under Built).
 - Search inside files, diffs, git operations, other previews (PDF, images).
 
 ## Acceptance criteria

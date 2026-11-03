@@ -19,6 +19,8 @@ import { queuedTotal, runQueues, subscribeQueues } from "./promptQueue";
 import { CreateSession } from "./createSession";
 import { duplicateAndLaunch } from "./sessionActions";
 import { clearPollFailure, shouldReportPollFailure } from "./polling";
+import { Workspace, WorkspaceGroup, flattenWorkspaces, groupSessions, readCollapsed, summarize, writeCollapsed } from "./workspaces";
+import { GroupControls, GroupHeader } from "./workspaceView";
 import { readRecentFolders, readTabs, recentFoldersKey, savedTabsKey, Tab, writeStored } from "./storage";
 
 window.addEventListener("error", (event) => {
@@ -48,6 +50,9 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { failed: bool
 
 function App() {
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [workspaceMap, setWorkspaceMap] = useState<Record<string, WorkspaceGroup>>({});
+  const [collapsedGroups, setCollapsedGroups] = useState(() => readCollapsed(localStorage));
+  const [stopGroup, setStopGroup] = useState<Workspace | null>(null);
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [tabs, setTabs] = useState<Tab[]>(() => readTabs(reportFrontendFailure));
   const [recentFolders, setRecentFolders] = useState<string[]>(() => readRecentFolders(reportFrontendFailure));
@@ -162,11 +167,13 @@ function App() {
 
   const refresh = async (redetectTools = false) => {
     try {
-      const [nextSessions, nextStatus] = await Promise.all([
+      const [nextSessions, nextStatus, nextGroups] = await Promise.all([
         app().GetSessions(),
         status && !redetectTools ? Promise.resolve(status) : app().GetSystemStatus(),
+        app().GetWorkspaces(),
       ]);
       setSessions(nextSessions);
+      setWorkspaceMap(nextGroups ?? {});
       setBackgroundTerminalIds((current) => current.filter((id) =>
         nextSessions.some((session) => session.id === id && session.runningHere)));
       setTabs((current) => current
@@ -336,6 +343,7 @@ function App() {
         }, delay);
       }
       await refresh();
+      if (started.launchNote) setError(started.launchNote);
     } catch (err) {
       showError("ui.session-launch", err);
     } finally {
@@ -404,11 +412,43 @@ function App() {
   };
   const [dragId, setDragId] = useState("");
   const [dropMark, setDropMark] = useState<{ id: string; after: boolean } | null>(null);
+  const workspaces = groupSessions(sessions, workspaceMap);
+  const displaySessions = flattenWorkspaces(workspaces);
+  const needsAttention = (session: Session) => !!activity[session.id]?.input;
+  const sameGroup = (a: string, b: string) => (workspaceMap[a]?.key ?? "") === (workspaceMap[b]?.key ?? "");
+  const toggleGroup = (key: string) => setCollapsedGroups((current) => {
+    const next = new Set(current);
+    if (!next.delete(key)) next.add(key);
+    writeCollapsed(localStorage, next);
+    return next;
+  });
+  const resumeGroup = async (workspace: Workspace) => {
+    const resumable = summarize(workspace.sessions, needsAttention).resumable;
+    for (const session of resumable) await launch(session, "restore");
+    if (resumable.length) setSelected("");
+  };
+  const confirmStopGroup = async () => {
+    const workspace = stopGroup;
+    setStopGroup(null);
+    if (!workspace) return;
+    setBusy(true);
+    for (const session of summarize(workspace.sessions, needsAttention).stoppable) {
+      try {
+        await app().StopSession(session.id);
+        removeTab(session.id);
+      } catch (err) {
+        showError("ui.stop-group", err);
+      }
+    }
+    await refresh();
+    setBusy(false);
+  };
+  const groupControls: GroupControls = { collapsed: collapsedGroups, busy, needsAttention, onToggle: toggleGroup, onResume: (workspace) => void resumeGroup(workspace), onStop: setStopGroup };
   const dragProps = (id: string, horizontal = false) => ({
     draggable: true,
     onDragStart: (event: DragEvent<HTMLElement>) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", id); setDragId(id); },
     onDragOver: (event: DragEvent<HTMLElement>) => {
-      if (!dragId || dragId === id) return;
+      if (!dragId || dragId === id || !sameGroup(dragId, id)) return;
       event.preventDefault();
       const rect = event.currentTarget.getBoundingClientRect();
       const after = horizontal ? event.clientX > rect.left + rect.width / 2 : event.clientY > rect.top + rect.height / 2;
@@ -419,7 +459,7 @@ function App() {
       const mark = dropMark;
       setDragId("");
       setDropMark(null);
-      if (!dragId || !mark || mark.id !== id) return;
+      if (!dragId || !mark || mark.id !== id || !sameGroup(dragId, id)) return;
       const ordered = moveId(sessions.map((session) => session.id), dragId, id, mark.after);
       if (ordered.join() === sessions.map((session) => session.id).join()) return;
       const previous = sessions;
@@ -429,14 +469,19 @@ function App() {
     onDragEnd: () => { setDragId(""); setDropMark(null); },
   });
   const dropClass = (id: string) => dropMark?.id === id ? (dropMark.after ? "drop-after" : "drop-before") : "";
+  const [cloneRequest, setCloneRequest] = useState<{ source: Session; launchArgs: string[] } | null>(null);
   const duplicateSession = async (session: Session) => {
+    try {
+      setCloneRequest({ source: session, launchArgs: await app().GetSessionLaunchArgs(session.id) });
+    } catch (err) {
+      showError("ui.duplicate-session", err);
+    }
+  };
+  const cloneCreated = async (copy: Session) => {
+    setCloneRequest(null);
     setBusy(true);
     try {
-      await duplicateAndLaunch(
-        () => app().DuplicateSession(session.id),
-        refresh,
-        (copy) => launch(copy, "start"),
-      );
+      await duplicateAndLaunch(async () => copy, refresh, (created) => launch(created, "start"));
     } catch (err) {
       showError("ui.duplicate-session", err);
     } finally {
@@ -445,7 +490,7 @@ function App() {
   };
   const colorOf = (id: string) => sessions.find((current) => current.id === id)?.color;
   // Tabs follow the same order as the sidebar and Home tiles, not the order they were opened.
-  const orderedTabs = [...tabs].sort((a, b) => sessions.findIndex((s) => s.id === a.id) - sessions.findIndex((s) => s.id === b.id));
+  const orderedTabs = [...tabs].sort((a, b) => displaySessions.findIndex((s) => s.id === a.id) - displaySessions.findIndex((s) => s.id === b.id));
 
   const toolFor = (session: Session) => status?.tools.find((tool) => tool.id === session.tool);
   const harnessFor = (session: Session) => {
@@ -642,7 +687,11 @@ function App() {
           <div className="sidebar-brand"><img className="brand-mark" src={appIcon} alt="" /><span className="brand-text"><strong>TauShell</strong><small>Your AI sessions</small></span></div>
           <div className="sidebar-heading"><span className="sidebar-title">SESSIONS</span> <button className="add-button" title="New session" onClick={() => setDialogOpen(true)}>+</button></div>
           <button className={`nav-row ${selected ? "" : "active"}`} title="Home" aria-label="Home" onClick={() => setSelected("")}><HomeIcon /></button>
-          {sessions.map((session) => (
+          {workspaces.map((workspace) => {
+            const open = sidebarCollapsed || !collapsedGroups.has(workspace.group.key);
+            return <div className="workspace-group" key={workspace.group.key}>
+              {!sidebarCollapsed && <GroupHeader workspace={workspace} controls={groupControls} variant="tree" />}
+              {open && <div className={sidebarCollapsed ? "" : "group-children"}>{workspace.sessions.map((session) => (
             <div className={`session-item ${selected === session.id ? "active" : ""} ${dragId === session.id ? "dragging" : ""} ${dropClass(session.id)}`} key={session.id} {...dragProps(session.id)} style={sessionColorStyle(session.color)} data-colored={session.color ? "" : undefined} onContextMenu={(event) => openMenu(event, session)}>
               <button className={`session-row ${selected === session.id ? "active" : ""}`} title={session.name} onClick={() => openTab(session)}>
                 <StateIcon session={session} activity={activity[session.id]} />
@@ -651,7 +700,9 @@ function App() {
               </button>
               <button className="delete-button" aria-label={`Delete ${session.name}`} title="Delete session" onClick={() => setDeleteRequest(session)}>x</button>
             </div>
-          ))}
+          ))}</div>}
+            </div>;
+          })}
           <div className="sidebar-foot"><button className="sidebar-toggle" aria-label="TauShell settings" title="TauShell settings (opens config.yaml)" onClick={() => void app().OpenSettingsFile().catch((err) => showError("ui.open-settings", err))}><GearIcon /></button><button className="sidebar-toggle" aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setSidebarCollapsed((value) => !value)}>{sidebarCollapsed ? ">>" : "<<"}</button></div>
         </aside>
         <main className="main">
@@ -695,7 +746,7 @@ function App() {
           <section className="main-content">
             <div id="panel-home" className={`home-container ${selected ? "hidden" : ""}`} role="tabpanel" aria-labelledby="tab-home" tabIndex={0}>
               {showSetup && powershell ? <Setup powershell={powershell} actions={toolActions} onRecheck={() => void refresh(true)} onContinue={() => setSetupDismissed(true)} /> :
-                <Home sessions={sessions} loaded={loaded} autoResumeAll={autoResumeAll} onAutoResumeAll={(enabled) => { setAutoResumeAll(enabled); void app().SetAutoResumeAll(enabled).catch((err) => { setAutoResumeAll(!enabled); showError("ui.auto-resume-all", err); }); }} onAutoResume={(session, enabled) => void updateSession("ui.auto-resume", () => app().SetSessionAutoResume(session.id, enabled))} status={status} busy={busy} tools={toolActions} skills={skillActions} onNew={() => setDialogOpen(true)} onRefresh={() => void refreshAll()} onHome={() => setSelected("")} onLaunch={launch} onDelete={setDeleteRequest} onDuplicate={duplicateSession} onError={showError} dragProps={dragProps} dropClass={dropClass} dragId={dragId} />}
+                <Home sessions={displaySessions} workspaces={workspaces} groupControls={groupControls} loaded={loaded} autoResumeAll={autoResumeAll} onAutoResumeAll={(enabled) => { setAutoResumeAll(enabled); void app().SetAutoResumeAll(enabled).catch((err) => { setAutoResumeAll(!enabled); showError("ui.auto-resume-all", err); }); }} onAutoResume={(session, enabled) => void updateSession("ui.auto-resume", () => app().SetSessionAutoResume(session.id, enabled))} status={status} busy={busy} tools={toolActions} skills={skillActions} onNew={() => setDialogOpen(true)} onRefresh={() => void refreshAll()} onHome={() => setSelected("")} onLaunch={launch} onDelete={setDeleteRequest} onDuplicate={duplicateSession} onError={showError} dragProps={dragProps} dropClass={dropClass} dragId={dragId} />}
             </div>
             {terminalIds.map((id) => {
               const tab = tabs.find((current) => current.id === id);
@@ -716,6 +767,7 @@ function App() {
         setDialogOpen(false);
         void launch(session, "start");
       }} onError={(failure) => showError("ui.create-session", failure)} />}
+      {cloneRequest && <CreateSession recentFolders={recentFolders} clone={cloneRequest} onClose={() => setCloneRequest(null)} onCreated={(copy) => void cloneCreated(copy)} onError={(failure) => showError("ui.duplicate-session", failure)} />}
       {menu && <SessionMenu x={menu.x} y={menu.y} session={menu.session} onClose={() => setMenu(null)}
         onDuplicate={() => { const target = menu.session; setMenu(null); void duplicateSession(target); }}
         onRename={() => { setRenameRequest(menu.session); setMenu(null); }}
@@ -739,6 +791,15 @@ function App() {
         <div className="modal-actions">
           <button className="secondary-button" onClick={() => setDeleteRequest(null)}>Cancel</button>
           <button className="danger-button" disabled={busy || deleteRequest.runningHere} onClick={() => void deleteSession(deleteRequest)}>{busy ? "Deleting..." : "Delete session"}</button>
+        </div>
+      </div></div>}
+      {stopGroup && <div className="modal-backdrop"><div className="modal confirm-modal">
+        <div className="modal-heading"><div><p className="eyebrow">STOP GROUP</p><h2>Stop {summarize(stopGroup.sessions, needsAttention).stoppable.length} running session(s) in {stopGroup.group.name}?</h2></div></div>
+        <p className="muted">Each session's PowerShell and harness process is interrupted and stopped. Work in progress is not saved by TauShell. A graceful stop helps resume, but does not guarantee it.</p>
+        <ul className="muted">{summarize(stopGroup.sessions, needsAttention).stoppable.map((session) => <li key={session.id}>{session.name}</li>)}</ul>
+        <div className="modal-actions">
+          <button className="secondary-button" onClick={() => setStopGroup(null)}>Cancel</button>
+          <button className="primary-button" onClick={() => void confirmStopGroup()}>Stop group</button>
         </div>
       </div></div>}
       {closeRequest && <div className="modal-backdrop"><div className="modal confirm-modal">

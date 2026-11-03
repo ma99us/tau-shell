@@ -143,4 +143,12 @@
   --tag-fallback: #f4f6fa;
   --tag-text-on-light: #101318;
   --tag-text-on-dark: #fff;
+  --syntax-keyword: #c792ea;
+  --syntax-string: #a5d6a7;
+  --syntax-number: #f2a97e;
+  --syntax-comment: #7e8896;
+  --syntax-title: #82aaff;
+  --syntax-attr: #ffcb6b;
+  --syntax-add: #7bd88f;
+  --syntax-del: #ff8080;
 }

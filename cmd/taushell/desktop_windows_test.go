@@ -633,11 +633,11 @@ func TestDuplicateSessionCopiesDefinitionWithUniqueName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := application.DuplicateSession(source.ID)
+	first, err := application.DuplicateSession(source.ID, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := application.DuplicateSession(source.ID)
+	second, err := application.DuplicateSession(source.ID, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -647,5 +647,13 @@ func TestDuplicateSessionCopiesDefinitionWithUniqueName(t *testing.T) {
 	config, err := session.FindConfig(application.configDirectory, first.ID)
 	if err != nil || len(config.LaunchArgs) != 2 || config.WorkingDir != source.WorkingDir {
 		t.Fatalf("copied config: %+v, %v", config, err)
+	}
+	other, err := application.DuplicateSession(source.ID, string(session.CopilotCLI), []string{"--yolo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config, err = session.FindConfig(application.configDirectory, other.ID)
+	if err != nil || config.Tool != session.CopilotCLI || len(config.LaunchArgs) != 1 || config.WorkingDir != source.WorkingDir {
+		t.Fatalf("overridden copy: %+v, %v", config, err)
 	}
 }

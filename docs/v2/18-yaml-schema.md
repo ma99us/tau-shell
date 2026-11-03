@@ -82,10 +82,12 @@ The isolated [`spikes/session-config/`](../../spikes/session-config/) prototype 
 
 ## Cloning a session
 
-"Clone" copies every definition field (harness, working directory, launch
-arguments, environment, PowerShell options, presets, color) into a new file
-named "name (n)" with a unique id. The copy is written by TauShell, so YAML
-comments in the source are not carried over. Runtime state is never copied.
+"Clone" opens the New session dialog with the original's project folder shown
+read-only (a clone always inherits it) and its harness and launch arguments
+prefilled and editable. It then copies every other definition field
+(environment, PowerShell options, presets, color) into a new file named
+"name (n)" with a unique id and starts it. The copy is written by TauShell, so
+YAML comments in the source are not carried over. Runtime state is never copied.
 
 ## App settings (`~/.tau_shell/config.yaml`)
 

@@ -649,6 +649,41 @@ func TestManagerRestoreFailurePreservesResumeID(t *testing.T) {
 	}
 }
 
+func TestManagerRestoreWithoutRecordedConversationStartsFresh(t *testing.T) {
+	manager, _, _ := newLifecycleTestManager(t, "norecord")
+	ctx := context.Background()
+	original, err := manager.store.BeginFresh(ctx, "norecord", session.ClaudeCode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.store.Finish(ctx, "norecord", session.StatusStopped, ""); err != nil {
+		t.Fatal(err)
+	}
+	// A transcript store exists but holds no conversation for this ID.
+	claudeHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", claudeHome)
+	if err := os.MkdirAll(filepath.Join(claudeHome, "projects", "p"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := manager.Start(ctx, "norecord", true, 80, 24)
+	if err != nil {
+		t.Fatalf("restore without a conversation should start fresh: %v", err)
+	}
+	if !snapshot.RunningHere || !strings.Contains(snapshot.LaunchNote, "Started a new conversation") {
+		t.Fatalf("snapshot = %+v", snapshot)
+	}
+	runtime, err := manager.store.Runtime(ctx, "norecord")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.HarnessSessionID == "" || runtime.HarnessSessionID == original.HarnessSessionID {
+		t.Errorf("resume ID = %q, want a new one (was %q)", runtime.HarnessSessionID, original.HarnessSessionID)
+	}
+	if err := manager.Stop(ctx, "norecord"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestManagerStartFailureReleasesReservationForRetry(t *testing.T) {
 	manager, factory, _ := newLifecycleTestManager(t, "retry-start")
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())

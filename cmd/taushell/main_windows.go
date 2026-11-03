@@ -265,12 +265,21 @@ func runSession(id string, restoring bool) (returnErr error) {
 	if runtime.Status == session.StatusRunning || runtime.Status == session.StatusStarting {
 		return fmt.Errorf("session %q is already active in another TauShell process", id)
 	}
+	fresh := false
 	if restoring && runtime.HarnessSessionID != "" {
 		if resumeErr := adapter.CheckResume(runtime.HarnessSessionID); resumeErr != nil {
-			return resumeErr
+			// Same as the desktop app: warn, then start a new conversation.
+			fmt.Fprintf(os.Stderr, "Could not resume: %v. Starting a new conversation instead.\n", resumeErr)
+			restoring, fresh = false, true
 		}
 	}
-	if adapter.DiscoversSessionID() {
+	if fresh {
+		if adapter.DiscoversSessionID() {
+			runtime, err = store.BeginDiscovered(context.Background(), id, config.Tool, false, true)
+		} else {
+			runtime, err = store.BeginFresh(context.Background(), id, config.Tool)
+		}
+	} else if adapter.DiscoversSessionID() {
 		runtime, err = store.BeginDiscovered(context.Background(), id, config.Tool, restoring, false)
 	} else {
 		runtime, err = store.Begin(context.Background(), id, config.Tool, restoring)

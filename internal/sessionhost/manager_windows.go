@@ -59,6 +59,8 @@ type Snapshot struct {
 	RunningHere bool                  `json:"runningHere"`
 	HasResumeID bool                  `json:"hasResumeId"`
 	ResumeNote  string                `json:"resumeNote,omitempty"`
+	// LaunchNote is set only on the result of a launch that fell back to a fresh conversation.
+	LaunchNote string `json:"launchNote,omitempty"`
 }
 
 type managedSession struct {
@@ -469,9 +471,13 @@ func (manager *Manager) start(ctx context.Context, id string, restoring, fresh b
 	if runtime.Status == session.StatusRunning || runtime.Status == session.StatusStarting {
 		return Snapshot{}, fmt.Errorf("session %q is active in another TauShell process", id)
 	}
+	launchNote := ""
 	if restoring && runtime.HarnessSessionID != "" {
 		if resumeErr := adapter.CheckResume(runtime.HarnessSessionID); resumeErr != nil {
-			return Snapshot{}, resumeErr
+			// Still start the session, as a new conversation, and say so.
+			launchNote = "Could not resume: " + resumeErr.Error() + ". Started a new conversation instead."
+			diagnostics.Warn("resume not possible, starting fresh", resumeErr, "session_id", id, "tool", config.Tool)
+			restoring, fresh = false, true
 		}
 	}
 	if fresh {
@@ -549,7 +555,9 @@ func (manager *Manager) start(ctx context.Context, id string, restoring, fresh b
 		"rows", rows,
 	)
 	go manager.supervise(current)
-	return current.snapshot(), nil
+	snapshot := current.snapshot()
+	snapshot.LaunchNote = launchNote
+	return snapshot, nil
 }
 
 func (manager *Manager) Write(id string, input []byte) error {

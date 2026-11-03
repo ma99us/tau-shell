@@ -8,8 +8,12 @@ import { clearPollFailure, shouldReportPollFailure } from "./polling";
 import { ControlAudit } from "./controlAudit";
 import { PhonePane } from "./phonePane";
 import { SecretsPane } from "./secretsPane";
+import { Workspace } from "./workspaces";
+import { GroupControls, GroupHeader } from "./workspaceView";
 
-export function Home({ sessions, loaded, autoResumeAll, onAutoResumeAll, onAutoResume, status, busy, tools, skills, onNew, onRefresh, onHome, onLaunch, onDelete, onDuplicate, onError, dragProps, dropClass, dragId }: {
+export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAll, onAutoResumeAll, onAutoResume, status, busy, tools, skills, onNew, onRefresh, onHome, onLaunch, onDelete, onDuplicate, onError, dragProps, dropClass, dragId }: {
+  workspaces: Workspace[];
+  groupControls: GroupControls;
   skills: SkillsActions;
   autoResumeAll: boolean;
   onAutoResumeAll: (enabled: boolean) => void;
@@ -101,10 +105,12 @@ export function Home({ sessions, loaded, autoResumeAll, onAutoResumeAll, onAutoR
         </div>
       </div>
       <div className="section-title"><div><h2>Your sessions</h2></div>{!loaded && <span className="spinner" role="status" aria-label="Loading sessions" />}</div>
-      {quota && !quota.unlimited && <p className={`home-usage home-quota${quota.canProject && quota.projected > quota.entitlement ? " warn" : ""}`} title={`Copilot plan: ${quota.plan}. Read through your GitHub CLI sign-in. ${quota.daysLeft} days left in the cycle.`}>Copilot: {Math.round(quota.used)} / {Math.round(quota.entitlement)} credits ({Math.round(quota.percentUsed)}%), resets {quota.resetDate}{quota.canProject ? `, on pace for ~${Math.round(quota.projected)}` : ""}</p>}
-      {summary && hasUsage(summary.month) && <p className="home-usage" title={monthTooltip(summary)}>This month: {usageText(summary.month)}{harnessIds.map((tool) => hasUsage(summary.monthByTool?.[tool]) ? <span key={tool}> | {harnessShort(tool)} {usageText(summary.monthByTool![tool])}</span> : null)}</p>}
+      {quota && !quota.unlimited && <p className={`home-usage home-quota${quota.canProject && quota.projected > quota.entitlement ? " warn" : ""}`} title={`Copilot plan: ${quota.plan}. Read through your GitHub CLI sign-in. ${quota.daysLeft} days left in the cycle.`}>Copilot: <b className="kv">{Math.round(quota.used)} / {Math.round(quota.entitlement)} credits ({Math.round(quota.percentUsed)}%)</b>, resets {quota.resetDate}{quota.canProject ? <>, on pace for <b className="kv">~{Math.round(quota.projected)}</b></> : ""}</p>}
+      {summary && hasUsage(summary.month) && <p className="home-usage" title={monthTooltip(summary)}>This month: <b className="kv">{usageText(summary.month)}</b>{harnessIds.map((tool) => hasUsage(summary.monthByTool?.[tool]) ? <span key={tool}> | {harnessShort(tool)} <b className="kv">{usageText(summary.monthByTool![tool])}</b></span> : null)}</p>}
       {sessions.length === 0 ? (!loaded ? <div className="loading-card" role="status"><span className="spinner" aria-hidden="true" /><span className="muted">Loading sessions...</span></div> : <div className="empty-card"><div className="empty-icon">+</div><h3>No sessions yet</h3><p>Create a session to connect a project folder to an AI harness such as Claude Code or GitHub Copilot CLI.</p>      <button className="primary-button" onClick={onNew}>New session</button></div>) :
-        <div className="session-grid">{sessions.map((session) => <article className={`session-card ${dragId === session.id ? "dragging" : ""} ${dropClass(session.id)}`} key={session.id} {...dragProps(session.id)}>
+        <>{workspaces.map((workspace) => <div className="home-group" key={workspace.group.key}>
+        <GroupHeader workspace={workspace} controls={groupControls} variant="home" />
+        {!groupControls.collapsed.has(workspace.group.key) && <div className="session-grid">{workspace.sessions.map((session) => <article className={`session-card ${dragId === session.id ? "dragging" : ""} ${dropClass(session.id)}`} key={session.id} {...dragProps(session.id)}>
           <div className="card-top"><ProjectIcon session={session} /><span className={`state-pill ${session.runningHere ? "running" : ""} ${!session.runningHere && session.status === "failed" ? "status-warn-text" : ""}`}>{session.runningHere ? "Running" : statusLabel(session.status)}</span><button className="delete-button" aria-label={`Delete ${session.name}`} title="Delete session" onClick={() => onDelete(session)}>x</button></div>
           <div className="card-title"><h3>{session.name}</h3>{hasUsage(summary?.sessions?.[session.id]) && <span className="card-usage" title="Estimate from harness logs; never reset">{usageText(summary!.sessions![session.id])}</span>}</div><p className="path">{session.workingDir}</p><p className="session-meta">{session.tool}</p>
           {session.lastError && <p className="card-error">{session.lastError}</p>}
@@ -116,7 +122,7 @@ export function Home({ sessions, loaded, autoResumeAll, onAutoResumeAll, onAutoR
             <button className="tile-button" disabled={busy} title="Copy this session definition and start the copy" onClick={() => onDuplicate(session)}>Clone</button>
             <label className="check-option" title={autoResumeAll ? "All sessions auto-resume (global setting is on)" : "Resume this session when TauShell starts"}><input type="checkbox" checked={session.autoResume || autoResumeAll} disabled={autoResumeAll} onChange={(event) => onAutoResume(session, event.target.checked)} />Auto resume</label>
           </div>
-        </article>)}</div>}
+        </article>)}</div>}</div>)}</>}
       <div className="tools-panel"><div className="tools-header"><h2>Tools</h2><div className="refresh-group">{tools.refreshing && <span className="spinner" role="status" aria-label="Refreshing" />}<button className="secondary-button" disabled={tools.refreshing} title="Reload sessions, re-detect tools and check for tool updates" onClick={onRefresh}>Refresh</button></div></div><div className="tool-list">
         {status?.tools.filter((tool) => !isHarness(tool.id)).map((tool) => <ToolRow key={tool.id} tool={tool} actions={tools} />) ?? <div className="loading-card" role="status"><span className="spinner" aria-hidden="true" /><span className="muted">Detecting tools...</span></div>}
       </div></div>

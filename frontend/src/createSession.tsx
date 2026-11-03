@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { app, LaunchPreview, Session } from "./bridge";
 import { HarnessIcon } from "./harnessIcons";
 import { harnesses } from "./harnesses";
@@ -7,16 +7,19 @@ function parseLaunchArgs(text: string): string[] {
   return text.split(/\r?\n/).map((arg) => arg.trim()).filter(Boolean);
 }
 
-export function CreateSession({ recentFolders, onClose, onCreated, onError }: {
+export function CreateSession({ recentFolders, clone, onClose, onCreated, onError }: {
   recentFolders: string[];
+  // Clone mode: the folder is inherited and fixed; harness and arguments start from the original's.
+  clone?: { source: Session; launchArgs: string[] };
   onClose: () => void;
   onCreated: (session: Session) => void;
   // Returns the message to show inside the dialog; the page banner is hidden behind it.
   onError: (error: unknown) => string;
 }) {
-  const [tool, setTool] = useState<Session["tool"]>("copilot-cli");
-  const [workingDir, setWorkingDir] = useState("");
-  const [launchArgs, setLaunchArgs] = useState("");
+  const [tool, setTool] = useState<Session["tool"]>(clone?.source.tool ?? "copilot-cli");
+  const [workingDir, setWorkingDir] = useState(clone?.source.workingDir ?? "");
+  const [launchArgs, setLaunchArgs] = useState(clone ? clone.launchArgs.join("\n") : "");
+  const toolChosen = useRef(false);
   const [templateText, setTemplateText] = useState<string | null>(null);
   const [preview, setPreview] = useState<LaunchPreview | null>(null);
   const [previewError, setPreviewError] = useState("");
@@ -34,6 +37,8 @@ export function CreateSession({ recentFolders, onClose, onCreated, onError }: {
   // the user switches tool while the field still matches the prior
   // template verbatim (i.e. they have not customized it yet).
   useEffect(() => {
+    // A clone keeps the original's arguments until a different harness is picked.
+    if (clone && !toolChosen.current) return;
     let cancelled = false;
     (async () => {
       try {
@@ -86,20 +91,24 @@ export function CreateSession({ recentFolders, onClose, onCreated, onError }: {
     setFormError("");
     setSaving(true);
     try {
-      const session = yamlOpen
+      const session = clone
+        ? await app().DuplicateSession(clone.source.id, tool, parseLaunchArgs(launchArgs))
+        : yamlOpen
         ? await app().CreateSessionFromYAML(yamlText)
         : await app().CreateSession("", tool, workingDir, parseLaunchArgs(launchArgs));
       onCreated(session);
     } catch (err) { fail(err); } finally { setSaving(false); }
   };
   return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="modal">
-    <div className="modal-heading"><h2>Start new AI session</h2><button className="icon-button" onClick={onClose}>x</button></div>
+    <div className="modal-heading"><h2>{clone ? `Clone ${clone.source.name}` : "Start new AI session"}</h2><button className="icon-button" onClick={onClose}>x</button></div>
     <form onSubmit={(event) => void submit(event)}>
-      <label>Project folder<div className="folder-row"><input autoFocus required list="recent-project-folders" value={workingDir} onChange={(event) => { setWorkingDir(event.target.value); setFormError(""); }} placeholder="Choose a local project folder" /><datalist id="recent-project-folders">{recentFolders.map((folder) => <option key={folder} value={folder} />)}</datalist><button type="button" className="secondary-button" onClick={() => void chooseDirectory()}>Browse</button></div></label>
+      {clone
+        ? <label>Project folder <span className="optional">(inherited from the original, cannot be changed)</span><div className="folder-row"><input readOnly value={workingDir} /></div></label>
+        : <label>Project folder<div className="folder-row"><input autoFocus required list="recent-project-folders" value={workingDir} onChange={(event) => { setWorkingDir(event.target.value); setFormError(""); }} placeholder="Choose a local project folder" /><datalist id="recent-project-folders">{recentFolders.map((folder) => <option key={folder} value={folder} />)}</datalist><button type="button" className="secondary-button" onClick={() => void chooseDirectory()}>Browse</button></div></label>}
       <div className="harness-field"><span className="harness-label" id="harness-label">AI harness</span>
         <div className="harness-picker" role="radiogroup" aria-labelledby="harness-label">
           {harnesses.map(({ id, name }) =>
-            <button key={id} type="button" role="radio" aria-checked={tool === id} className={`harness-option ${tool === id ? "selected" : ""}`} onClick={() => setTool(id)}>
+            <button key={id} type="button" role="radio" aria-checked={tool === id} className={`harness-option ${tool === id ? "selected" : ""}`} onClick={() => { toolChosen.current = true; setTool(id); }}>
               <HarnessIcon tool={id} /><span className="harness-name">{name}</span>
             </button>)}
         </div>
@@ -112,16 +121,16 @@ export function CreateSession({ recentFolders, onClose, onCreated, onError }: {
           {preview.warnings.map((warning) => <p key={warning} className="tool-warning">{warning}</p>)}
         </>}
       </div>
-      <div className="yaml-section">
+      {!clone && <div className="yaml-section">
         <button type="button" className="text-button" aria-expanded={yamlOpen} onClick={() => setYamlOpen((open) => !open)}>{yamlOpen ? "Hide session YAML" : "Edit session YAML"}</button>
         {yamlOpen && <>
           <textarea className="yaml-editor" rows={9} spellCheck={false} aria-label="Session YAML" value={yamlText} onChange={(event) => { setYamlText(event.target.value); setYamlDirty(true); }} />
           {yamlError && <p className="tool-warning">{yamlError}</p>}
           <p className="form-note">{yamlDirty ? "Edited by hand: the form fields above no longer change this text. " : "Follows the form until you edit it. "}The definition is validated and saved in normal form.{yamlDirty && <> <button type="button" className="text-button" onClick={() => setYamlDirty(false)}>Reset from form</button></>}</p>
         </>}
-      </div>
+      </div>}
       {formError && <p className="tool-warning" role="alert">{formError}</p>}
-      <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button" disabled={saving}>{saving ? "Creating..." : "Start new AI session"}</button></div>
+      <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button" disabled={saving}>{saving ? (clone ? "Cloning..." : "Creating...") : (clone ? "Clone and start" : "Start new AI session")}</button></div>
     </form>
   </div></div>;
 }
