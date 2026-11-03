@@ -851,6 +851,28 @@ h3 {
   white-space: nowrap;
 }
 
+.project-icon-wrap {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+.clone-tag {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  min-width: 13px;
+  padding: 0 3px;
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius-20);
+  background: var(--bg-app);
+  color: var(--accent-text-4);
+  font-size: var(--fs-10);
+  font-weight: 700;
+  line-height: 12px;
+  text-align: center;
+}
+
 .state-pill {
   padding: 4px 7px;
   border: 1px solid var(--border-hover);

@@ -26,7 +26,11 @@ export function ProjectIcon({ session }: { session: Session }) {
     fontSize: `${Math.max(5, Math.min(16, 26 / count * 1.15))}px`,
     ...(session.color ? { background: session.color, borderColor: session.color, color: readableTextColor(session.color) } : {}),
   };
-  return <div className="tool-icon project-icon" style={style} aria-hidden="true">{text}</div>;
+  const icon = <div className="tool-icon project-icon" style={style} aria-hidden="true">{text}</div>;
+  // A default clone name ends in " (N)"; show N as a tag on the icon.
+  const clone = session.name.match(/\s\((\d+)\)$/)?.[1];
+  if (!clone) return icon;
+  return <span className="project-icon-wrap">{icon}<span className="clone-tag" aria-hidden="true">{clone}</span></span>;
 }
 
 export function sessionColorStyle(color?: string): CSSProperties | undefined {
