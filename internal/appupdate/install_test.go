@@ -277,3 +277,26 @@ func TestDownloadRejectsMissingAssets(t *testing.T) {
 		t.Fatal("expected error for release without assets")
 	}
 }
+
+func TestBackupState(t *testing.T) {
+	dir := t.TempDir()
+	db := filepath.Join(dir, "state.db")
+	if _, err := BackupState(db, filepath.Join(dir, "backups"), "1.0.0"); err == nil {
+		t.Fatal("expected error when there is no database")
+	}
+	for suffix, content := range map[string]string{"": "db", "-wal": "wal"} {
+		if err := os.WriteFile(db+suffix, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	dest, err := BackupState(db, filepath.Join(dir, "backups"), "v1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Base(dest) != "state-1.0.0" || read(t, filepath.Join(dest, "state.db")) != "db" || read(t, filepath.Join(dest, "state.db-wal")) != "wal" {
+		t.Fatalf("unexpected backup at %s", dest)
+	}
+	if _, err := os.Stat(filepath.Join(dest, "state.db-shm")); err == nil {
+		t.Fatal("missing -shm must not be invented")
+	}
+}

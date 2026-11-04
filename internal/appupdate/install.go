@@ -378,3 +378,34 @@ func TakeResult(path string) (*Result, error) {
 	}
 	return &result, removeErr
 }
+
+// BackupState copies the state database (and its WAL files) into
+// backupRoot\state-<label>, replacing an earlier backup with the same label.
+func BackupState(dbPath, backupRoot, label string) (string, error) {
+	dest := filepath.Join(backupRoot, "state-"+safeName(label))
+	if err := os.RemoveAll(dest); err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(dest, 0o700); err != nil {
+		return "", err
+	}
+	copied := 0
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		source := dbPath + suffix
+		data, err := os.ReadFile(source)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return "", fmt.Errorf("back up %s: %w", filepath.Base(source), err)
+		}
+		if err := os.WriteFile(filepath.Join(dest, filepath.Base(source)), data, 0o600); err != nil {
+			return "", err
+		}
+		copied++
+	}
+	if copied == 0 {
+		return "", errors.New("no state database found to back up")
+	}
+	return dest, nil
+}

@@ -147,6 +147,13 @@ Home offers a newer GitHub release (pre-releases included) only after a click on
   process writes `~/.tau_shell/update-result.json` (versions, running session IDs)
   and starts the new exe; the new one reads and deletes it, restores those sessions
   that have a resume ID, and reports the rest.
+- Data safety: before swapping files, the state database (`state.db` plus WAL files) is
+  copied to `~/.tau_shell/backups/state-<old-version>`; if the backup fails, the update
+  stops. The database records a schema version (`PRAGMA user_version`,
+  `session.SchemaVersion`). A build refuses to open a database with a newer schema
+  and points at the backup folder, so a rollback cannot silently corrupt it. Bump
+  `SchemaVersion` for any change an older build cannot read. Builds before this guard
+  (1.0.1 and earlier) do not enforce it.
 - Not yet verified: the exe's embedded version is not compared with the tag.
 
 ## Tool update checks

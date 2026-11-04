@@ -74,7 +74,8 @@ page.
   an **Update and restart** button. Nothing is downloaded or installed without
   that click. TauShell checks the ZIP's SHA-256 against `SHA256SUMS.txt`, asks
   before stopping running sessions, restarts, and resumes them. The previous
-  version stays in `_rollback\` (Home: **Roll back**). If the folder is not
+  version stays in `_rollback\` (Home: **Roll back**). State is backed
+  up to `~/.tau_shell\backups` first. If the folder is not
   writable, update by hand from the Releases page.
 
 Full documentation: <https://github.com/ma99us/tau-shell>. License: MIT.

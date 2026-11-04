@@ -179,6 +179,10 @@ func (application *App) InstallAppUpdate() (err error) {
 	if err := appupdate.WriteResult(resultPath, appupdate.Result{From: version, To: strings.TrimPrefix(release.Tag, "v"), Sessions: running}); err != nil {
 		return err
 	}
+	if err := backupState(version); err != nil {
+		_ = os.Remove(resultPath)
+		return err
+	}
 	if err := appupdate.Apply(dir, unpacked, version); err != nil {
 		_ = os.Remove(resultPath)
 		return err
@@ -228,11 +232,29 @@ func (application *App) RollbackAppUpdate() (err error) {
 	if err := appupdate.WriteResult(resultPath, appupdate.Result{From: version, To: previous, Sessions: running}); err != nil {
 		return err
 	}
+	if err := backupState(version); err != nil {
+		_ = os.Remove(resultPath)
+		return err
+	}
 	if err := appupdate.Rollback(dir, version); err != nil {
 		_ = os.Remove(resultPath)
 		return err
 	}
 	return application.restartInto(dir, exe, resultPath)
+}
+
+// backupState keeps a copy of the state database before the app files change.
+func backupState(label string) error {
+	_, databasePath, err := appPaths()
+	if err != nil {
+		return err
+	}
+	dest, err := appupdate.BackupState(databasePath, filepath.Join(filepath.Dir(databasePath), "backups"), label)
+	if err != nil {
+		return fmt.Errorf("back up session state before the update: %w", err)
+	}
+	diagnostics.Info("session state backed up", "path", dest)
+	return nil
 }
 
 // restartInto starts the freshly installed executable and quits this process.

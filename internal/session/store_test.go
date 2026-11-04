@@ -557,3 +557,24 @@ func TestOpenStoreAddsLaunchTokenWithoutChangingLegacyDuplicates(t *testing.T) {
 		}
 	}
 }
+
+func TestOpenStoreRecordsAndEnforcesSchemaVersion(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.db")
+	store, err := OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var version int
+	if err := store.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != SchemaVersion {
+		t.Fatalf("user_version = %d err=%v", version, err)
+	}
+	if _, err := store.db.Exec("PRAGMA user_version = 99"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := OpenStore(path); !errors.Is(err, ErrNewerSchema) {
+		t.Fatalf("OpenStore on newer schema = %v, want ErrNewerSchema", err)
+	}
+}

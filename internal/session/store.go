@@ -38,6 +38,13 @@ type Store struct {
 	mu sync.Mutex
 }
 
+// SchemaVersion is stored in the database's user_version. Bump it whenever a
+// change would stop an older TauShell from reading the database correctly.
+const SchemaVersion = 1
+
+// ErrNewerSchema means the database was written by a newer TauShell.
+var ErrNewerSchema = errors.New("the session state database was written by a newer TauShell")
+
 var (
 	ErrHarnessSessionIDClaimed = errors.New("harness session ID is already recorded by another TauShell session")
 	ErrHarnessLaunchChanged    = errors.New("session launch changed before the harness session ID could be recorded")
@@ -53,6 +60,10 @@ func OpenStore(path string) (*Store, error) {
 		return nil, fmt.Errorf("open session state database: %w", err)
 	}
 	db.SetMaxOpenConns(1)
+	if err := checkSchemaVersion(db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	if _, err := db.Exec(`
 		PRAGMA journal_mode = WAL;
 		PRAGMA busy_timeout = 5000;
@@ -86,7 +97,24 @@ func OpenStore(path string) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("migrate session state database: %w", err)
 	}
+	if _, err := db.Exec(fmt.Sprintf("PRAGMA user_version = %d", SchemaVersion)); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("record session state schema version: %w", err)
+	}
 	return &Store{db: db}, nil
+}
+
+// checkSchemaVersion refuses a database written by a newer schema, before any
+// change is made to it. Version 0 is a new or pre-versioning database.
+func checkSchemaVersion(db *sql.DB) error {
+	var version int
+	if err := db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
+		return fmt.Errorf("read session state schema version: %w", err)
+	}
+	if version > SchemaVersion {
+		return fmt.Errorf("%w (schema %d, this build understands %d); update TauShell or restore a state backup from ~/.tau_shell/backups", ErrNewerSchema, version, SchemaVersion)
+	}
+	return nil
 }
 
 func ensureLaunchTokenColumn(db *sql.DB) error {
