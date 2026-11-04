@@ -4,6 +4,7 @@
 package projectfiles
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -37,11 +38,20 @@ type Listing struct {
 	Truncated bool    `json:"truncated"`
 }
 
-// File is the readable text of one file.
+// File is the readable text of one file, or a data URL when it is a supported image.
 type File struct {
 	Path      string `json:"path"`
 	Text      string `json:"text"`
+	ImageURL  string `json:"imageUrl,omitempty"`
 	Truncated bool   `json:"truncated"`
+}
+
+// MaxImageBytes bounds an image the viewer will load.
+const MaxImageBytes = 8 * 1024 * 1024
+
+var imageTypes = map[string]string{
+	".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif",
+	".webp": "image/webp", ".bmp": "image/bmp", ".ico": "image/x-icon", ".svg": "image/svg+xml",
 }
 
 var noise = map[string]bool{".git": true, "node_modules": true, ".vs": true, "__pycache__": true}
@@ -140,6 +150,20 @@ func Read(root, rel string) (File, error) {
 	if info.IsDir() {
 		return File{}, errors.New("that is a folder, not a file")
 	}
+	shown := strings.TrimPrefix(filepath.ToSlash(filepath.Clean(filepath.FromSlash(rel))), "./")
+	if mime, ok := imageTypes[strings.ToLower(filepath.Ext(path))]; ok {
+		if info.Size() > MaxImageBytes {
+			return File{}, fmt.Errorf("this image is larger than %d MB, so it is not shown", MaxImageBytes>>20)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return File{}, err
+		}
+		return File{Path: shown, ImageURL: "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data)}, nil
+	}
+	if err != nil {
+		return File{}, err
+	}
 	handle, err := os.Open(path)
 	if err != nil {
 		return File{}, err
@@ -160,5 +184,5 @@ func Read(root, rel string) (File, error) {
 	if strings.ContainsRune(string(data), 0) || !utf8.Valid(data) {
 		return File{}, errors.New("this file is not UTF-8 text, so it cannot be shown")
 	}
-	return File{Path: strings.TrimPrefix(filepath.ToSlash(filepath.Clean(filepath.FromSlash(rel))), "./"), Text: string(data), Truncated: truncated}, nil
+	return File{Path: shown, Text: string(data), Truncated: truncated}, nil
 }

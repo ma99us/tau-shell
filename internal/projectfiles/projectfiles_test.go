@@ -17,6 +17,25 @@ func write(t *testing.T, path, text string) {
 	}
 }
 
+func TestReadReturnsSupportedImagesAsDataURLs(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "pic.PNG"), "\x89PNG\r\n\x1a\n\x00")
+	file, err := Read(root, "pic.PNG")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(file.ImageURL, "data:image/png;base64,") || file.Text != "" {
+		t.Fatalf("image not returned as a data URL: %+v", file)
+	}
+	write(t, filepath.Join(root, "big.png"), strings.Repeat("x", MaxImageBytes+1))
+	if _, err := Read(root, "big.png"); err == nil {
+		t.Fatal("oversized images are refused")
+	}
+	if _, err := Read(root, "../pic.png"); err == nil {
+		t.Fatal("images outside the root are refused")
+	}
+}
+
 func TestListHidesNoiseSortsFoldersFirstAndStaysInside(t *testing.T) {
 	root := t.TempDir()
 	write(t, filepath.Join(root, "b.md"), "b")

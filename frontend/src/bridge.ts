@@ -81,7 +81,7 @@ export type HarnessWidgets = {
 export type GitStatus = { branch: string; dirty: boolean; ahead: number; behind: number };
 export type ProjectEntry = { name: string; path: string; dir: boolean; size: number };
 export type ProjectListing = { entries: ProjectEntry[]; truncated: boolean };
-export type ProjectFile = { path: string; text: string; truncated: boolean };
+export type ProjectFile = { path: string; text: string; imageUrl?: string; truncated: boolean };
 export type SecretInfo = { name: string; usedBy: string[]; missing: boolean };
 export type Conversation = { harnessSessionId: string; title: string; model: string; firstDay: string; lastDay: string; tokens: number; usd: number; unpriced: boolean; current: boolean; unavailable: string };
 

@@ -195,9 +195,12 @@ Read-only. `internal/projectfiles` resolves every requested path with
 `EvalSymlinks` and requires it to stay inside the session's working directory:
 `..`, absolute paths, volume names and links leaving the folder are refused.
 Listings are capped (2000 entries) and reads are bounded (512 KB, UTF-8 text
-only; binary files are refused). File contents are never logged. Markdown is
-parsed into plain UI nodes: no HTML is passed through, links are shown as text
-and never followed, and images are not loaded.
+only; other binary files are refused). Files with a png, jpg, gif, webp, bmp,
+ico or svg extension (up to 8 MB) are returned as a `data:` URL and shown in an
+`<img>`, never inlined, so SVG scripts do not run. File contents are never
+logged. Markdown is parsed into plain UI nodes: no HTML is passed through,
+links are shown as text and never followed, and images referenced from
+Markdown are not loaded.
 
 ## Phone server (experimental, off by default)
 

@@ -1840,6 +1840,20 @@ h3 {
   border-top: 1px solid var(--border-hover);
 }
 
+.file-image {
+  display: flex;
+  justify-content: center;
+  padding: 10px;
+}
+
+.file-image img {
+  max-width: 100%;
+  height: auto;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-hover);
+  image-rendering: auto;
+}
+
 .md {
   padding: 4px 10px 12px;
   color: var(--text-3);

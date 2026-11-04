@@ -112,7 +112,7 @@ export function FileDrawer({ session, onClose, onError, onInsert }: { session: S
         <button className="file-act" onClick={() => app().OpenProjectFile(session.id, file.path).catch(onError)} title="Open in the default application" aria-label="Open the file in its default application"><Icon name="external" size={14} /></button>
         <button className="file-act" onClick={() => setFile(null)} aria-label="Close the file">x</button></div>
       {file.truncated && <div className="toolbar-popover-note">Only the first part of this file is shown.</div>}
-      {isMarkdown(file.path) ? <div className="md">{parseMarkdown(file.text).map(renderBlock)}</div> : <CodeView language={languageFor(file.path)} text={file.text} />}
+      {file.imageUrl ? <div className="file-image"><img src={file.imageUrl} alt={file.path} /></div> : isMarkdown(file.path) ? <div className="md">{parseMarkdown(file.text).map(renderBlock)}</div> : <CodeView language={languageFor(file.path)} text={file.text} />}
     </div>}
   </aside>;
 }
