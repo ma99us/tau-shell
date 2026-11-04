@@ -84,7 +84,15 @@ taushell ctl read [--rows N] <session>          # visible terminal text; needs m
 - Sessions are shown in the same order on Home, in the sidebar and in the tabs.
   Home is the house icon. Session icons show the initials of the session name
   (new sessions are named after the project folder, so they match it until
-  renamed), tinted with the session color when one is set.
+  renamed), tinted with the session color when one is set. The session color
+  also tints the tab, sidebar row and top bar, with text chosen for contrast.
+- The sidebar lists sessions with an open tab; closing a running session's tab
+  asks first and interrupts it. Home lists every session and has a "Group by
+  workspace" switch (saved, off by default).
+- The top bar shows the git branch with a green `*` for uncommitted changes and
+  another for unpushed or missing commits, a **Sync changes** button (stage all,
+  commit, pull --rebase, push; it stops with a message on conflicts, a detached
+  HEAD or no upstream) and a button that opens the project folder in Explorer.
 - Right-click a session in the sidebar or its tab to rename or recolor it. New
   sessions are named after the project folder.
 - Running sessions have a toolbar: **Prompts** (presets from

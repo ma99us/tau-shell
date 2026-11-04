@@ -181,8 +181,8 @@ abstraction was added.
   mobile features, or a web dashboard. Local flash/toast alerts are in scope.
 - Preserve session-scoped environment handling and never log secrets,
   terminal contents, prompt text, or argument values. Do not rewrite provider
-  output. Keep background xterm instances alive and receiving output when a
-  live session's tab is closed to the background.
+  output. Keep xterm instances of running sessions alive and receiving output while
+  their tab is not selected.
 - Restore the PowerShell process and resume the harness conversation as
   separate outcomes. Do not report a conversation as restored merely because
   a process started. Do not delete the user's working directory or a

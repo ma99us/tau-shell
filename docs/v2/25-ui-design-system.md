@@ -20,9 +20,11 @@ Rules for changes:
 - Add a token before using a new color. Reuse the nearest existing one first.
 - Need a value in JavaScript? Add a token and read it through `theme.ts`.
 - Per-session colors are the one runtime theme input. A session tag sets
-  `--session-color` inline, and the CSS mixes it with `color-mix()` against
-  `--bg-panel`, `--white` and `--text-3`. Text on a tag color is chosen by
-  luminance in `readableTextColor`.
+  `--session-color` inline (`sessionColorStyle`), and the CSS mixes it with
+  `color-mix()` against `--bg-panel` using the shares published as
+  `--session-tint-*`. Text on a tinted surface is chosen per state by contrast
+  (`sessionColor.ts`, WCAG 4.5:1 with a pure black/white fallback); the project
+  icon text uses the same rule.
 - TauShell-owned UI text is ASCII (`~$`, `k`, `M`, `x`, `|`). Provider output
   in the terminal is never rewritten.
 - No `target=_blank`; links go through the host.
@@ -112,12 +114,21 @@ never for body text or inside buttons.
 - **Shell:** a sidebar (244px, collapsible to a 58px icon rail, remembered in
   `localStorage`) and a main area with a 42px tab strip over the content.
   Below 820px the sidebar narrows to 205px; below 620px chrome compacts.
-- **Sidebar:** brand row, a Home nav row, then session rows. Each session row
+- **Sidebar:** brand row, a Home nav row, then workspace groups of session rows
+  for sessions that have an open tab. Each session row
   has a state icon, the name and a small second line. Rows can be reordered by
-  drag; the blue drop line shows the target. Active rows use the green ramp.
+  drag; the blue drop line shows the target. Active rows use the green ramp
+  (a tagged session shows an outline in its readable text color instead).
 - **Tabs:** persistent session tabs next to a fixed Home tab; the strip
   scrolls with hidden scrollbars and arrow buttons. Active tab uses the green
-  ramp. A tagged session colors its tab and sidebar row.
+  ramp. A tagged session colors its tab, sidebar row, top bar (tint plus a 3px
+  bottom border) and the terminal's left edge so a prompt is not typed into the
+  wrong session; the active tab/row gets an outline and a bold label. A running
+  session's tab closes only after a confirmation that interrupts it.
+- **Top bar:** state dot and tool, the project path with an Open in File
+  Explorer button, the git branch with sync button, model and usage. A green
+  `*` after the branch means uncommitted changes; a green `*` after the `+N -M`
+  counts means unpushed or missing commits.
 - **Home:** hero (title, subtitle, actions), the sessions header with the
   month usage totals, a grid of session tiles
   (`repeat(auto-fill, minmax(min(100%, 300px), 330px))`, 13px gap), then the

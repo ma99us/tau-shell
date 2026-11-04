@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { contrast, inkOn, parseHex, sessionPalette } from "../src/sessionColor.ts";
+import { contrast, inkOn, parseHex, sessionPalette, tintShares } from "../src/sessionColor.ts";
 
 const panel = "#11141a", light = "#ffffff", dark = "#101318";
 
@@ -8,7 +8,7 @@ test("every swatch-like color gets readable ink on every tinted surface", () => 
   for (const color of ["#ff0000", "#ffff00", "#ffffff", "#000000", "#00ffff", "#7a3cff", "#ff9500", "#33cc66"]) {
     const palette = sessionPalette(color, panel, light, dark)!;
     const ground = parseHex(panel)!, base = parseHex(color)!;
-    for (const [share, ink] of [[0.3, palette.ink], [0.42, palette.inkHover], [0.52, palette.inkActive], [0.5, palette.barInk]] as const) {
+    for (const [share, ink] of [[tintShares.rest, palette.ink], [tintShares.hover, palette.inkHover], [tintShares.active, palette.inkActive], [tintShares.bar, palette.barInk]] as const) {
       const surface = base.map((v, i) => v * share + ground[i] * (1 - share)) as [number, number, number];
       assert.ok(contrast(surface, parseHex(ink)!) >= 4.5, `${color} at ${share}: ${ink}`);
     }

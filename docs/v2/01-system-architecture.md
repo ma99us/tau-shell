@@ -25,9 +25,8 @@ is mounted per open tab and receives ConPTY output as base64-encoded bytes;
 input (including binary terminal input) and measured resize are sent only to
 the session represented by that terminal. The app stores open tab IDs and
 selection in WebView local storage. The desktop opens Home by default; opt-in
-per-session/global settings can restore eligible sessions on startup. Choosing
-to keep a live session in the background retains its
-xterm instance in the current app process so it continues consuming output and
+per-session/global settings can restore eligible sessions on startup. Live sessions
+continue running when their tab is not selected. A running session always has a tab and cannot be closed without being stopped. The xterm instance stays mounted so it continues consuming output and
 can reopen the same screen. A browser-only mocked-bridge smoke exercised
 background output, split UTF-8/emoji, ANSI, alternate screen, terminal queries,
 mouse reporting, resize, and input. It does not verify those behaviors through

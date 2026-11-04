@@ -8,11 +8,11 @@ import { Activity, AttentionKind, answerPlan, attentionEdge, combineSignal, hasC
 import { moveId } from "./order";
 import { CommandPalette, PaletteItem } from "./harnessActions";
 import { GearIcon, HomeIcon } from "./harnessIcons";
-import { harnessName, setHarnesses } from "./harnesses";
+import { setHarnesses } from "./harnesses";
 import appIcon from "./assets/appicon.png";
 import { errorDetails, reportFrontendFailure, isStoppedSessionError } from "./errors";
 import { AppDialog, ShutdownPopup, RenameDialog } from "./dialogs";
-import { ProjectIcon, sessionColorStyle, SessionMenu, statusLabel, StateIcon } from "./sessionVisuals";
+import { sessionColorStyle, SessionMenu, statusLabel, StateIcon } from "./sessionVisuals";
 import { Home, SkillsActions, toolUsable, Setup } from "./home";
 import { terminalInstances, lastInputAt, terminalTitles, echoWindowMs, fitInstances, waitForTerminal, sendToSession, controlSend, interruptSession, queueHooks, TerminalPane } from "./terminalPane";
 import { queuedTotal, runQueues, subscribeQueues } from "./promptQueue";
@@ -20,7 +20,8 @@ import { CreateSession } from "./createSession";
 import { duplicateAndLaunch } from "./sessionActions";
 import { clearPollFailure, shouldReportPollFailure } from "./polling";
 import { Workspace, WorkspaceGroup, flattenWorkspaces, groupSessions, moveGroup, readCollapsed, summarize, writeCollapsed } from "./workspaces";
-import { GroupControls, GroupHeader } from "./workspaceView";
+import { GroupControls } from "./workspaceView";
+import { SessionTree } from "./sessionTree";
 import { readRecentFolders, readTabs, recentFoldersKey, savedTabsKey, Tab, writeStored } from "./storage";
 
 window.addEventListener("error", (event) => {
@@ -56,7 +57,6 @@ function App() {
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [tabs, setTabs] = useState<Tab[]>(() => readTabs(reportFrontendFailure));
   const [recentFolders, setRecentFolders] = useState<string[]>(() => readRecentFolders(reportFrontendFailure));
-  const [backgroundTerminalIds, setBackgroundTerminalIds] = useState<string[]>([]);
   const [selected, setSelected] = useState("");
   const [activity, setActivity] = useState<Record<string, Activity>>({});
   const activityRef = useRef<Record<string, Activity>>({});
@@ -185,8 +185,6 @@ function App() {
       ]);
       setSessions(nextSessions);
       setWorkspaceMap(nextGroups ?? {});
-      setBackgroundTerminalIds((current) => current.filter((id) =>
-        nextSessions.some((session) => session.id === id && session.runningHere)));
       setTabs((current) => {
         const kept = current
           .filter((tab) => nextSessions.some((session) => session.id === tab.id))
@@ -216,7 +214,6 @@ function App() {
           outputAt.current.delete(event.sessionId);
           terminalTitles.delete(event.sessionId);
           setActivity((current) => { const { [event.sessionId]: _removed, ...rest } = current; return rest; });
-          setBackgroundTerminalIds((current) => current.filter((id) => id !== event.sessionId));
         }
         terminalInstances.get(event.sessionId)?.writeln(`\r\n[session ${statusLabel(event.session.status)}${event.session.lastError ? `: ${event.session.lastError}` : ""}]\r\n`);
       } else if (event.kind === "output" && event.dataBase64) {
@@ -332,7 +329,6 @@ function App() {
 
   const openTab = (session: Session) => {
     setTabs((current) => current.some((tab) => tab.id === session.id) ? current : [...current, { id: session.id, name: session.name }]);
-    setBackgroundTerminalIds((current) => current.filter((id) => id !== session.id));
     setSelected(session.id);
   };
 
@@ -367,13 +363,9 @@ function App() {
     }
   };
 
-  const removeTab = (id: string, retainRunningTerminal = false) => {
+  const removeTab = (id: string) => {
     const remainingTabs = orderedTabs.filter((tab) => tab.id !== id);
     setTabs((current) => current.filter((tab) => tab.id !== id));
-    setBackgroundTerminalIds((current) => {
-      if (!retainRunningTerminal) return current.filter((terminalId) => terminalId !== id);
-      return current.includes(id) ? current : [...current, id];
-    });
     if (selected === id) {
       const nextSelected = remainingTabs[0]?.id ?? "";
       setSelected(nextSelected);
@@ -412,7 +404,7 @@ function App() {
       setBusy(false);
     }
   };
-  const terminalIds = Array.from(new Set([...tabs.map((tab) => tab.id), ...backgroundTerminalIds]));
+  const terminalIds = tabs.map((tab) => tab.id);
   const openMenu = (event: MouseEvent, session: Session) => {
     event.preventDefault();
     setMenu({ x: event.clientX, y: event.clientY, session });
@@ -706,22 +698,7 @@ function App() {
           <div className="sidebar-brand"><img className="brand-mark" src={appIcon} alt="" /><span className="brand-text"><strong>TauShell</strong><small>Your AI sessions</small></span></div>
           <div className="sidebar-heading"><span className="sidebar-title">SESSIONS</span> <button className="add-button" title="New session" onClick={() => setDialogOpen(true)}>+</button></div>
           <button className={`nav-row ${selected ? "" : "active"}`} title="Home" aria-label="Home" onClick={() => setSelected("")}><HomeIcon /></button>
-          {workspaces.map((workspace) => ({ ...workspace, sessions: workspace.sessions.filter((session) => tabs.some((tab) => tab.id === session.id)) })).filter((workspace) => workspace.sessions.length > 0).map((workspace) => {
-            const open = sidebarCollapsed || !collapsedGroups.has(workspace.group.key);
-            return <div className="workspace-group" key={workspace.group.key}>
-              {!sidebarCollapsed && <GroupHeader workspace={workspace} controls={groupControls} variant="tree" />}
-              {open && <div className={sidebarCollapsed ? "" : "group-children"}>{workspace.sessions.map((session) => (
-            <div className={`session-item ${selected === session.id ? "active" : ""} ${dragId === session.id ? "dragging" : ""} ${dropClass(session.id)}`} key={session.id} {...dragProps(session.id)} style={sessionColorStyle(session.color)} data-colored={session.color ? "" : undefined} onContextMenu={(event) => openMenu(event, session)}>
-              <button className={`session-row ${selected === session.id ? "active" : ""}`} title={session.name} onClick={() => openTab(session)}>
-                <StateIcon session={session} activity={activity[session.id]} />
-                <span className="collapsed-only"><ProjectIcon session={session} /></span>
-                <span className="session-row-text"><strong>{session.name}</strong><small>{harnessName(session.tool)}</small></span>
-              </button>
-              <button className="delete-button" aria-label={`Delete ${session.name}`} title="Delete session" onClick={() => setDeleteRequest(session)}>x</button>
-            </div>
-          ))}</div>}
-            </div>;
-          })}
+          <SessionTree workspaces={workspaces} openIds={new Set(tabs.map((tab) => tab.id))} selected={selected} collapsed={sidebarCollapsed} activity={activity} groupControls={groupControls} dragId={dragId} dragProps={dragProps} dropClass={dropClass} onOpen={openTab} onMenu={openMenu} onDelete={setDeleteRequest} />
           <div className="sidebar-foot"><button className="sidebar-toggle" aria-label="TauShell settings" title="TauShell settings (opens config.yaml)" onClick={() => void app().OpenSettingsFile().catch((err) => showError("ui.open-settings", err))}><GearIcon /></button><button className="sidebar-toggle" aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setSidebarCollapsed((value) => !value)}>{sidebarCollapsed ? ">>" : "<<"}</button></div>
         </aside>
         <main className="main">

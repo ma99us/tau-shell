@@ -126,9 +126,9 @@ regression-test plans, see the
   inventory, local tab-order/selection storage, xterm.js panes, and typed
   frontend bridge declarations. Start and restore now open and size the
   xterm.js pane before launching the harness so initial output has a mounted
-  terminal to receive it. Choosing to keep a live tab in the background keeps
-  its xterm pane mounted, so its buffer continues receiving output and the
-  screen is reused when the session is reopened. Built assets are embedded
+  terminal to receive it.   Closing a live tab now asks to interrupt the session, so a running session always
+  keeps its xterm pane mounted; the buffer continues receiving output and the
+  screen is reused when its tab is reselected. Built assets are embedded
   from `cmd/taushell/frontend/dist/`; build the frontend before Go compilation.
 - Optional Node.js/npm and Git for Windows appear as general Home tools and do
   not gate Home. Existing PATH installs are used until a TauShell-managed
@@ -216,7 +216,7 @@ only top-level `NavigationStarting` (no `NewWindowRequested` handler). The one
 that calls the metadata-restricted `OpenToolSetupPage` binding; a live frame
 injection test is still not automated.
 
-A browser-canvas interaction smoke with a mocked Wails bridge confirmed that
+A browser-canvas interaction smoke with a mocked Wails bridge confirmed (when closing a live tab to the background was still offered; that option has since been removed) that
 closing a live tab to the background retains the same xterm instance, buffers
 output received while hidden, restores that output when the session is opened
 again, and routes keyboard input to the reopened session. This tests frontend

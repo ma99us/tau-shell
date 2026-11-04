@@ -7,12 +7,12 @@ export const recentFoldersKey = "taushell.recent-folders.v1";
 export const maxRecentFolders = 5;
 export const groupedKey = "taushell.home-grouped.v1";
 
-// Home groups sessions by workspace unless the user switched that off.
+// Home lists sessions flat unless the user switched grouping on.
 export function readGrouped(storage: Pick<Storage, "getItem">): boolean {
   try {
-    return storage.getItem(groupedKey) !== "false";
+    return storage.getItem(groupedKey) === "true";
   } catch {
-    return true;
+    return false;
   }
 }
 

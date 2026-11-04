@@ -2492,7 +2492,7 @@ h3 {
 .session-item[data-colored] .session-row,
 .tab-item[data-colored] {
   border-color: color-mix(in srgb, var(--session-color) 55%, transparent);
-  background: color-mix(in srgb, var(--session-color) 30%, var(--bg-panel));
+  background: color-mix(in srgb, var(--session-color) var(--session-tint-rest), var(--bg-panel));
 }
 
 .session-item[data-colored] .session-row,
@@ -2503,7 +2503,7 @@ h3 {
 
 .session-item[data-colored] .session-row:hover,
 .tab-item[data-colored]:hover {
-  background: color-mix(in srgb, var(--session-color) 42%, var(--bg-panel));
+  background: color-mix(in srgb, var(--session-color) var(--session-tint-hover), var(--bg-panel));
 }
 
 .session-item[data-colored] .session-row:hover,
@@ -2515,7 +2515,7 @@ h3 {
 .session-item[data-colored] .session-row.active,
 .tab-item[data-colored].active {
   border-color: var(--session-ink-active, var(--white));
-  background: color-mix(in srgb, var(--session-color) 52%, var(--bg-panel));
+  background: color-mix(in srgb, var(--session-color) var(--session-tint-active), var(--bg-panel));
   box-shadow: inset 0 0 0 1px var(--session-ink-active, var(--white)), 0 0 0 1px var(--session-ink-active, var(--white));
   font-weight: 700;
 }

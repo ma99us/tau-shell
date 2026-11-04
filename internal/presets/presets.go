@@ -146,7 +146,7 @@ func Resolve(ctx context.Context, list []Preset, values Context) []Resolved {
 			return time.Now().Format("2006-01-02"), true
 		case "branch":
 			if branch == nil {
-				value := gitBranch(ctx, values.WorkingDir)
+				value := GitBranch(ctx, values.WorkingDir)
 				branch = &value
 			}
 			return *branch, true
@@ -182,10 +182,6 @@ func contains(list []string, value string) bool {
 		}
 	}
 	return false
-}
-
-func gitBranch(ctx context.Context, dir string) string {
-	return GitBranch(ctx, dir)
 }
 
 // GitBranch returns the current branch of the repository at dir, or "" when

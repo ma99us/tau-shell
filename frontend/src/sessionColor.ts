@@ -38,8 +38,15 @@ export function inkOn(background: Rgb, light: string, dark: string): string {
   return contrast(background, [255, 255, 255]) >= contrast(background, [0, 0, 0]) ? "#ffffff" : "#000000";
 }
 
-// Tab/row tint shares must match the .tab-item[data-colored] rules in style.css.
+// The tint shares are published to CSS as --session-tint-* so the tab/row
+// backgrounds and the contrast math above cannot disagree.
 export const tintShares = { rest: 0.3, hover: 0.42, active: 0.52, bar: 0.5 } as const;
+
+export const tintVars = {
+  "--session-tint-rest": `${tintShares.rest * 100}%`,
+  "--session-tint-hover": `${tintShares.hover * 100}%`,
+  "--session-tint-active": `${tintShares.active * 100}%`,
+} as const;
 
 export type SessionPalette = { color: string; ink: string; inkHover: string; inkActive: string; bar: string; barInk: string };
 

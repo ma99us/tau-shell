@@ -2,7 +2,7 @@ import { CSSProperties, useEffect, useRef } from "react";
 import { Session } from "./bridge";
 import { theme } from "./theme/theme";
 import { Activity } from "./attention";
-import { sessionPalette } from "./sessionColor";
+import { inkOn, parseHex, sessionPalette, tintVars } from "./sessionColor";
 
 const sessionColors = () => theme.sessionSwatches();
 
@@ -17,11 +17,9 @@ export function projectInitials(name: string, workingDir: string): string {
 }
 
 function readableTextColor(background: string): string {
-  const hex = background.replace("#", "");
-  if (!/^[0-9a-f]{6}$/i.test(hex))   return theme.fallbackSessionColor();
-  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((c) => c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
-  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  return theme.sessionTextOn(luminance > 0.3);
+  const rgb = parseHex(background);
+  if (!rgb) return theme.fallbackSessionColor();
+  return inkOn(rgb, theme.sessionTextOn(false), theme.sessionTextOn(true));
 }
 
 export function ProjectIcon({ session }: { session: Session }) {
@@ -41,8 +39,9 @@ export function ProjectIcon({ session }: { session: Session }) {
 export function sessionColorStyle(color?: string): CSSProperties | undefined {
   if (!color) return undefined;
   const palette = sessionPalette(color, theme.panelBackground(), theme.sessionTextOn(false), theme.sessionTextOn(true));
-  if (!palette) return { "--session-color": color } as CSSProperties;
+  if (!palette) return { "--session-color": color, ...tintVars } as CSSProperties;
   return {
+    ...tintVars,
     "--session-color": palette.color,
     "--session-ink": palette.ink,
     "--session-ink-hover": palette.inkHover,

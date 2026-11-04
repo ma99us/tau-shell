@@ -44,7 +44,8 @@ disabled skill names; JSON rather than `app_settings`), `sources/<owner>-<repo>/
 (downloaded snapshots), and `plugins/<harness>/<hash>/` (immutable plugin
 folders passed to `--plugin-dir`; old ones are garbage-collected).
 
-The UI persists open tab IDs/order/selection in WebView `localStorage`; live
+The UI persists open tab IDs/order/selection, collapsed workspace groups and the
+Home "Group by workspace" switch (`taushell.home-grouped.v1`) in WebView `localStorage`; live
 xterm buffers and terminal state are process-local and are not persisted across
 restarts. Presentation state does not start or restore a session by itself.
 The desktop frame defaults to a normal 1280x920 window. Its normal bounds and
