@@ -11,6 +11,8 @@ conversation.
 TauShell -> ConPTY -> PowerShell 7 -> AI harness
 ```
 
+![TauShell with several sessions, a session-colored tab and top bar, and the Files drawer](docs/screenshots/taushell-main.png)
+
 TauShell keeps ordinary PowerShell behavior, never rewrites harness output, and
 keeps core session management independent of any one AI provider.
 
@@ -147,7 +149,9 @@ snapshot works offline; Home checks GitHub on startup and daily and offers
 Enabled skills are loaded into new or resumed sessions with the harness's
 `--plugin-dir` option, so they stay out of your own skill folders; a skill you
 already have personally wins. Toggle skills on Home, or set `skills: false`
-in a session YAML. Settings: [schema](docs/v2/18-yaml-schema.md).
+in a session YAML. Settings: [schema](docs/v2/18-yaml-schema.md). To add skills
+or prompt templates, or to use TauShell in place of manual tool setup, see the
+[ai-cookbook TauShell guide](https://github.com/mgerdov-igt/ai-cookbook/blob/main/tools/tau-shell/SETUP.md).
 Verified live only with Copilot CLI 1.0.105; Claude Code 2.1.312's plugin
 manifest validates but a live skill listing was not verified.
 
