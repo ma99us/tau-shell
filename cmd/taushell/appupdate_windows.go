@@ -107,7 +107,34 @@ func (application *App) emitUpdateProgress(phase string, done, total int64) {
 	}
 }
 
-// GetUpdateResult returns the outcome of the previous update or rollback,\n// once, and removes leftover staging files.\nfunc (application *App) GetUpdateResult() *appupdate.Result {\n	if dir, _, err := installFolder(); err == nil {\n		_ = os.RemoveAll(filepath.Join(dir, appupdate.UpdateDir))\n	}\n	path, err := updateResultPath()\n	if err != nil {\n		return nil\n	}\n	result, err := appupdate.TakeResult(path)\n	if err != nil {\n		diagnostics.Warn("read update result failed", err)\n	}\n	return result\n}\n\n// GetRollbackVersion returns the version kept for rollback, or an empty string.\nfunc (application *App) GetRollbackVersion() string {\n	dir, _, err := installFolder()\n	if err != nil {\n		return ""\n	}\n	version, _ := appupdate.RollbackVersion(dir)\n	return version\n}\n\n// InstallAppUpdate downloads, verifies and installs the newest release, then
+// GetUpdateResult returns the outcome of the previous update or rollback,
+// once, and removes leftover staging files.
+func (application *App) GetUpdateResult() *appupdate.Result {
+	if dir, _, err := installFolder(); err == nil {
+		_ = os.RemoveAll(filepath.Join(dir, appupdate.UpdateDir))
+	}
+	path, err := updateResultPath()
+	if err != nil {
+		return nil
+	}
+	result, err := appupdate.TakeResult(path)
+	if err != nil {
+		diagnostics.Warn("read update result failed", err)
+	}
+	return result
+}
+
+// GetRollbackVersion returns the version kept for rollback, or an empty string.
+func (application *App) GetRollbackVersion() string {
+	dir, _, err := installFolder()
+	if err != nil {
+		return ""
+	}
+	kept, _ := appupdate.RollbackVersion(dir)
+	return kept
+}
+
+// InstallAppUpdate downloads, verifies and installs the newest release, then
 // restarts TauShell. It returns only when something went wrong; the old
 // version stays in place in that case.
 func (application *App) InstallAppUpdate() (err error) {
