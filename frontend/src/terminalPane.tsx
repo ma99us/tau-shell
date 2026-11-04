@@ -3,6 +3,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import { app, GitStatus, HarnessWidgets, Session } from "./bridge";
 import { gitParts, gitTooltip } from "./gitChip";
+import { parseOsc52 } from "./osc52";
 import { Icon } from "./icons";
 import { theme } from "./theme/theme";
 import { composeInjection, controlSendPlan, readDraft, readHarnessSignal } from "./attention";
@@ -261,6 +262,12 @@ export function TerminalPane({ session, peers, visible, busy, harness, onSend, o
       terminal.onData((data) => { lastInputAt.set(session.id, Date.now()); void app().WriteTerminal(session.id, data).catch((err) => onError(err)); });
       terminal.onBinary((data) => { void app().WriteTerminalBinary(session.id, btoa(data)).catch((err) => onError(err)); });
       terminal.attachCustomKeyEventHandler((event) => handleClipboardKey(event, terminal!, onError));
+      // Harnesses with their own mouse selection (Copilot CLI) copy through OSC 52.
+      terminal.parser.registerOscHandler(52, (payload) => {
+        const text = parseOsc52(payload);
+        if (text) void window.runtime.ClipboardSetText(text).catch((error) => onError(error));
+        return true;
+      });
     } else {
       terminal.loadAddon(fit);
       terminal.open(container.current);
