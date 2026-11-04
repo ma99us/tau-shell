@@ -91,6 +91,7 @@ func (application *App) windowPlacementPath() string {
 
 func (application *App) restoreWindowPlacement(ctx context.Context) {
 	runtime.WindowShow(ctx)
+	application.startSmokeTest(ctx)
 	placement, err := loadWindowPlacement(application.windowPlacementPath())
 	if errors.Is(err, os.ErrNotExist) {
 		return

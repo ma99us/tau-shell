@@ -125,6 +125,13 @@ jobs:
           if ($info.ProductVersion -ne $bare) { throw "ProductVersion '$($info.ProductVersion)' != '$bare'" }
           Get-AuthenticodeSignature $exe | Format-List Status, StatusMessage
 
+      - name: End-to-end smoke test of the packaged ZIP
+        shell: pwsh
+        run: |
+          $bare = $env:VERSION.TrimStart('v')
+          ./scripts/smoke-test.ps1 -Zip "dist/TauShell-$bare-windows-x64.zip" -Version $bare
+          if ($LASTEXITCODE -ne 0) { throw 'smoke test failed' }
+
       - name: Build the Android APK
         shell: pwsh
         working-directory: android

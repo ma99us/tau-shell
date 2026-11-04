@@ -45,6 +45,7 @@ TauShell is a local Windows desktop session manager: a Go host (`cmd/taushell`, 
 - Frontend: `npm ci && npm run build` in `frontend/` (set `$env:npm_config_allow_scripts=''` on `EALLOWSCRIPTS`). Type check: `npx tsc --noEmit`. Unit tests: `npm test`.
 - Go: `go test ./...`, then `go build -tags production -ldflags "-H=windowsgui" -o taushell.exe ./cmd/taushell`. Build the frontend first; the embedded `cmd/taushell/frontend/dist`, `taushell.exe`, ConPTY files and icon resources are gitignored.
 - Stop a running `taushell.exe` by PID before rebuilding.
+- End-to-end smoke test of a built app: `./scripts/smoke-test.ps1 -Exe .\taushell.exe` (or `-Zip`); run it before any release. CI and the release workflow run it automatically. See `docs/v2/17-contributor-guide.md`.
 - Opt-in live harness check: `TAUSHELL_LIVE=gsd|opencode|codex go test ./internal/sessionhost -run TestLiveHarness -v`. The `./internal/sessionhost` suite takes about 2 minutes.
 - Regenerate the harness golden fixture with `$env:UPDATE_GOLDEN=1; go test ./internal/harness/manifest`.
 - Real-harness probes use disposable directories and sessions, never print credentials, and clean up transcripts and temp files.

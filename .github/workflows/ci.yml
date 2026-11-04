@@ -59,6 +59,15 @@ jobs:
         shell: pwsh
         run: ./scripts/build-release.ps1 -Version 0.0.0-ci -SkipFrontend
 
+      - name: E2E script unit tests
+        run: node --test e2e/smoke.test.mjs
+
+      - name: End-to-end smoke test of the release ZIP
+        shell: pwsh
+        run: |
+          ./scripts/smoke-test.ps1 -Zip dist/TauShell-0.0.0-ci-windows-x64.zip -Version 0.0.0-ci
+          if ($LASTEXITCODE -ne 0) { throw 'smoke test failed' }
+
       - uses: actions/upload-artifact@v4
         with:
           name: TauShell-ci-windows-x64

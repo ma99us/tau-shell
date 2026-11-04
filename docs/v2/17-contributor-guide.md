@@ -52,9 +52,21 @@ Go extension (Delve) is required.
 ## CI and releases
 
 - `.github/workflows/ci.yml` runs on pushes to `main` and PRs: frontend build,
-  token check and unit tests (`npm test`), `gofmt -l`, `go vet`, `go test`, and a
-  release-build smoke test. `cmd/taushell/frontend/dist` is generated and
+  token check and unit tests (`npm test`), `gofmt -l`, `go vet`, `go test`, a
+  release-build smoke test, and an end-to-end smoke test of the built ZIP
+  (below). `cmd/taushell/frontend/dist` is generated and
   gitignored, so the frontend must be built before any Go build or test.
+- End-to-end smoke test: `./scripts/smoke-test.ps1 -Zip <zip> -Version <ver>`
+  (or `-Exe <taushell.exe>`). It starts the built app in an isolated profile
+  (`USERPROFILE`, `TEMP`, `APPDATA`) with `TAUSHELL_SMOKE_OUT` set; the app
+  then self-checks in its own WebView (`cmd/taushell/smoke_windows.go`) and
+  `e2e/smoke.mjs` verifies: Home renders without an error banner, every method
+  declared in `frontend/src/bridge.ts` is bound on the Go host, the log has no
+  frontend failure or panic, and the version matches. It would have caught the
+  release whose `GetRollbackVersion` bridge method was missing. WebView2 remote
+  debugging (CDP) was tried first but does not open a port under Wails. Releases
+  run the same test on the packaged ZIP before publishing. Unit tests for the
+  script: `node --test e2e/smoke.test.mjs`. Requires Node 22+.
 - Releases: push a SemVer tag (`git tag v1.0.0 && git push origin v1.0.0`).
   `.github/workflows/release.yml` tests, builds
   `TauShell-<version>-windows-x64.zip` with `scripts/build-release.ps1`, writes
