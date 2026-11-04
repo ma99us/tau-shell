@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { app, CopilotQuota, InstallResult, Session, SkillsView, SystemStatus, ToolStatus } from "./bridge";
+import { app, AppUpdate, CopilotQuota, InstallResult, Session, SkillsView, SystemStatus, ToolStatus } from "./bridge";
 import { UsageSummary, hasUsage, monthTooltip, usageText } from "./usage";
 import { GearIcon } from "./harnessIcons";
 import { getHarnesses, harnessIds, harnessShort, isHarness } from "./harnesses";
@@ -11,6 +11,7 @@ import { PhonePane } from "./phonePane";
 import { SecretsPane } from "./secretsPane";
 import { Workspace, ungrouped } from "./workspaces";
 import { groupedKey, readGrouped, writeStored } from "./storage";
+import { UpdateDialog } from "./updateDialog";
 import { GroupControls, GroupHeader } from "./workspaceView";
 
 export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAll, onAutoResumeAll, onAutoResume, status, busy, tools, skills, onNew, onRefresh, onHome, onLaunch, onDelete, onDuplicate, onError, dragProps, dropClass, dragId }: {
@@ -83,7 +84,10 @@ export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAl
   }, []);
   const [resumeProgress, setResumeProgress] = useState("");
   const [appVersion, setAppVersion] = useState("");
-  const [appUpdate, setAppUpdate] = useState<{ tag: string; url: string } | null>(null);
+  const [appUpdate, setAppUpdate] = useState<AppUpdate | null>(null);
+  const [updateOpen, setUpdateOpen] = useState(false);
+  const [rollbackVersion, setRollbackVersion] = useState("");
+  useEffect(() => { void app().GetRollbackVersion().then(setRollbackVersion).catch(() => setRollbackVersion("")); }, []);
   useEffect(() => {
     let cancelled = false;
     void app().GetAppVersion().then((value) => { if (!cancelled) { clearPollFailure(pollFailures.current, "app-version"); setAppVersion(value); } }).catch((error) => { if (!cancelled && shouldReportPollFailure(pollFailures.current, "app-version")) onError("ui.poll-app-version", error); });
@@ -144,10 +148,12 @@ export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAl
       <PhonePane onError={onError} />
       <SecretsPane onError={onError} />
       <div className="home-footer">
-        {appUpdate && <button className="link-button home-update" title="Open the TauShell releases page" onClick={() => void app().OpenReleasePage()}>{appUpdate.tag} available</button>}
+        {appUpdate && <button className="link-button home-update" title="View the release and update TauShell" onClick={() => setUpdateOpen(true)}>{appUpdate.tag} available</button>}
+        {rollbackVersion && <button className="link-button home-update" title="Restore the previous TauShell version and restart" onClick={() => void app().RollbackAppUpdate().catch((error) => onError("ui.rollback-update", error))}>Roll back to v{rollbackVersion}</button>}
         {appVersion && <span className="home-version" title="TauShell version">{appVersion === "dev" ? "dev build" : `v${appVersion.replace(/^v/, "")}`}</span>}
       </div>
     </div>
+    {updateOpen && appUpdate && <UpdateDialog update={appUpdate} onClose={() => setUpdateOpen(false)} onError={onError} />}
     {freshSession && <div className="modal-backdrop"><div className="modal confirm-modal">
       <div className="modal-heading"><div><p className="eyebrow">START FRESH</p><h2>Begin a new harness conversation?</h2></div></div>
       <p className="muted">This replaces the saved resume ID for <strong>{freshSession.name}</strong>. Its previous harness conversation will no longer be restored by TauShell.</p>

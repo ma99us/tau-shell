@@ -81,6 +81,9 @@ export type HarnessWidgets = {
 export type GitStatus = { branch: string; dirty: boolean; ahead: number; behind: number };
 export type ProjectEntry = { name: string; path: string; dir: boolean; size: number };
 export type ProjectListing = { entries: ProjectEntry[]; truncated: boolean };
+export type AppUpdate = { tag: string; url: string; notes: string; canInstall: boolean; reason: string };
+export type UpdateResult = { from: string; to: string; sessions: string[] | null };
+
 export type ProjectFile = { path: string; text: string; imageUrl?: string; truncated: boolean };
 export type SecretInfo = { name: string; usedBy: string[]; missing: boolean };
 export type Conversation = { harnessSessionId: string; title: string; model: string; firstDay: string; lastDay: string; tokens: number; usd: number; unpriced: boolean; current: boolean; unavailable: string };
@@ -259,7 +262,11 @@ type WailsApp = {
   GetUsageSummary(): Promise<UsageSummary>;
   GetCopilotQuota(refresh: boolean): Promise<CopilotQuota | null>;
   GetAppVersion(): Promise<string>;
-  CheckAppUpdate(): Promise<{ tag: string; url: string } | null>;
+  CheckAppUpdate(): Promise<AppUpdate | null>;
+  GetUpdateResult(): Promise<UpdateResult | null>;
+  GetRollbackVersion(): Promise<string>;
+  InstallAppUpdate(): Promise<void>;
+  RollbackAppUpdate(): Promise<void>;
   OpenReleasePage(): Promise<void>;
   DuplicateSession(id: string, tool: string, launchArgs: string[]): Promise<Session>;
   GetSessionLaunchArgs(id: string): Promise<string[]>;

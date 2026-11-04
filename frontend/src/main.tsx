@@ -1,7 +1,7 @@
 import { Component, DragEvent, ErrorInfo, KeyboardEvent, MouseEvent, ReactNode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "@xterm/xterm/css/xterm.css";
-import { app, DialogRequest, InstallResult, Session, SessionEvent, ShutdownProgress, SkillsView, SystemStatus, ToolStatus } from "./bridge";
+import { app, DialogRequest, InstallResult, Session, SessionEvent, ShutdownProgress, SkillsView, SystemStatus, ToolStatus, UpdateResult } from "./bridge";
 import "./theme/tokens.css";
 import "./style.css";
 import { Activity, AttentionKind, answerPlan, attentionEdge, combineSignal, hasCueSignal, logActivityTtlMs, nextActivity, readDraft, readHarnessSignal, readScreen, reportedState } from "./attention";
@@ -152,6 +152,7 @@ function App() {
   const [loaded, setLoaded] = useState(false);
   const [autoResumeAll, setAutoResumeAll] = useState(false);
   const autoResumeRan = useRef(false);
+  const [updateNote, setUpdateNote] = useState("");
   const showError = (source: string, failure: unknown) => {
     const message = reportFrontendFailure(source, failure);
     setError(message);
@@ -170,7 +171,18 @@ function App() {
       } catch (err) {
         showError("ui.auto-resume", err);
       }
-      const targets = sessions.filter((session) => (all || session.autoResume) && !session.runningHere && session.hasResumeId && !session.resumeNote);
+      let updated: UpdateResult | null = null;
+      try {
+        updated = await app().GetUpdateResult();
+      } catch (err) {
+        showError("ui.update-result", err);
+      }
+      const restore = new Set(updated?.sessions ?? []);
+      const targets = sessions.filter((session) => (all || session.autoResume || restore.has(session.id)) && !session.runningHere && session.hasResumeId && !session.resumeNote);
+      if (updated) {
+        const unresumed = (updated.sessions ?? []).length - targets.filter((session) => restore.has(session.id)).length;
+        setUpdateNote(`TauShell changed from ${updated.from} to ${updated.to}.${unresumed > 0 ? ` ${unresumed} session(s) could not be resumed automatically.` : ""}`);
+      }
       for (const session of targets) await launch(session, "restore");
       if (targets.length > 0) setSelected("");
     })();
@@ -737,6 +749,7 @@ function App() {
             </div>
             <button className="tab-scroll-button" aria-label="Scroll tabs right" disabled={!tabScroll.right} onClick={() => scrollTabs(1)}>&gt;</button>
           </div>
+          {updateNote && <div className="notice-banner" role="status">{updateNote}<button onClick={() => setUpdateNote("")}>Dismiss</button></div>}
           {error && <div className="error-banner">{error}<button onClick={() => setError("")}>Dismiss</button></div>}
           {notice && notice.sessionId === selected && <div className={notice.isError ? "error-banner" : "notice-banner"} role="status">{notice.message}<button onClick={() => setNotice(null)}>Dismiss</button></div>}
           <section className="main-content">

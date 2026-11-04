@@ -125,6 +125,30 @@ and opens the desktop. Windows Focus Assist or per-app settings can suppress
 toasts; TauShell does not claim a toast was seen. If toast setup fails it is
 logged and only the taskbar flash remains.
 
+## App updates
+
+Home offers a newer GitHub release (pre-releases included) only after a click on
+**Update and restart**; nothing is downloaded or installed silently.
+
+- Source: the project's GitHub API and asset URLs under
+  `https://github.com/ma99us/tau-shell/releases/download/`; anything else is refused.
+  Size caps: 150 MB ZIP, 64 KB checksum file.
+- Trust: the ZIP's SHA-256 must match the release's `SHA256SUMS.txt`. This proves
+  integrity of the download, not publisher identity (both files come from the same
+  release); signature verification is future hardening. Extraction refuses paths
+  outside the target and requires `taushell.exe`.
+- Swap: files are staged in `<install>\_update` (same volume). The old files are
+  renamed into `_rollback\<old-version>` (Windows allows renaming a running exe),
+  the new ones moved in, and any error undoes the move. One previous version is kept;
+  Home offers **Roll back**. The app never elevates: a read-only folder, a dev build
+  or another instance from the same folder disables the button and the Releases page
+  link remains.
+- Sessions: the normal close confirmation stops running sessions first. The old
+  process writes `~/.tau_shell/update-result.json` (versions, running session IDs)
+  and starts the new exe; the new one reads and deletes it, restores those sessions
+  that have a resume ID, and reports the rest.
+- Not yet verified: the exe's embedded version is not compared with the tag.
+
 ## Tool update checks
 
 At startup and then daily, TauShell runs `winget list --id <package> --exact

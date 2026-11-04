@@ -18,7 +18,7 @@ function renderInline(nodes: Inline[]): ReactNode {
   });
 }
 
-function renderBlock(block: Block, index: number): ReactNode {
+export function renderBlock(block: Block, index: number): ReactNode {
   switch (block.kind) {
     case "heading": return <div className={`md-heading md-h${Math.min(block.level, 3)}`} key={index}>{renderInline(block.inline)}</div>;
     case "code": return <CodeView key={index} language={block.lang ? languageForFence(block.lang) : null} text={block.text} />;

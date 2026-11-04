@@ -37,8 +37,9 @@ export function formatTokens(count: number): string {
 // A trailing "+" means some usage had no known price and is not in the amount.
 export function formatUSD(totals: UsageTotals): string {
   const suffix = totals.unpriced ? "+" : "";
-  if (totals.usd <= 0) return totals.unpriced ? "$?" : "~$0.00";
-  return `~$${totals.usd < 10 ? totals.usd.toFixed(2) : totals.usd.toFixed(totals.usd < 100 ? 1 : 0)}${suffix}`;
+  if (totals.usd <= 0) return totals.unpriced ? "$?" : "~$0";
+  const whole = Math.ceil(totals.usd);
+  return `~$${whole.toLocaleString("en-US")}${suffix}`;
 }
 
 export function hasUsage(totals?: UsageTotals | null): totals is UsageTotals {

@@ -16,8 +16,11 @@ var version = "dev"
 
 // AppUpdate describes a newer published TauShell release.
 type AppUpdate struct {
-	Tag string `json:"tag"`
-	URL string `json:"url"`
+	Tag        string `json:"tag"`
+	URL        string `json:"url"`
+	Notes      string `json:"notes"`
+	CanInstall bool   `json:"canInstall"`
+	Reason     string `json:"reason"`
 }
 
 // GetAppVersion returns the running TauShell version ("dev" for local builds).
@@ -39,7 +42,15 @@ func (application *App) CheckAppUpdate() *AppUpdate {
 	if !ok || !appupdate.Newer(version, release.Tag) {
 		return nil
 	}
-	return &AppUpdate{Tag: release.Tag, URL: release.URL}
+	update := &AppUpdate{Tag: release.Tag, URL: release.URL, Notes: release.Notes}
+	switch {
+	case release.ZipURL == "" || release.SumsURL == "":
+		update.Reason = "This release has no installable package."
+	default:
+		update.Reason = installBlocker()
+	}
+	update.CanInstall = update.Reason == ""
+	return update
 }
 
 // OpenReleasePage opens the project's release page in the default browser.

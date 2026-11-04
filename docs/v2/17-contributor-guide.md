@@ -73,6 +73,8 @@ Go extension (Delve) is required.
   unsigned and the README documents the SmartScreen steps.
 - The app version comes from `-X main.version`; local builds report `dev` and
   skip the update check.
+- In-app update contract: each release must keep the assets`TauShell-<version>-windows-x64.zip` (flat, `taushell.exe` at the root) and `SHA256SUMS.txt`.
+  Re-releasing the same tag is not offered as an update (strict version compare).
 
 ## Rules of thumb
 

@@ -2646,3 +2646,13 @@ h3 {
 .session-item.drop-after, .session-card.drop-after { box-shadow: 0 3px 0 0 var(--accent, var(--drop-indicator)); }
 .tab-item.drop-before { box-shadow: -3px 0 0 0 var(--accent, var(--drop-indicator)); }
 .tab-item.drop-after { box-shadow: 3px 0 0 0 var(--accent, var(--drop-indicator)); }
+
+.update-modal {
+  width: min(640px, 92vw);
+}
+
+.update-notes {
+  max-height: 40vh;
+  overflow: auto;
+  margin: 10px 0;
+}

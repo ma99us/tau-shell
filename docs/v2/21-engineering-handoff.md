@@ -174,8 +174,9 @@ regression-test plans, see the
 Releases are portable, unsigned-by-default ZIPs built by
 `scripts/build-release.ps1` (see the contributor guide). Not verified: signing
 (no certificate configured), behavior under Windows 11 Smart App Control, and
-the in-app update notice against a real published release (unit-tested
-against a fake API only). The first published release is cut manually by
+the in-app update click-through (the download, checksum, extract, swap and
+rollback steps were run against the published v1.0.1 release in a temp folder;
+the restart, session restore and UI dialog are unit/type-checked only). The first published release is cut manually by
 pushing a tag.
 
 ## Verified on the current Windows 10 development machine

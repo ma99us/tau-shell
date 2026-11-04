@@ -1,5 +1,6 @@
-// Package appupdate checks GitHub Releases for a newer TauShell build. It only
-// reports availability; it never downloads or installs anything.
+// Package appupdate checks GitHub Releases for a newer TauShell build and can
+// download, verify and install it (see install.go). Nothing runs without the
+// caller asking for it.
 package appupdate
 
 import (
@@ -19,6 +20,10 @@ const (
 	ReleasesAPI = "https://api.github.com/repos/ma99us/tau-shell/releases?per_page=20"
 	// ReleasesPrefix is the only URL prefix a reported release page may have.
 	ReleasesPrefix = "https://github.com/ma99us/tau-shell/releases"
+	// DownloadPrefix is the only URL prefix release assets may be fetched from.
+	DownloadPrefix = ReleasesPrefix + "/download/"
+	// SumsName is the release asset listing the SHA-256 of the ZIP.
+	SumsName = "SHA256SUMS.txt"
 
 	requestTimeout = 10 * time.Second
 	maxBody        = 1 << 20
@@ -26,14 +31,24 @@ const (
 
 // Release is the newest published release.
 type Release struct {
-	Tag string `json:"tag"`
-	URL string `json:"url"`
+	Tag     string `json:"tag"`
+	URL     string `json:"url"`
+	Notes   string `json:"notes"`
+	ZipURL  string `json:"-"`
+	SumsURL string `json:"-"`
+}
+
+type apiAsset struct {
+	Name string `json:"name"`
+	URL  string `json:"browser_download_url"`
 }
 
 type apiRelease struct {
-	Tag   string `json:"tag_name"`
-	URL   string `json:"html_url"`
-	Draft bool   `json:"draft"`
+	Tag    string     `json:"tag_name"`
+	URL    string     `json:"html_url"`
+	Body   string     `json:"body"`
+	Draft  bool       `json:"draft"`
+	Assets []apiAsset `json:"assets"`
 }
 
 var versionPattern = regexp.MustCompile(`^v?(\d+)\.(\d+)\.(\d+)`)
@@ -118,8 +133,26 @@ func Latest(ctx context.Context, client *http.Client, apiURL string) (release Re
 			continue
 		}
 		if !ok || greater(version, best) {
-			best, release, ok = version, Release{Tag: candidate.Tag, URL: candidate.URL}, true
+			best, release, ok = version, newRelease(candidate), true
 		}
 	}
 	return release, ok, nil
+}
+
+// newRelease keeps asset URLs only when they point at this repository's release downloads.
+func newRelease(candidate apiRelease) Release {
+	release := Release{Tag: candidate.Tag, URL: candidate.URL, Notes: candidate.Body}
+	zipName := fmt.Sprintf("TauShell-%s-windows-x64.zip", strings.TrimPrefix(candidate.Tag, "v"))
+	for _, asset := range candidate.Assets {
+		if !strings.HasPrefix(asset.URL, DownloadPrefix) {
+			continue
+		}
+		switch asset.Name {
+		case zipName:
+			release.ZipURL = asset.URL
+		case SumsName:
+			release.SumsURL = asset.URL
+		}
+	}
+	return release
 }

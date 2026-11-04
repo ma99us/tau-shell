@@ -70,7 +70,11 @@ page.
 - Command line: `taushell list`, `taushell start <id>`, `taushell restore <id>`.
 - Restoring a session brings back its PowerShell process; the AI conversation is
   resumed only when the tool supports it, and TauShell tells you when it cannot.
-- TauShell never downloads or installs updates by itself. Home shows a small link
-  when a newer release exists.
+- Updates: Home shows a link when a newer release exists. It opens the notes and
+  an **Update and restart** button. Nothing is downloaded or installed without
+  that click. TauShell checks the ZIP's SHA-256 against `SHA256SUMS.txt`, asks
+  before stopping running sessions, restarts, and resumes them. The previous
+  version stays in `_rollback\` (Home: **Roll back**). If the folder is not
+  writable, update by hand from the Releases page.
 
 Full documentation: <https://github.com/ma99us/tau-shell>. License: MIT.

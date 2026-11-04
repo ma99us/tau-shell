@@ -47,7 +47,8 @@ TauShell -> ConPTY -> PowerShell 7 -> AI harness
 Download `TauShell-<version>-windows-x64.zip` from the
 [Releases page](https://github.com/ma99us/tau-shell/releases), extract it
 anywhere and run `taushell.exe`. There is no installer and no admin rights are
-needed. Session data lives in `%USERPROFILE%\.tau_shell`.
+needed. Session data lives in `%USERPROFILE%\.tau_shell`. Later releases can be
+installed from Home (**Update and restart**, with rollback).
 
 Requires Windows 10 or later, the Microsoft Edge WebView2 Runtime and
 PowerShell 7; first run offers confirmed installs. Missing harnesses do not
