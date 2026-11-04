@@ -50,12 +50,14 @@ cues:
     source: last-rows
     rows: 2
     ignore_case: true
-    pattern: '^\S{0,2}\s*Working\b.*\besc\b'
+    # Observed in autopilot: "Autopilot · Allow All · ◎ Working · 286 B esc esc interrupt".
+    pattern: '\bWorking\b.*\besc\b'
   - state: idle
     source: last-rows
     rows: 2
     pattern: '\? help'
 model: copilot-events
+activity: copilot-events
 title: copilot-workspace
 usage:
   reader: copilot-events

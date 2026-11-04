@@ -39,6 +39,7 @@ ones; a new log format needs a Go change (see "Adding a reader").
 | `session.discovery` | `codex-rollout`, `opencode-db` |
 | `model` | `claude-jsonl`, `copilot-events`, `gsd-jsonl`, `codex-rollout`, `opencode-db` |
 | `title` | `claude-ai-title`, `copilot-workspace` |
+| `activity` | `copilot-events` (busy/idle from the harness's own log; preferred over screen cues) |
 | `usage.reader` | `claude-jsonl`, `copilot-events`, `gsd-jsonl`, `codex-rollout`, `opencode-db` |
 | `phone_answer` | `claude-permission`, `copilot-permission` |
 

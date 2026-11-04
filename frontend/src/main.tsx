@@ -4,7 +4,7 @@ import "@xterm/xterm/css/xterm.css";
 import { app, DialogRequest, InstallResult, Session, SessionEvent, ShutdownProgress, SkillsView, SystemStatus, ToolStatus } from "./bridge";
 import "./theme/tokens.css";
 import "./style.css";
-import { Activity, AttentionKind, answerPlan, attentionEdge, hasCueSignal, nextActivity, readDraft, readHarnessSignal, readScreen, reportedState } from "./attention";
+import { Activity, AttentionKind, answerPlan, attentionEdge, combineSignal, hasCueSignal, logActivityTtlMs, nextActivity, readDraft, readHarnessSignal, readScreen, reportedState } from "./attention";
 import { moveId } from "./order";
 import { CommandPalette, PaletteItem } from "./harnessActions";
 import { GearIcon, HomeIcon } from "./harnessIcons";
@@ -19,7 +19,7 @@ import { queuedTotal, runQueues, subscribeQueues } from "./promptQueue";
 import { CreateSession } from "./createSession";
 import { duplicateAndLaunch } from "./sessionActions";
 import { clearPollFailure, shouldReportPollFailure } from "./polling";
-import { Workspace, WorkspaceGroup, flattenWorkspaces, groupSessions, readCollapsed, summarize, writeCollapsed } from "./workspaces";
+import { Workspace, WorkspaceGroup, flattenWorkspaces, groupSessions, moveGroup, readCollapsed, summarize, writeCollapsed } from "./workspaces";
 import { GroupControls, GroupHeader } from "./workspaceView";
 import { readRecentFolders, readTabs, recentFoldersKey, savedTabsKey, Tab, writeStored } from "./storage";
 
@@ -65,6 +65,8 @@ function App() {
   const selectedRef = useRef("");
   selectedRef.current = selected;
   const outputAt = useRef(new Map<string, number>());
+  const logActivity = useRef(new Map<string, { state: string; at: number }>());
+  const logPolling = useRef(new Set<string>());
   const sessionsRef = useRef<Session[]>([]);
   sessionsRef.current = sessions;
   useEffect(() => {
@@ -80,7 +82,16 @@ function App() {
         if (!session.runningHere) return;
         const id = session.id;
         const at = outputAt.current.get(id);
-        const signal = readHarnessSignal(session.tool, terminalInstances.get(id), terminalTitles.get(id) ?? "");
+        const screenSignal = readHarnessSignal(session.tool, terminalInstances.get(id), terminalTitles.get(id) ?? "");
+        const log = logActivity.current.get(id);
+        const signal = combineSignal(screenSignal, log && now - log.at <= logActivityTtlMs ? log.state : undefined);
+        if (!logPolling.current.has(id) && now - (log?.at ?? 0) >= 1000) {
+          logPolling.current.add(id);
+          app().GetHarnessActivity(id)
+            .then((state) => logActivity.current.set(id, { state, at: Date.now() }))
+            .catch(() => logActivity.current.set(id, { state: "", at: Date.now() }))
+            .finally(() => logPolling.current.delete(id));
+        }
         if (signal === undefined && at === undefined) return;
         const old = previous[id] ?? { working: false, input: false, unseen: false };
         const { working, input, unseen } = nextActivity(old, signal, at, now, selectedRef.current === id && watching, hasCueSignal(session.tool));
@@ -176,9 +187,14 @@ function App() {
       setWorkspaceMap(nextGroups ?? {});
       setBackgroundTerminalIds((current) => current.filter((id) =>
         nextSessions.some((session) => session.id === id && session.runningHere)));
-      setTabs((current) => current
-        .filter((tab) => nextSessions.some((session) => session.id === tab.id))
-        .map((tab) => ({ ...tab, name: nextSessions.find((session) => session.id === tab.id)!.name })));
+      setTabs((current) => {
+        const kept = current
+          .filter((tab) => nextSessions.some((session) => session.id === tab.id))
+          .map((tab) => ({ ...tab, name: nextSessions.find((session) => session.id === tab.id)!.name }));
+        // A running session always has a tab; it can only leave by being stopped.
+        const missing = nextSessions.filter((session) => session.runningHere && !kept.some((tab) => tab.id === session.id));
+        return missing.length ? [...kept, ...missing.map((session) => ({ id: session.id, name: session.name }))] : kept;
+      });
       setSelected((current) => nextSessions.some((session) => session.id === current) ? current : "");
       setStatus(nextStatus);
       setError("");
@@ -364,7 +380,6 @@ function App() {
       requestAnimationFrame(() => document.getElementById(nextSelected ? `tab-${nextSelected}` : "tab-home")?.focus());
     }
   };
-  const keepTerminalInBackground = (id: string) => removeTab(id, true);
   const closeTab = (id: string) => {
     const session = sessions.find((current) => current.id === id);
     if (session?.runningHere) setCloseRequest(session);
@@ -448,7 +463,7 @@ function App() {
     draggable: true,
     onDragStart: (event: DragEvent<HTMLElement>) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", id); setDragId(id); },
     onDragOver: (event: DragEvent<HTMLElement>) => {
-      if (!dragId || dragId === id || !sameGroup(dragId, id)) return;
+      if (!dragId || dragId === id) return;
       event.preventDefault();
       const rect = event.currentTarget.getBoundingClientRect();
       const after = horizontal ? event.clientX > rect.left + rect.width / 2 : event.clientY > rect.top + rect.height / 2;
@@ -459,9 +474,13 @@ function App() {
       const mark = dropMark;
       setDragId("");
       setDropMark(null);
-      if (!dragId || !mark || mark.id !== id || !sameGroup(dragId, id)) return;
-      const ordered = moveId(sessions.map((session) => session.id), dragId, id, mark.after);
-      if (ordered.join() === sessions.map((session) => session.id).join()) return;
+      if (!dragId || !mark || mark.id !== id) return;
+      const currentIds = sessions.map((session) => session.id);
+      // Inside a workspace the session moves; onto another workspace's session the whole group moves.
+      const ordered = sameGroup(dragId, id)
+        ? moveId(currentIds, dragId, id, mark.after)
+        : moveGroup(workspaces, dragId, id, mark.after);
+      if (ordered.join() === currentIds.join()) return;
       const previous = sessions;
       setSessions(ordered.map((sessionId) => previous.find((session) => session.id === sessionId)!));
       app().SetSessionOrder(ordered).catch((err) => { setSessions(previous); showError("ui.reorder-sessions", err); });
@@ -687,7 +706,7 @@ function App() {
           <div className="sidebar-brand"><img className="brand-mark" src={appIcon} alt="" /><span className="brand-text"><strong>TauShell</strong><small>Your AI sessions</small></span></div>
           <div className="sidebar-heading"><span className="sidebar-title">SESSIONS</span> <button className="add-button" title="New session" onClick={() => setDialogOpen(true)}>+</button></div>
           <button className={`nav-row ${selected ? "" : "active"}`} title="Home" aria-label="Home" onClick={() => setSelected("")}><HomeIcon /></button>
-          {workspaces.map((workspace) => {
+          {workspaces.map((workspace) => ({ ...workspace, sessions: workspace.sessions.filter((session) => tabs.some((tab) => tab.id === session.id)) })).filter((workspace) => workspace.sessions.length > 0).map((workspace) => {
             const open = sidebarCollapsed || !collapsedGroups.has(workspace.group.key);
             return <div className="workspace-group" key={workspace.group.key}>
               {!sidebarCollapsed && <GroupHeader workspace={workspace} controls={groupControls} variant="tree" />}
@@ -804,11 +823,10 @@ function App() {
       </div></div>}
       {closeRequest && <div className="modal-backdrop"><div className="modal confirm-modal">
         <div className="modal-heading"><div><p className="eyebrow">CLOSE SESSION TAB</p><h2>{closeRequest.name} is running</h2></div></div>
-        <p className="muted">Stop its PowerShell and harness process, or keep it running in the background?</p>
+        <p className="muted">Closing this tab will interrupt the session and stop its PowerShell and harness process. Continue?</p>
         <div className="modal-actions">
           <button className="secondary-button" onClick={() => setCloseRequest(null)}>Cancel</button>
-          <button className="secondary-button" onClick={() => { keepTerminalInBackground(closeRequest.id); setCloseRequest(null); }}>Keep running</button>
-          <button className="primary-button" disabled={busy} onClick={() => void stopAndCloseTab(closeRequest)}>{busy ? "Stopping..." : "Stop and close"}</button>
+          <button className="primary-button" disabled={busy} onClick={() => void stopAndCloseTab(closeRequest)}>{busy ? "Stopping..." : "Interrupt and close"}</button>
         </div>
       </div></div>}
       {dialogs[0] && <AppDialog request={dialogs[0]} onAnswer={(choice) => answerDialog(dialogs[0], choice)} />}

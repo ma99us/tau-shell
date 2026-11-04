@@ -9,7 +9,8 @@ import { clearPollFailure, shouldReportPollFailure } from "./polling";
 import { ControlAudit } from "./controlAudit";
 import { PhonePane } from "./phonePane";
 import { SecretsPane } from "./secretsPane";
-import { Workspace } from "./workspaces";
+import { Workspace, ungrouped } from "./workspaces";
+import { groupedKey, readGrouped, writeStored } from "./storage";
 import { GroupControls, GroupHeader } from "./workspaceView";
 
 export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAll, onAutoResumeAll, onAutoResume, status, busy, tools, skills, onNew, onRefresh, onHome, onLaunch, onDelete, onDuplicate, onError, dragProps, dropClass, dragId }: {
@@ -36,6 +37,11 @@ export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAl
   onDelete: (session: Session) => void;
 }) {
   const [freshSession, setFreshSession] = useState<Session | null>(null);
+  const [grouped, setGrouped] = useState(() => readGrouped(localStorage));
+  const changeGrouped = (value: boolean) => {
+    setGrouped(value);
+    writeStored(groupedKey, value, onError);
+  };
   const [summary, setSummary] = useState<UsageSummary | null>(null);
   const pollFailures = useRef(new Set<string>());
   useEffect(() => {
@@ -105,13 +111,13 @@ export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAl
           <button className="primary-button"           onClick={onNew}>New session</button>
         </div>
       </div>
-      <div className="section-title"><div><h2>Your sessions</h2></div>{!loaded && <span className="spinner" role="status" aria-label="Loading sessions" />}</div>
+      <div className="section-title"><div><h2>Your sessions</h2></div>{!loaded && <span className="spinner" role="status" aria-label="Loading sessions" />}<label className="check-option" title="Group sessions by workspace, or list them all in one row of cards"><input type="checkbox" role="switch" checked={grouped} onChange={(event) => changeGrouped(event.target.checked)} />Group by workspace</label></div>
       {quota && !quota.unlimited && <p className={`home-usage home-quota${quota.canProject && quota.projected > quota.entitlement ? " warn" : ""}`} title={`Copilot plan: ${quota.plan}. Read through your GitHub CLI sign-in. ${quota.daysLeft} days left in the cycle.`}>Copilot: <b className="kv">{Math.round(quota.used)} / {Math.round(quota.entitlement)} credits ({Math.round(quota.percentUsed)}%)</b>, resets {quota.resetDate}{quota.canProject ? <>, on pace for <b className="kv">~{Math.round(quota.projected)}</b></> : ""}</p>}
       {summary && hasUsage(summary.month) && <p className="home-usage" title={monthTooltip(summary)}>This month: <b className="kv">{usageText(summary.month)}</b>{harnessIds().map((tool) => hasUsage(summary.monthByTool?.[tool]) ? <span key={tool}> | {harnessShort(tool)} <b className="kv">{usageText(summary.monthByTool![tool])}</b></span> : null)}</p>}
       {sessions.length === 0 ? (!loaded ? <div className="loading-card" role="status"><span className="spinner" aria-hidden="true" /><span className="muted">Loading sessions...</span></div> : <div className="empty-card"><div className="empty-icon">+</div><h3>No sessions yet</h3><p>Create a session to connect a project folder to an AI harness such as Claude Code or GitHub Copilot CLI.</p>      <button className="primary-button" onClick={onNew}>New session</button></div>) :
-        <>{workspaces.map((workspace) => <div className="home-group" key={workspace.group.key}>
-        <GroupHeader workspace={workspace} controls={groupControls} variant="home" />
-        {!groupControls.collapsed.has(workspace.group.key) && <div className="session-grid">{workspace.sessions.map((session) => <article className={`session-card ${dragId === session.id ? "dragging" : ""} ${dropClass(session.id)}`} key={session.id} {...dragProps(session.id)}>
+        <>{(grouped ? workspaces : [{ group: ungrouped, sessions }]).map((workspace) => <div className="home-group" key={workspace.group.key}>
+        {grouped && <GroupHeader workspace={workspace} controls={groupControls} variant="home" />}
+        {(!grouped || !groupControls.collapsed.has(workspace.group.key)) && <div className="session-grid">{workspace.sessions.map((session) => <article className={`session-card ${dragId === session.id ? "dragging" : ""} ${dropClass(session.id)}`} key={session.id} {...dragProps(session.id)}>
           <div className="card-top"><ProjectIcon session={session} /><span className={`state-pill ${session.runningHere ? "running" : ""} ${!session.runningHere && session.status === "failed" ? "status-warn-text" : ""}`}>{session.runningHere ? "Running" : statusLabel(session.status)}</span><button className="delete-button" aria-label={`Delete ${session.name}`} title="Delete session" onClick={() => onDelete(session)}>x</button></div>
           <div className="card-title"><h3>{session.name}</h3>{hasUsage(summary?.sessions?.[session.id]) && <span className="card-usage" title="Estimate from harness logs; never reset">{usageText(summary!.sessions![session.id])}</span>}</div><p className="path">{session.workingDir}</p><p className="session-meta">{session.tool}</p>
           {session.lastError && <p className="card-error">{session.lastError}</p>}

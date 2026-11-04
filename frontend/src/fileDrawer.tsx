@@ -1,4 +1,4 @@
-import { Fragment, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { highlightCode, languageFor, languageForFence } from "./highlight";
 import { app, ProjectEntry, ProjectFile, Session } from "./bridge";
 import { Block, Inline, parseMarkdown } from "./markdown";
@@ -45,6 +45,7 @@ export function FileDrawer({ session, onClose, onError, onInsert }: { session: S
   const [open, setOpen] = useState<string[]>([]);
   const [file, setFile] = useState<ProjectFile | null>(null);
   const [note, setNote] = useState("");
+  const treeRef = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; entry: ProjectEntry } | null>(null);
   useEffect(() => {
     if (!menu) return;
@@ -55,6 +56,13 @@ export function FileDrawer({ session, onClose, onError, onInsert }: { session: S
     window.addEventListener("keydown", onKey);
     return () => { window.removeEventListener("pointerdown", close); window.removeEventListener("blur", close); window.removeEventListener("keydown", onKey); };
   }, [menu]);
+  const selectedPath = file?.path;
+  // The file view opens over the bottom of the drawer and shrinks the tree; keep the selected row visible.
+  useEffect(() => {
+    if (!selectedPath) return;
+    const frame = requestAnimationFrame(() => treeRef.current?.querySelector(".file-row.selected")?.scrollIntoView({ block: "nearest" }));
+    return () => cancelAnimationFrame(frame);
+  }, [selectedPath]);
   const load = useCallback((dir: string) => {
     app().ListProjectDir(session.id, dir, true)
       .then((listing) => setTree((current) => ({ ...current, [dir]: listing.entries ?? [] })))
@@ -73,7 +81,7 @@ export function FileDrawer({ session, onClose, onError, onInsert }: { session: S
     const expanded = open.includes(entry.path);
     const kind = fileIconFor(entry.name);
     return <Fragment key={entry.path}>
-      <div className="file-row" style={{ paddingLeft: 8 + depth * 14 }}
+      <div className={`file-row ${!entry.dir && file?.path === entry.path ? "selected" : ""}`} style={{ paddingLeft: 8 + depth * 14 }}
         onContextMenu={(event) => { event.preventDefault(); setMenu({ x: Math.min(event.clientX, window.innerWidth - 210), y: Math.min(event.clientY, window.innerHeight - 120), entry }); }}>
         <button className="file-name" title={`${entry.path} (right-click for more)`} onClick={() => entry.dir ? toggle(entry) : void view(entry)}>
           <span className="file-ico" style={{ color: entry.dir ? "#d6a85c" : kind.color }}><Icon name={entry.dir ? (expanded ? "folderOpen" : "folder") : kind.icon} size={15} /></span><span className="file-label">{entry.name}</span>
@@ -87,7 +95,7 @@ export function FileDrawer({ session, onClose, onError, onInsert }: { session: S
       <strong>Files</strong>
       <button className="file-act" onClick={onClose} aria-label="Close the file drawer">x</button>
     </div>
-    <div className="file-tree">{tree[""] ? (tree[""].length ? rows("", 0) : <div className="toolbar-popover-note">Empty folder.</div>) : <div className="toolbar-popover-note">Loading...</div>}</div>
+    <div className="file-tree" ref={treeRef}>{tree[""] ? (tree[""].length ? rows("", 0) : <div className="toolbar-popover-note">Empty folder.</div>) : <div className="toolbar-popover-note">Loading...</div>}</div>
     {note && <div className="toolbar-popover-note">{note}</div>}
     {menu && <div className="file-menu" role="menu" style={{ left: menu.x, top: menu.y }} onPointerDown={(event) => event.stopPropagation()}>
       <button role="menuitem" onClick={() => { onInsert(menu.entry.path); setMenu(null); }}><Icon name="commands" size={14} />Insert path in prompt</button>

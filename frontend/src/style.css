@@ -195,6 +195,7 @@ textarea:focus-visible,
   border-color: var(--accent-border-1);
   background: var(--accent-bg-2);
   color: var(--accent-text-1);
+  box-shadow: inset 0 0 0 1px var(--accent-border-1);
 }
 
 .session-row-text {
@@ -1243,6 +1244,17 @@ h3 {
   color: var(--status-warn);
 }
 
+.toolbar-path-group {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+}
+
+.toolbar-path-group .toolbar-path {
+  flex: 0 1 auto;
+}
+
 .toolbar-path {
   overflow: hidden;
   min-width: 0;
@@ -1256,6 +1268,16 @@ h3 {
 .toolbar-model {
   flex: 0 0 auto;
   white-space: nowrap;
+}
+
+.git-flag {
+  color: var(--accent);
+  font-weight: 800;
+}
+
+.path-reveal {
+  flex: 0 0 auto;
+  margin-left: 4px;
 }
 
 .toolbar-model {
@@ -1416,6 +1438,13 @@ h3 {
   align-items: center;
   justify-content: center;
   padding: 0 7px;
+}
+
+.git-sync-button {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  flex: 0 0 auto;
 }
 
 .icon-button[aria-pressed="true"] {
@@ -1675,6 +1704,10 @@ h3 {
   min-height: 80px;
   flex: 1;
   overflow: auto;
+}
+
+.file-row.selected {
+  background: var(--bg-control-hover);
 }
 
 .file-row {
@@ -2462,21 +2495,78 @@ h3 {
   background: color-mix(in srgb, var(--session-color) 30%, var(--bg-panel));
 }
 
+.session-item[data-colored] .session-row,
+.tab-item[data-colored] .tab,
+.tab-item[data-colored] .tab-close {
+  color: var(--session-ink, var(--text-2));
+}
+
 .session-item[data-colored] .session-row:hover,
 .tab-item[data-colored]:hover {
   background: color-mix(in srgb, var(--session-color) 42%, var(--bg-panel));
 }
 
+.session-item[data-colored] .session-row:hover,
+.tab-item[data-colored]:hover .tab,
+.tab-item[data-colored]:hover .tab-close {
+  color: var(--session-ink-hover, var(--text-2));
+}
+
 .session-item[data-colored] .session-row.active,
 .tab-item[data-colored].active {
-  border-color: color-mix(in srgb, var(--session-color) 30%, var(--white));
+  border-color: var(--session-ink-active, var(--white));
   background: color-mix(in srgb, var(--session-color) 52%, var(--bg-panel));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--session-color) 30%, var(--white));
-  color: var(--white);
+  box-shadow: inset 0 0 0 1px var(--session-ink-active, var(--white)), 0 0 0 1px var(--session-ink-active, var(--white));
+  font-weight: 700;
+}
+
+.tab-item[data-colored].active .tab {
+  font-weight: 700;
+}
+
+.tab-item[data-colored].active {
+  border-bottom: 0;
+  box-shadow: inset 0 0 0 1px var(--session-ink-active, var(--white)), inset 0 -3px 0 var(--session-ink-active, var(--white));
+}
+
+.session-item[data-colored] .session-row.active,
+.tab-item[data-colored].active .tab,
+.tab-item[data-colored].active .tab-close {
+  color: var(--session-ink-active, var(--white));
 }
 
 .session-item[data-colored] .session-row-text small {
-  color: color-mix(in srgb, var(--session-color) 25%, var(--text-3));
+  color: inherit;
+  opacity: 0.8;
+}
+
+/* The top bar and a left edge carry the session color so a prompt is never typed into the wrong session. */
+.terminal-view[data-colored] .terminal-toolbar {
+  border-bottom: 3px solid var(--session-color);
+  background: var(--session-bar, var(--bg-panel));
+  color: var(--session-bar-ink, var(--text-6));
+}
+
+.terminal-view[data-colored] .terminal-toolbar .toolbar-model,
+.terminal-view[data-colored] .terminal-toolbar .toolbar-sep,
+.terminal-view[data-colored] .terminal-toolbar .terminal-status {
+  color: inherit;
+}
+
+.terminal-view[data-colored] .terminal-toolbar .toolbar-sep {
+  opacity: 0.5;
+}
+
+.terminal-view[data-colored] .terminal-toolbar .text-button {
+  color: inherit;
+}
+
+.terminal-view[data-colored] .terminal-body {
+  box-shadow: inset 3px 0 0 var(--session-color);
+}
+
+.terminal-view[data-colored] .side-rail {
+  border-left-color: var(--session-color);
 }
 
 .context-menu {

@@ -10,9 +10,15 @@ Harness-specific parsing is in `frontend/src/attention.ts`.
   title glyph indicates idle, and the trust-folder confirmation footer
   indicates input. The title glyphs and footer were observed on Claude Code
   2.1.311.
-- **GitHub Copilot CLI:** the working status row and idle help footer indicate
-  activity; the selection footer indicates a prompt that needs user input.
-  These cues were observed on Copilot CLI 1.0.103.
+- **GitHub Copilot CLI:** busy/idle come from the harness's own session log
+  (`activity: copilot-events`, `internal/harness/activity.go`): a user message,
+  turn start or tool call means working; a turn end with nothing following for
+  2 s means idle. This does not depend on the footer wording, which changes
+  between modes (for example autopilot's `Autopilot · Allow All · Working ·
+  286 B esc esc interrupt`). The screen cues remain the fallback, and the
+  selection footer still indicates a prompt that needs user input (the log does
+  not record it). Cues were observed on Copilot CLI 1.0.103 and autopilot on
+  1.0.105. `combineSignal` merges the two.
 - **Other tools or missing cues:** recent terminal output is used as a fallback.
   Output within 400 ms after a keystroke is treated as echo; output within the
   last 2.5 seconds indicates working. Without a harness cue, silence is not

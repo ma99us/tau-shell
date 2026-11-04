@@ -232,6 +232,20 @@ func (manager *Manager) HarnessModel(ctx context.Context, id string) (string, er
 	return harness.CurrentModel(config.Tool, runtime.HarnessSessionID), nil
 }
 
+// HarnessActivity reports "working" or "idle" from the harness's own log, or
+// "" when the harness offers no such signal for the session.
+func (manager *Manager) HarnessActivity(ctx context.Context, id string) (string, error) {
+	config, err := session.FindConfig(manager.configDirectory, id)
+	if err != nil {
+		return "", err
+	}
+	runtime, err := manager.store.Runtime(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	return harness.CurrentActivity(config.Tool, runtime.HarnessSessionID, time.Now()), nil
+}
+
 func (manager *Manager) List(ctx context.Context) ([]Snapshot, error) {
 	configs, err := session.ListConfigs(manager.configDirectory)
 	if err != nil {

@@ -225,6 +225,79 @@ func GitStatus(ctx context.Context, dir string) (status RepoStatus, ok bool) {
 	return ParseGitStatus(string(output)), true
 }
 
+// GitSync makes the repository clean and shared: it stages every change that
+// .gitignore does not exclude, commits it, rebases onto the upstream and
+// pushes. It never prompts for credentials. A failed rebase is aborted so the
+// repository is left as it was after the commit; the failing git command's
+// output is returned as the error.
+func GitSync(ctx context.Context, dir string) error {
+	status, ok := GitStatus(ctx, dir)
+	if !ok {
+		return errors.New("not a git repository")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	run := func(args ...string) (string, error) {
+		command := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
+		command.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+		hideWindow(command)
+		output, err := command.CombinedOutput()
+		message := strings.TrimSpace(string(output))
+		if err != nil {
+			if message == "" {
+				message = err.Error()
+			}
+			return message, fmt.Errorf("git %s failed: %s", args[0], message)
+		}
+		return message, nil
+	}
+	if status.Branch == "(detached)" {
+		return errors.New("HEAD is detached; check out a branch before syncing")
+	}
+	for _, name := range []string{"rebase-merge", "rebase-apply", "MERGE_HEAD", "CHERRY_PICK_HEAD"} {
+		path, err := run("rev-parse", "--git-path", name)
+		if err != nil {
+			continue
+		}
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(dir, path)
+		}
+		if _, err := os.Stat(path); err == nil {
+			return fmt.Errorf("a %s is in progress; finish or abort it before syncing", name)
+		}
+	}
+	if conflicts, _ := run("diff", "--name-only", "--diff-filter=U"); conflicts != "" {
+		return fmt.Errorf("unresolved merge conflicts must be fixed first:\n%s", conflicts)
+	}
+	if status.Dirty {
+		if _, err := run("add", "--all"); err != nil {
+			return err
+		}
+		if _, err := run("diff", "--cached", "--quiet"); err != nil {
+			message := "Sync changes " + time.Now().Format("2006-01-02 15:04")
+			if _, err := run("commit", "-m", message); err != nil {
+				return fmt.Errorf("%w (changes remain staged)", err)
+			}
+		}
+	}
+	if status.Ahead < 0 {
+		return errors.New("changes are committed locally, but the branch has no upstream to sync with")
+	}
+	for attempt := 0; ; attempt++ {
+		if _, err := run("pull", "--rebase"); err != nil {
+			_, _ = run("rebase", "--abort")
+			return fmt.Errorf("%w; the rebase was aborted and your commits are intact", err)
+		}
+		_, err := run("push")
+		if err == nil {
+			return nil
+		}
+		// Someone pushed between the pull and the push: pull once more.
+		if attempt == 1 {
+			return err
+		}
+	}
+}
 // ParseGitStatus reads `git status --porcelain=v2 --branch` output.
 func ParseGitStatus(output string) RepoStatus {
 	status := RepoStatus{Ahead: -1, Behind: -1}

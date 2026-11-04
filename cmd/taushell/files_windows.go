@@ -62,6 +62,15 @@ func (application *App) RevealProjectFile(sessionID, rel string) error {
 	return exec.Command("explorer.exe", "/select,"+path).Start()
 }
 
+// RevealProjectRoot opens the session's project folder in Explorer.
+func (application *App) RevealProjectRoot(sessionID string) error {
+	root, err := application.projectRoot(sessionID)
+	if err != nil {
+		return err
+	}
+	return exec.Command("explorer.exe", filepath.Clean(root)).Start()
+}
+
 // executableExtensions are never launched through "open", so a file that runs code is not started by one click.
 var executableExtensions = map[string]bool{".exe": true, ".com": true, ".bat": true, ".cmd": true, ".ps1": true, ".psm1": true, ".vbs": true, ".vbe": true, ".jse": true, ".wsf": true, ".msi": true, ".scr": true, ".lnk": true, ".reg": true, ".hta": true, ".cpl": true, ".dll": true}
 

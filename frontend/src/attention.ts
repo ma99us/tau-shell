@@ -186,6 +186,17 @@ export function controlSendPlan(signal: HarnessSignal, submit: boolean, draft: s
   return { allowed: true };
 }
 
+export const logActivityTtlMs = 5000;
+
+// The harness's own log is the most generic busy/idle source, so it beats screen
+// text for working/idle; a visible prompt on screen (input) still wins because the
+// log does not record it. Without a fresh log answer the screen cue is used.
+export function combineSignal(screen: HarnessSignal, log: string | undefined): HarnessSignal {
+  if (screen === "input") return screen;
+  if (log === "working" || log === "idle") return log;
+  return screen;
+}
+
 export type ReportedState = { state: "working" | "input" | "idle" | "unknown"; source: "cue" | "heuristic" };
 
 // What the window tells Go about a session. Only a harness cue is "cue"; output

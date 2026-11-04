@@ -5,6 +5,16 @@ export type Tab = { id: string; name: string };
 export const savedTabsKey = "taushell.tabs.v1";
 export const recentFoldersKey = "taushell.recent-folders.v1";
 export const maxRecentFolders = 5;
+export const groupedKey = "taushell.home-grouped.v1";
+
+// Home groups sessions by workspace unless the user switched that off.
+export function readGrouped(storage: Pick<Storage, "getItem">): boolean {
+  try {
+    return storage.getItem(groupedKey) !== "false";
+  } catch {
+    return true;
+  }
+}
 
 type Report = (source: string, error: unknown) => void;
 

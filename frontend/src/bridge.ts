@@ -240,6 +240,8 @@ type WailsApp = {
   UpdateTool(id: string): Promise<InstallResult>;
   GetGitBranch(sessionId: string): Promise<string>;
   GetGitStatus(sessionId: string): Promise<GitStatus | null>;
+  SyncGit(sessionId: string): Promise<void>;
+  GetHarnessActivity(sessionId: string): Promise<string>;
   ListProjectDir(sessionId: string, rel: string, showAll: boolean): Promise<ProjectListing>;
   ReadProjectFile(sessionId: string, rel: string): Promise<ProjectFile>;
   ListConversations(sessionId: string): Promise<Conversation[]>;
@@ -249,6 +251,7 @@ type WailsApp = {
   DeleteSecret(name: string): Promise<void>;
   ResumeConversation(sessionId: string, harnessSessionId: string, columns: number, rows: number): Promise<Session>;
   RevealProjectFile(sessionId: string, rel: string): Promise<void>;
+  RevealProjectRoot(sessionId: string): Promise<void>;
   OpenProjectFile(sessionId: string, rel: string): Promise<void>;
   ProjectFullPath(sessionId: string, rel: string): Promise<string>;
   GetSessionModel(sessionId: string): Promise<string>;

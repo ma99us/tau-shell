@@ -28,6 +28,7 @@ export const theme = {
     gsd: "var(--brand-gsd)",
   } as const,
   fallbackSessionColor: () => token("tag-fallback"),
+  panelBackground: () => token("bg-panel"),
   sessionTextOn: (light: boolean) => token(light ? "tag-text-on-light" : "tag-text-on-dark"),
   // Session tag colors offered in the context menu. The hex is what gets saved in the session YAML.
   sessionSwatches: () => swatchNames.map((name) => ({ name, value: token(`tag-${name.toLowerCase()}`) })),

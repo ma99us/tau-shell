@@ -3,6 +3,7 @@ package presets
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -91,5 +92,46 @@ func TestResolveExpandsFiltersAndReportsUnknown(t *testing.T) {
 	want := filepath.Base(dir) + "|S|" + dir + "||{nope}"
 	if item.Text != want || item.Submit || len(item.Unknown) != 1 || item.Unknown[0] != "nope" {
 		t.Fatalf("got %+v, want text %q", item, want)
+	}
+}
+
+func TestGitSyncCommitsAndPushes(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	root := t.TempDir()
+	git := func(dir string, args ...string) {
+		t.Helper()
+		command := exec.Command("git", append([]string{"-C", dir, "-c", "user.name=t", "-c", "user.email=t@t"}, args...)...)
+		if output, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, output)
+		}
+	}
+	remote, work := filepath.Join(root, "remote.git"), filepath.Join(root, "work")
+	git(root, "init", "--bare", remote)
+	git(root, "clone", remote, work)
+	git(work, "config", "user.name", "t")
+	git(work, "config", "user.email", "t@t")
+	if err := os.WriteFile(filepath.Join(work, "a.txt"), []byte("one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(work, "add", "-A")
+	git(work, "commit", "-m", "init")
+	git(work, "push", "-u", "origin", "HEAD")
+	if err := os.WriteFile(filepath.Join(work, "b.txt"), []byte("two\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := GitSync(context.Background(), work); err != nil {
+		t.Fatal(err)
+	}
+	status, _ := GitStatus(context.Background(), work)
+	if status.Dirty || status.Ahead != 0 || status.Behind != 0 {
+		t.Fatalf("workspace not clean after sync: %+v", status)
+	}
+}
+
+func TestGitSyncRejectsNonRepository(t *testing.T) {
+	if err := GitSync(context.Background(), t.TempDir()); err == nil {
+		t.Fatal("expected an error outside a repository")
 	}
 }

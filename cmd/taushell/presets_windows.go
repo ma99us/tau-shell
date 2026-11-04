@@ -80,10 +80,30 @@ func (application *App) GetGitStatus(sessionID string) (*presets.RepoStatus, err
 	return &status, nil
 }
 
+// SyncGit commits all pending changes, rebases onto upstream and pushes.
+func (application *App) SyncGit(sessionID string) (err error) {
+	defer func() {
+		if err != nil {
+			diagnostics.Error("git sync failed", err, "session_id", sessionID)
+		}
+	}()
+	config, err := session.FindConfig(application.configDirectory, sessionID)
+	if err != nil {
+		return err
+	}
+	return presets.GitSync(context.Background(), config.WorkingDir)
+}
+
 // GetSessionModel returns the model the harness last recorded for the
 // session, or "" when it is unknown.
 func (application *App) GetSessionModel(sessionID string) (string, error) {
 	return application.manager.HarnessModel(context.Background(), sessionID)
+}
+
+// GetHarnessActivity returns "working" or "idle" from the harness's own log,
+// or "" when it offers no such signal.
+func (application *App) GetHarnessActivity(sessionID string) (string, error) {
+	return application.manager.HarnessActivity(context.Background(), sessionID)
 }
 
 // GetSessionUsage returns the session's all-time token and cost totals.

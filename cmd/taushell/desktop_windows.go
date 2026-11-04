@@ -88,6 +88,7 @@ type App struct {
 type desktopSessionManager interface {
 	List(context.Context) ([]sessionhost.Snapshot, error)
 	HarnessModel(context.Context, string) (string, error)
+	HarnessActivity(context.Context, string) (string, error)
 	SessionUsage(context.Context, string) (usage.SessionUsage, error)
 	UsageSummary(context.Context) (usage.Summary, error)
 	StartPriceUpdates(context.Context)

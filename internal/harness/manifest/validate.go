@@ -23,6 +23,7 @@ var (
 	DiscoveryReaders   = names("codex-rollout", "opencode-db")
 	ModelReaders       = names("claude-jsonl", "copilot-events", "gsd-jsonl", "codex-rollout", "opencode-db")
 	TitleReaders       = names("claude-ai-title", "copilot-workspace")
+	ActivityReaders    = names("copilot-events")
 	UsageReaders       = names("claude-jsonl", "copilot-events", "gsd-jsonl", "codex-rollout", "opencode-db")
 	PhoneAnswerReaders = names("claude-permission", "copilot-permission")
 )
@@ -135,6 +136,7 @@ func (item *Manifest) Validate() error {
 		"resume_check":      {item.ResumeCheck, ResumeCheckReaders},
 		"model":             {item.Model, ModelReaders},
 		"title":             {item.Title, TitleReaders},
+		"activity":          {item.Activity, ActivityReaders},
 		"usage.reader":      {item.Usage.Reader, UsageReaders},
 		"phone_answer":      {item.PhoneAnswer, PhoneAnswerReaders},
 		"session.discovery": {item.Session.Discovery, DiscoveryReaders},

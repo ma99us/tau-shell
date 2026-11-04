@@ -16,7 +16,7 @@
         "state": "working",
         "source": "last-rows",
         "rows": 2,
-        "pattern": "^\\S{0,2}\\s*Working\\b.*\\besc\\b",
+        "pattern": "\\bWorking\\b.*\\besc\\b",
         "ignoreCase": true
       },
       {
@@ -33,7 +33,7 @@
     },
     "builtin": true,
     "path": "builtin/copilot-cli.yaml",
-    "hash": "b92f6fead82223ae86bafc713cfcaa5d34ef59967fad7cfdbafcc2e3f45b9543"
+    "hash": "678844c88aee8a2d404c7e08515fb17dbc9a25ac83d1361544151590897c9e71"
   },
   {
     "id": "claude-code",

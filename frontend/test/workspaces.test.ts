@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Session } from "../src/bridge.ts";
-import { flattenWorkspaces, groupSessions, readCollapsed, summarize, summaryText, writeCollapsed } from "../src/workspaces.ts";
+import { flattenWorkspaces, groupSessions, moveGroup, readCollapsed, summarize, summaryText, writeCollapsed } from "../src/workspaces.ts";
 
 const make = (id: string, over: Partial<Session> = {}): Session => ({ id, name: id, tool: "claude-code", workingDir: "C:/x", status: "stopped", runningHere: false, hasResumeId: false, autoResume: false, ...over } as Session);
 const groups = {
@@ -14,6 +14,13 @@ test("groups follow first appearance and keep the shared order inside a group", 
   const result = groupSessions([make("a1"), make("b1"), make("a2"), make("new")], groups);
   assert.deepEqual(result.map((w) => [w.group.key, w.sessions.map((s) => s.id)]), [["a", ["a1", "a2"]], ["b", ["b1"]], ["ungrouped", ["new"]]]);
   assert.deepEqual(flattenWorkspaces(result).map((s) => s.id), ["a1", "a2", "b1", "new"]);
+});
+
+test("dropping onto another workspace moves the whole group", () => {
+  const result = groupSessions([make("a1"), make("b1"), make("a2"), make("new")], groups);
+  assert.deepEqual(moveGroup(result, "a1", "new", true), ["b1", "new", "a1", "a2"]);
+  assert.deepEqual(moveGroup(result, "new", "a2", false), ["new", "a1", "a2", "b1"]);
+  assert.deepEqual(moveGroup(result, "a1", "a2", true), ["a1", "a2", "b1", "new"]);
 });
 
 test("summary follows the Resume All rule and counts attention only for running sessions", () => {

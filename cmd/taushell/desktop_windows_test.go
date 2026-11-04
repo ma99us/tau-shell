@@ -37,6 +37,10 @@ func (manager *closeTestManager) HarnessModel(context.Context, string) (string, 
 	return "", nil
 }
 
+func (manager *closeTestManager) HarnessActivity(context.Context, string) (string, error) {
+	return "", nil
+}
+
 func (manager *closeTestManager) SessionUsage(context.Context, string) (usage.SessionUsage, error) {
 	return usage.SessionUsage{}, nil
 }

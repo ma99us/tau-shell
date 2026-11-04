@@ -1,0 +1,58 @@
+// Pure color math for session tags: tinted surfaces and the text color that stays
+// readable on them, whatever color the user picks.
+
+type Rgb = [number, number, number];
+
+export function parseHex(hex: string): Rgb | null {
+  const match = hex.trim().match(/^#([0-9a-f]{6})$/i);
+  if (!match) return null;
+  return [0, 2, 4].map((i) => parseInt(match[1].slice(i, i + 2), 16)) as Rgb;
+}
+
+export function toHex(rgb: Rgb): string {
+  return `#${rgb.map((value) => Math.round(value).toString(16).padStart(2, "0")).join("")}`;
+}
+
+export function luminance(rgb: Rgb): number {
+  const [r, g, b] = rgb.map((value) => value / 255).map((c) => c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+export function contrast(a: Rgb, b: Rgb): number {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+// Same result as CSS color-mix(in srgb, color share%, base).
+export function mix(color: Rgb, base: Rgb, share: number): Rgb {
+  return color.map((value, index) => value * share + base[index] * (1 - share)) as Rgb;
+}
+
+// Whichever of the two ink colors has more contrast on the background; pure
+// black or white is used when neither reaches WCAG AA (4.5), which one always can.
+export function inkOn(background: Rgb, light: string, dark: string): string {
+  const lightRgb = parseHex(light), darkRgb = parseHex(dark);
+  if (!lightRgb || !darkRgb) return light;
+  const [best, bestRgb] = contrast(background, lightRgb) >= contrast(background, darkRgb) ? [light, lightRgb] : [dark, darkRgb];
+  if (contrast(background, bestRgb) >= 4.5) return best;
+  return contrast(background, [255, 255, 255]) >= contrast(background, [0, 0, 0]) ? "#ffffff" : "#000000";
+}
+
+// Tab/row tint shares must match the .tab-item[data-colored] rules in style.css.
+export const tintShares = { rest: 0.3, hover: 0.42, active: 0.52, bar: 0.5 } as const;
+
+export type SessionPalette = { color: string; ink: string; inkHover: string; inkActive: string; bar: string; barInk: string };
+
+export function sessionPalette(color: string, panel: string, light: string, dark: string): SessionPalette | null {
+  const base = parseHex(color), ground = parseHex(panel);
+  if (!base || !ground) return null;
+  const on = (share: number) => inkOn(mix(base, ground, share), light, dark);
+  return {
+    color,
+    ink: on(tintShares.rest),
+    inkHover: on(tintShares.hover),
+    inkActive: on(tintShares.active),
+    bar: toHex(mix(base, ground, tintShares.bar)),
+    barInk: on(tintShares.bar),
+  };
+}

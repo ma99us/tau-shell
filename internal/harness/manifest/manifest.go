@@ -35,6 +35,7 @@ type Manifest struct {
 	Widgets      *Widgets    `yaml:"widgets,omitempty" json:"-"`
 	Cues         []Cue       `yaml:"cues,omitempty" json:"cues"`
 	Model        string      `yaml:"model,omitempty" json:"-"`
+	Activity     string      `yaml:"activity,omitempty" json:"-"`
 	Title        string      `yaml:"title,omitempty" json:"-"`
 	Usage        Usage       `yaml:"usage,omitempty" json:"-"`
 	Skills       Skills      `yaml:"skills,omitempty" json:"-"`

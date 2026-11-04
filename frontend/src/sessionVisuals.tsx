@@ -2,13 +2,18 @@ import { CSSProperties, useEffect, useRef } from "react";
 import { Session } from "./bridge";
 import { theme } from "./theme/theme";
 import { Activity } from "./attention";
+import { sessionPalette } from "./sessionColor";
 
 const sessionColors = () => theme.sessionSwatches();
 
-function projectInitials(workingDir: string, fallback: string): string {
+function initialsOf(text: string): string {
+  return text.split(/[-_. ]+/).map((word) => word.match(/[\p{L}\p{N}]/u)?.[0] ?? "").join("").toUpperCase();
+}
+
+// Initials follow the session name (minus a clone " (N)" suffix) so renaming regenerates the icon.
+export function projectInitials(name: string, workingDir: string): string {
   const folder = workingDir.split(/[\\/]+/).filter(Boolean).pop() ?? "";
-  const letters = folder.split(/[-_. ]+/).map((word) => word.match(/[\p{L}\p{N}]/u)?.[0] ?? "").join("").toUpperCase();
-  return letters || (fallback.match(/[\p{L}\p{N}]/u)?.[0] ?? "?").toUpperCase();
+  return initialsOf(name.replace(/\s\(\d+\)$/, "")) || initialsOf(folder) || "?";
 }
 
 function readableTextColor(background: string): string {
@@ -20,7 +25,7 @@ function readableTextColor(background: string): string {
 }
 
 export function ProjectIcon({ session }: { session: Session }) {
-  const text = projectInitials(session.workingDir, session.name);
+  const text = projectInitials(session.name, session.workingDir);
   const count = Array.from(text).length;
   const style: CSSProperties = {
     fontSize: `${Math.max(5, Math.min(16, 26 / count * 1.15))}px`,
@@ -34,7 +39,17 @@ export function ProjectIcon({ session }: { session: Session }) {
 }
 
 export function sessionColorStyle(color?: string): CSSProperties | undefined {
-  return color ? { "--session-color": color } as CSSProperties : undefined;
+  if (!color) return undefined;
+  const palette = sessionPalette(color, theme.panelBackground(), theme.sessionTextOn(false), theme.sessionTextOn(true));
+  if (!palette) return { "--session-color": color } as CSSProperties;
+  return {
+    "--session-color": palette.color,
+    "--session-ink": palette.ink,
+    "--session-ink-hover": palette.inkHover,
+    "--session-ink-active": palette.inkActive,
+    "--session-bar": palette.bar,
+    "--session-bar-ink": palette.barInk,
+  } as CSSProperties;
 }
 
 export function SessionMenu({ x, y, session, onClose, onRename, onDuplicate, onColor }: {

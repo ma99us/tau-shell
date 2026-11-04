@@ -82,8 +82,9 @@ taushell ctl read [--rows N] <session>          # visible terminal text; needs m
 ```
 
 - Sessions are shown in the same order on Home, in the sidebar and in the tabs.
-  Home is the house icon. Session icons come from the project folder name
-  (initials, tinted with the session color when one is set).
+  Home is the house icon. Session icons show the initials of the session name
+  (new sessions are named after the project folder, so they match it until
+  renamed), tinted with the session color when one is set.
 - Right-click a session in the sidebar or its tab to rename or recolor it. New
   sessions are named after the project folder.
 - Running sessions have a toolbar: **Prompts** (presets from

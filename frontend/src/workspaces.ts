@@ -23,6 +23,19 @@ export function groupSessions(sessions: Session[], groups: Record<string, Worksp
   return result;
 }
 
+// Moves the workspace holding `fromId` directly before or after the one holding
+// `toId`, keeping each group's session order; returns the flat id order.
+export function moveGroup(workspaces: Workspace[], fromId: string, toId: string, after: boolean): string[] {
+  const has = (workspace: Workspace, id: string) => workspace.sessions.some((session) => session.id === id);
+  const from = workspaces.find((workspace) => has(workspace, fromId));
+  const to = workspaces.find((workspace) => has(workspace, toId));
+  const flat = workspaces.flatMap((workspace) => workspace.sessions.map((session) => session.id));
+  if (!from || !to || from === to) return flat;
+  const rest = workspaces.filter((workspace) => workspace !== from);
+  const index = rest.indexOf(to) + (after ? 1 : 0);
+  return [...rest.slice(0, index), from, ...rest.slice(index)].flatMap((workspace) => workspace.sessions.map((session) => session.id));
+}
+
 export const flattenWorkspaces = (workspaces: Workspace[]): Session[] => workspaces.flatMap((workspace) => workspace.sessions);
 
 export type WorkspaceSummary = { total: number; running: number; needsAttention: number; resumable: Session[]; stoppable: Session[] };
