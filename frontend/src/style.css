@@ -888,6 +888,25 @@ h3 {
   color: var(--accent-text-4);
 }
 
+/* A running session reads as "live": accent edge, soft glow and a lit status dot. */
+.session-card.running {
+  border-color: var(--accent-border-3);
+  background: linear-gradient(160deg, var(--accent-bg-4), var(--bg-card) 55%);
+  box-shadow: inset 3px 0 0 var(--status-ok), 0 0 16px var(--status-ok-glow);
+}
+
+.state-pill.running::before {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--status-ok);
+  box-shadow: 0 0 6px var(--status-ok-glow);
+  content: "";
+  vertical-align: 1px;
+}
+
 .path {
   overflow: hidden;
   margin-bottom: 0;
