@@ -103,7 +103,7 @@ Phase 1 (local Windows desktop) is implemented. Remote access and web
 dashboards are out of scope; a phone server exists as an experimental, off by
 default option.
 
-![TauShell Phone companion (Android): session tiles with live state such as Thinking, Idle and Stopped](docs/screenshots/taushell-phone.png)
+<img src="docs/screenshots/taushell-phone.png" width="450" alt="TauShell Phone companion (Android): session tiles with live state such as Thinking, Idle and Stopped">
 
 The Android companion app (`android/`, sideloaded) lists your sessions with their
 live state and can send prompts, answer permission prompts and show alerts. It is
