@@ -27,6 +27,8 @@ const paths: Record<string, ReactNode> = {
   history: <><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5" /><path d="M3.5 4v4.5H8" /><path d="M12 7.5V12l3 2" /></>,
   sync: <><path d="M20 11a8 8 0 0 0-14-4.5L4 9" /><path d="M4 4v5h5" /><path d="M4 13a8 8 0 0 0 14 4.5l2-2.5" /><path d="M20 20v-5h-5" /></>,
   chevron: <path d="M9 6l6 6-6 6" />,
+  arrowUp: <path d="M12 19V5M6 11l6-6 6 6" />,
+  arrowDown: <path d="M12 5v14M6 13l6 6 6-6" />,
   play: <path d="M7 5l12 7-12 7z" />,
   stop: <rect x="6" y="6" width="12" height="12" rx="1.5" />,
 };

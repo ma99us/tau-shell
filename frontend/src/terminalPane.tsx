@@ -14,6 +14,7 @@ import { FileDrawer } from "./fileDrawer";
 import { ConversationsDrawer } from "./conversationsDrawer";
 import { reportFrontendFailure, isStoppedSessionError } from "./errors";
 import { Sep, sessionColorStyle, statusLabel } from "./sessionVisuals";
+import { isExpensiveModel } from "./modelTier";
 import { clearPollFailure, shouldReportPollFailure } from "./polling";
 
 export const terminalInstances = new Map<string, Terminal>();
@@ -162,7 +163,9 @@ function GitChip({ session, git, onChange, onError }: { session: Session; git: G
   };
   return <>
     <span className="toolbar-branch" title={gitTooltip(git)}>
-      {parts.branch}{parts.dirty && <b className="git-flag">*</b>}{parts.counts && ` ${parts.counts}`}{parts.unsynced && <b className="git-flag">*</b>}
+      {parts.branch}{parts.dirty && <b className="git-flag">*</b>}
+      {parts.ahead > 0 && <span className="git-count" aria-label={`${parts.ahead} unpushed`}><Icon name="arrowUp" size={12} />{parts.ahead}</span>}
+      {parts.behind > 0 && <span className="git-count" aria-label={`${parts.behind} to pull`}><Icon name="arrowDown" size={12} />{parts.behind}</span>}
     </span>
     <button className="text-button icon-button git-sync-button" disabled={syncing} title="Sync changes: commit all pending changes, pull (rebase) and push" aria-label="Sync changes" onClick={sync}><Icon name="sync" size={14} /></button>
   </>;
@@ -337,7 +340,7 @@ export function TerminalPane({ session, peers, visible, busy, harness, onSend, o
       <span className={`status-dot ${session.runningHere ? "online" : ""}`} />{session.tool}{harness && onSend && <InterruptButton interrupt={onInterrupt} />}
       <Sep /><span className="toolbar-path-group"><span className="toolbar-path">{session.workingDir}</span><button className="text-button icon-button path-reveal" title="Open the project folder in File Explorer" aria-label="Open the project folder in File Explorer" onClick={() => app().RevealProjectRoot(session.id).catch(onError)}><Icon name="reveal" size={14} /></button></span>
       {git?.branch && <><Sep /><GitChip session={session} git={git} onChange={setGit} onError={onError} /></>}
-      {model && <><Sep /><span className="toolbar-model" title="Model last recorded by the harness">{model}</span></>}
+      {model && <><Sep /><span className={`toolbar-model ${isExpensiveModel(model) ? "expensive" : ""}`} title={isExpensiveModel(model) ? "Expensive model (last recorded by the harness)" : "Model last recorded by the harness"}>{model}</span></>}
       {hasUsage(usage?.total) && <UsageChips usage={usage!} />}
       <span className={`terminal-status ${!session.runningHere && session.status === "failed" ? "status-warn-text" : ""}`}>{session.runningHere ? "" : statusLabel(session.status) || "Not started"}</span>
       {!session.runningHere && (session.hasResumeId && session.resumeNote ? <button className="secondary-button terminal-action" disabled={busy} title={session.resumeNote} onClick={() => onLaunch(session, "fresh")}>Start fresh</button> : <button className="primary-button terminal-action" disabled={busy} onClick={() => onLaunch(session, session.hasResumeId ? "restore" : "start")}>{session.hasResumeId ? "Resume" : "Start"}</button>)}

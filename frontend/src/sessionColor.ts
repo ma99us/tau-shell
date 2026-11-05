@@ -48,18 +48,35 @@ export const tintVars = {
   "--session-tint-active": `${tintShares.active * 100}%`,
 } as const;
 
-export type SessionPalette = { color: string; ink: string; inkHover: string; inkActive: string; bar: string; barInk: string };
+// The warning color adjusted until it reaches WCAG AA (4.5) on the background:
+// kept as is when it already does, otherwise moved toward white or black (whichever
+// reads better on that background), falling back to plain ink if nothing reaches it.
+export function warnOn(background: Rgb, warn: string, fallbackInk: string): string {
+  const base = parseHex(warn);
+  if (!base) return fallbackInk;
+  if (contrast(background, base) >= 4.5) return warn;
+  const target: Rgb = contrast(background, [255, 255, 255]) >= contrast(background, [0, 0, 0]) ? [255, 255, 255] : [0, 0, 0];
+  for (let share = 0.1; share <= 1.0001; share += 0.1) {
+    const candidate = mix(target, base, share);
+    if (contrast(background, candidate) >= 4.5) return toHex(candidate);
+  }
+  return fallbackInk;
+}
 
-export function sessionPalette(color: string, panel: string, light: string, dark: string): SessionPalette | null {
+export type SessionPalette = { color: string; ink: string; inkHover: string; inkActive: string; bar: string; barInk: string; barWarn: string };
+
+export function sessionPalette(color: string, panel: string, light: string, dark: string, warn = ""): SessionPalette | null {
   const base = parseHex(color), ground = parseHex(panel);
   if (!base || !ground) return null;
   const on = (share: number) => inkOn(mix(base, ground, share), light, dark);
+  const barInk = on(tintShares.bar);
   return {
     color,
     ink: on(tintShares.rest),
     inkHover: on(tintShares.hover),
     inkActive: on(tintShares.active),
     bar: toHex(mix(base, ground, tintShares.bar)),
-    barInk: on(tintShares.bar),
+    barInk,
+    barWarn: warnOn(mix(base, ground, tintShares.bar), warn, barInk),
   };
 }

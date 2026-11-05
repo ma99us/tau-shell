@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { contrast, inkOn, parseHex, sessionPalette, tintShares } from "../src/sessionColor.ts";
+import { contrast, inkOn, parseHex, sessionPalette, tintShares, warnOn } from "../src/sessionColor.ts";
 
 const panel = "#11141a", light = "#ffffff", dark = "#101318";
 
@@ -22,4 +22,18 @@ test("ink flips to dark on light backgrounds", () => {
 
 test("an invalid color gives no palette", () => {
   assert.equal(sessionPalette("red", panel, light, dark), null);
+});
+
+test("the warning color stays readable on every tinted top bar", () => {
+  const warn = "#e0b24d";
+  for (const color of ["#ff0000", "#ffff00", "#ffffff", "#000000", "#00ffff", "#7a3cff", "#ff9500", "#33cc66", "#e0b24d"]) {
+    const palette = sessionPalette(color, panel, light, dark, warn)!;
+    const ground = parseHex(panel)!, base = parseHex(color)!;
+    const bar = base.map((v, i) => v * tintShares.bar + ground[i] * (1 - tintShares.bar)) as [number, number, number];
+    assert.ok(contrast(bar, parseHex(palette.barWarn)!) >= 4.5, `${color}: ${palette.barWarn}`);
+  }
+});
+
+test("the warning color is left alone when it already reads well", () => {
+  assert.equal(warnOn([17, 20, 26], "#e0b24d", "#ffffff"), "#e0b24d");
 });

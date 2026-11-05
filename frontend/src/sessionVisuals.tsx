@@ -38,7 +38,7 @@ export function ProjectIcon({ session }: { session: Session }) {
 
 export function sessionColorStyle(color?: string): CSSProperties | undefined {
   if (!color) return undefined;
-  const palette = sessionPalette(color, theme.panelBackground(), theme.sessionTextOn(false), theme.sessionTextOn(true));
+  const palette = sessionPalette(color, theme.panelBackground(), theme.sessionTextOn(false), theme.sessionTextOn(true), theme.warningColor());
   if (!palette) return { "--session-color": color, ...tintVars } as CSSProperties;
   return {
     ...tintVars,
@@ -48,6 +48,7 @@ export function sessionColorStyle(color?: string): CSSProperties | undefined {
     "--session-ink-active": palette.inkActive,
     "--session-bar": palette.bar,
     "--session-bar-ink": palette.barInk,
+    "--session-bar-warn": palette.barWarn,
   } as CSSProperties;
 }
 

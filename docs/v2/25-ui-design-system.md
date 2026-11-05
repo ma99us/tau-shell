@@ -148,7 +148,10 @@ never for body text or inside buttons.
   left; the button is disabled while refreshing and always re-enabled.
 - **Session top bar:** `tool | path | branch | model | tokens | ~$cost`,
   with dim `|` separators (`.toolbar-sep`). A part with no value is dropped
-  together with its separator. Status text and the harness widgets (Commands,
+  together with its separator. An expensive model (Opus, "pro", "max", o1/o3;
+  `modelTier.ts`) is shown bold in the warning color; on a tagged session the
+  warning hue is adjusted per color (`warnOn`) to keep 4.5:1 on the tinted bar.
+  Status text and the harness widgets (Commands,
   Prompts, Model, Resume) sit on the right.
 - **Notices:** the pending-command banner belongs to its session panel and is
   not shown on other tabs.

@@ -1275,6 +1275,18 @@ h3 {
   font-weight: 800;
 }
 
+.git-count {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  gap: 1px;
+  vertical-align: middle;
+}
+
+.git-count .ui-icon {
+  stroke-width: 2.4;
+}
+
 .path-reveal {
   flex: 0 0 auto;
   margin-left: 4px;
@@ -1282,6 +1294,11 @@ h3 {
 
 .toolbar-model {
   color: var(--accent);
+}
+
+.toolbar-model.expensive {
+  color: var(--status-warn);
+  font-weight: 700;
 }
 
 .toolbar-usage {
@@ -1838,6 +1855,13 @@ h3 {
   flex-direction: column;
   overflow: auto;
   border-top: 1px solid var(--border-hover);
+}
+
+.file-warning {
+  padding: 10px 12px;
+  color: var(--danger-text-4);
+  font-size: var(--fs-12);
+  line-height: 1.4;
 }
 
 .file-image {
@@ -2565,6 +2589,11 @@ h3 {
 .terminal-view[data-colored] .terminal-toolbar .toolbar-sep,
 .terminal-view[data-colored] .terminal-toolbar .terminal-status {
   color: inherit;
+}
+
+/* The warning hue is nudged per session color until it keeps 4.5:1 on the tinted bar. */
+.terminal-view[data-colored] .terminal-toolbar .toolbar-model.expensive {
+  color: var(--session-bar-warn, var(--status-warn));
 }
 
 .terminal-view[data-colored] .terminal-toolbar .toolbar-sep {

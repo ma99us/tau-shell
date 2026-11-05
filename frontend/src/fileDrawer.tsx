@@ -74,7 +74,10 @@ export function FileDrawer({ session, onClose, onError, onInsert }: { session: S
     setOpen([...open, entry.path]);
     if (!tree[entry.path]) load(entry.path);
   };
-  const view = (entry: ProjectEntry) => app().ReadProjectFile(session.id, entry.path).then(setFile).catch((error) => { setFile(null); onError(error); });
+  // A file that cannot be previewed stays selected; the pane explains why and keeps its actions.
+  const view = (entry: ProjectEntry) => app().ReadProjectFile(session.id, entry.path).then(setFile).catch((error) => {
+    setFile({ path: entry.path, text: "", truncated: false, unsupported: error instanceof Error ? error.message : String(error) });
+  });
   const copy = (text: string, what: string) => window.runtime.ClipboardSetText(text).then(() => setNote(`Copied ${what}.`)).catch(onError);
   const copyFull = (entry: { path: string }) => app().ProjectFullPath(session.id, entry.path).then((full) => copy(full, "the full path")).catch(onError);
   const rows = (dir: string, depth: number): ReactNode => (tree[dir] ?? []).map((entry) => {
@@ -112,7 +115,7 @@ export function FileDrawer({ session, onClose, onError, onInsert }: { session: S
         <button className="file-act" onClick={() => app().OpenProjectFile(session.id, file.path).catch(onError)} title="Open in the default application" aria-label="Open the file in its default application"><Icon name="external" size={14} /></button>
         <button className="file-act" onClick={() => setFile(null)} aria-label="Close the file">x</button></div>
       {file.truncated && <div className="toolbar-popover-note">Only the first part of this file is shown.</div>}
-      {file.imageUrl ? <div className="file-image"><img src={file.imageUrl} alt={file.path} /></div> : isMarkdown(file.path) ? <div className="md">{parseMarkdown(file.text).map(renderBlock)}</div> : <CodeView language={languageFor(file.path)} text={file.text} />}
+      {file.unsupported ? <div className="file-warning" role="alert">Warning: this file cannot be previewed ({file.unsupported.replace(/\.$/, "")}). You can still use the buttons above.</div> : file.imageUrl ? <div className="file-image"><img src={file.imageUrl} alt={file.path} /></div> : isMarkdown(file.path) ? <div className="md">{parseMarkdown(file.text).map(renderBlock)}</div> : <CodeView language={languageFor(file.path)} text={file.text} />}
     </div>}
   </aside>;
 }

@@ -84,7 +84,7 @@ export type ProjectListing = { entries: ProjectEntry[]; truncated: boolean };
 export type AppUpdate = { tag: string; url: string; notes: string; canInstall: boolean; reason: string };
 export type UpdateResult = { from: string; to: string; sessions: string[] | null };
 
-export type ProjectFile = { path: string; text: string; imageUrl?: string; truncated: boolean };
+export type ProjectFile = { path: string; text: string; imageUrl?: string; truncated: boolean; unsupported?: string };
 export type SecretInfo = { name: string; usedBy: string[]; missing: boolean };
 export type Conversation = { harnessSessionId: string; title: string; model: string; firstDay: string; lastDay: string; tokens: number; usd: number; unpriced: boolean; current: boolean; unavailable: string };
 
