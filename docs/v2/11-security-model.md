@@ -262,7 +262,10 @@ answer a Claude Code trust or permission prompt with a fixed yes (Enter) or no (
 (`POST /v1/sessions/{id}/answer`). Go refuses unless the prompt is a confirmed cue
 state and the window re-checks the prompt footer; Yes is sent only when the
 highlighted choice is a Yes. The audit records `answer yes|no`
-and the outcome, never text. Verified live on Claude Code. Revoking a
+and the outcome, never text. A waiting Claude Code or Copilot CLI that shows something
+other than a permission prompt (a question or choice list) is flagged `question` by the
+window; only then does `send` accept text during the wait, so a permission prompt never
+receives typed text. Choice lists are not parsed. Verified live on Claude Code. Revoking a
 phone deletes its key and token; it must pair again, and pairing otherwise persists
 across TauShell and app restarts (one-year expiry). The Android app (`android/`,
 sideload APK) pins the certificate, keeps its token sealed with the Android Keystore

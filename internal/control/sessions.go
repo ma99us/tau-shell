@@ -279,6 +279,9 @@ func Refusal(item SessionInfo, insertOnly bool) string {
 	switch {
 	case !item.RunningHere:
 		return "the session is not running"
+	case activity.State == agentstate.Input && activity.Confirmed && activity.Question && activity.Source == agentstate.Cue:
+		// The window identified a question or choice list, not a permission prompt.
+		return ""
 	case activity.State == agentstate.Input && activity.Confirmed:
 		return "the harness is waiting for an answer; answer it in the terminal first"
 	case activity.State == agentstate.Unknown || activity.State == agentstate.Stopped || activity.Source != agentstate.Cue:

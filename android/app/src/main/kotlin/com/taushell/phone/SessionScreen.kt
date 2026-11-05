@@ -131,6 +131,9 @@ class SessionScreen(
         val working = running && item.activity.confirmed && item.activity.state == "working"
         val waiting = running && item.activity.state == "input" && item.activity.confirmed
         val answerable = waiting && (item.tool == "claude-code" || item.tool == "copilot-cli")
+        // A question or choice list takes typed text; only a permission prompt gets Yes/No.
+        val question = answerable && item.activity.question
+        val yesNo = answerable && !question
 
         stateText.text = StateClock.headline(item)
         stateText.setTextColor(color)
@@ -139,6 +142,7 @@ class SessionScreen(
         stateBar.setBackgroundColor(color)
         notice.text = when {
             !running -> if (item.lastError.isNotBlank()) "Not running. Last error: ${item.lastError}" else "Not running."
+            question -> "Waiting for an answer to a question. Type the reply (the option number for a list) and send it."
             answerable -> "Waiting for an answer. Yes presses Enter and No presses Esc, only on a permission prompt."
             waiting -> "Waiting for an answer. Answer it on the PC; replies from here are blocked until then."
             working -> "Replies are blocked until this turn finishes."
@@ -162,10 +166,10 @@ class SessionScreen(
                 )
             }
         }
-        send.alpha = if (running && !working && !waiting) 1f else 0.5f
+        send.alpha = if (running && !working && (!waiting || question)) 1f else 0.5f
         chipScroll.visibility = if (running && !answerable && shownNow.isNotEmpty()) View.VISIBLE else View.GONE
-        promptRow.visibility = if (running && !answerable) View.VISIBLE else View.GONE
-        answerRow.visibility = if (answerable) View.VISIBLE else View.GONE
+        promptRow.visibility = if (running && !yesNo) View.VISIBLE else View.GONE
+        answerRow.visibility = if (yesNo) View.VISIBLE else View.GONE
         startRow.visibility = if (!running) View.VISIBLE else View.GONE
     }
 

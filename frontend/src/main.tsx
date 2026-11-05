@@ -4,7 +4,7 @@ import "@xterm/xterm/css/xterm.css";
 import { app, DialogRequest, InstallResult, Session, SessionEvent, ShutdownProgress, SkillsView, SystemStatus, ToolStatus, UpdateResult } from "./bridge";
 import "./theme/tokens.css";
 import "./style.css";
-import { Activity, AttentionKind, answerPlan, attentionEdge, combineSignal, hasCueSignal, logActivityTtlMs, nextActivity, readDraft, readHarnessSignal, readScreen, reportedState } from "./attention";
+import { Activity, AttentionKind, answerPlan, attentionEdge, combineSignal, hasCueSignal, logActivityTtlMs, nextActivity, promptKind, readDraft, readHarnessSignal, readScreen, reportedState } from "./attention";
 import { moveId } from "./order";
 import { CommandPalette, PaletteItem } from "./harnessActions";
 import { GearIcon, HomeIcon } from "./harnessIcons";
@@ -99,7 +99,8 @@ function App() {
         const reported = reportedState(signal, { working, input, unseen });
         const terminal = terminalInstances.get(id);
         const hasDraft = reported.state === "idle" && reported.source === "cue" && !!terminal && readDraft(terminal).trim() !== "";
-        app().ReportSessionState(id, reported.state, reported.source, hasDraft).catch((err) => showError("ui.report-state", err));
+        const question = reported.state === "input" && reported.source === "cue" && !!terminal && promptKind(session.tool, terminal) === "question";
+        app().ReportSessionState(id, reported.state, reported.source, hasDraft, question).catch((err) => showError("ui.report-state", err));
         if (working && !old.working) workingSince.current.set(id, now);
         const alert = attentionEdge(old, { working, input }, now - (workingSince.current.get(id) ?? now));
         if (alert) alerts.push({ id, kind: alert });
@@ -763,7 +764,7 @@ function App() {
               if (!tab && !session?.runningHere) return null;
               return (
                 <div id={`panel-${id}`} className={`terminal-tab-content ${tab && selected === id ? "" : "hidden"}`} role="tabpanel" aria-labelledby={`tab-${id}`} tabIndex={0} key={id}>
-                  <TerminalPane session={session} peers={sessions} visible={Boolean(tab && selected === id)} busy={busy} harness={session ? harnessFor(session) : undefined} onSend={session ? sendFor(session) : undefined} onInterrupt={() => { const harness = session && harnessFor(session); if (session && harness) interruptSession(session, harness.widgets.interruptKeys); }} onLaunch={launch} onResumeConversation={(target, conversationId) => void launch(target, "conversation", conversationId)} onError={(failure) => showError("ui.terminal", failure)} />
+                  <TerminalPane session={session} peers={sessions} visible={Boolean(tab && selected === id)} busy={busy} harness={session ? harnessFor(session) : undefined} onSend={session ? sendFor(session) : undefined} onNotice={(message) => session && setNotice({ sessionId: session.id, message, isError: false })} onInterrupt={() => { const harness = session && harnessFor(session); if (session && harness) interruptSession(session, harness.widgets.interruptKeys); }} onLaunch={launch} onResumeConversation={(target, conversationId) => void launch(target, "conversation", conversationId)} onError={(failure) => showError("ui.terminal", failure)} />
                 </div>
               );
             })}

@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import type { Terminal } from "@xterm/xterm";
-import { answerPlan, attentionEdge, composeInjection, controlSendPlan, copilotPermission, hasCueSignal, highlightedIsYes, nextActivity, readHarnessSignal, reportedState, staleWorkingMs, workingWindowMs } from "../src/attention.ts";
+import { answerPlan, attentionEdge, composeInjection, controlSendPlan, copilotPermission, hasCueSignal, highlightedIsYes, nextActivity, promptKind, readHarnessSignal, reportedState, staleWorkingMs, workingWindowMs } from "../src/attention.ts";
 import { setHarnesses, type HarnessInfo } from "../src/harnesses.ts";
 
 // The same JSON the host serves; a Go test keeps it equal to the built-in manifests.
@@ -58,6 +58,17 @@ test("controlSendPlan refuses unreadable, waiting, busy and drafted screens", ()
   assert.equal(controlSendPlan("idle", true, "half typed").allowed, false);
   assert.equal(controlSendPlan("idle", true, "").allowed, true);
   assert.equal(controlSendPlan("working", false, "draft").allowed, true);
+  assert.equal(controlSendPlan("input", true, "", true).allowed, true);
+});
+
+test("promptKind separates permission prompts from questions on verified harnesses only", () => {
+  const permission = fakeTerminal(["Do you want to proceed?", "Esc to cancel · Tab to amend", ""]);
+  const picker = fakeTerminal(["1. Red", "2. Blue", "Enter to select · ↑/↓ to navigate · Esc to cancel"]);
+  assert.equal(promptKind("claude-code", permission), "permission");
+  assert.equal(promptKind("claude-code", picker), "question");
+  assert.equal(promptKind("copilot-cli", fakeTerminal(["Do you want to run ls?", "❯ 1. Yes", "  2. Yes, and don't ask again", "  3. No, and tell Copilot", "enter to select · esc to cancel"])), "permission");
+  assert.equal(promptKind("copilot-cli", picker), "question");
+  assert.equal(promptKind("gsd", picker), "unknown");
 });
 
 // Minimal xterm buffer: only what the signal reader touches.

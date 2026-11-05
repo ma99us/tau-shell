@@ -63,11 +63,15 @@ export function FileDrawer({ session, onClose, onError, onInsert }: { session: S
     const frame = requestAnimationFrame(() => treeRef.current?.querySelector(".file-row.selected")?.scrollIntoView({ block: "nearest" }));
     return () => cancelAnimationFrame(frame);
   }, [selectedPath]);
+  // The parent passes a fresh onError each render; a ref keeps load stable so a re-render
+  // never resets the tree, the open folders or the selected file.
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
   const load = useCallback((dir: string) => {
     app().ListProjectDir(session.id, dir, true)
       .then((listing) => setTree((current) => ({ ...current, [dir]: listing.entries ?? [] })))
-      .catch(onError);
-  }, [session.id, onError]);
+      .catch((error) => onErrorRef.current(error));
+  }, [session.id]);
   useEffect(() => { setTree({}); setOpen([]); setFile(null); load(""); }, [session.id, load]);
   const toggle = (entry: ProjectEntry) => {
     if (open.includes(entry.path)) { setOpen(open.filter((path) => path !== entry.path)); return; }

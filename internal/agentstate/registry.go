@@ -50,6 +50,9 @@ type View struct {
 	Source    Source `json:"source,omitempty"`
 	// HasDraft reports that text is already typed in the harness input.
 	HasDraft bool `json:"hasDraft,omitempty"`
+	// Question reports that a waiting harness shows a question or choice list
+	// the window positively identified as not a permission prompt.
+	Question bool `json:"question,omitempty"`
 	// AgeMS is the time since the last report; SinceMS since the state began.
 	AgeMS   int64 `json:"ageMs"`
 	SinceMS int64 `json:"sinceMs"`
@@ -59,6 +62,7 @@ type entry struct {
 	state    State
 	source   Source
 	hasDraft bool
+	question bool
 	since    time.Time
 	reported time.Time
 }
@@ -95,6 +99,17 @@ func (registry *Registry) Report(id string, state State, source Source, hasDraft
 	registry.entries[id] = entry{state: state, source: source, hasDraft: hasDraft, since: since, reported: now}
 }
 
+// MarkQuestion flags the entry written by the latest Report as a question. The
+// next Report clears it, so a stale flag never outlives the observation.
+func (registry *Registry) MarkQuestion(id string) {
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+	if current, ok := registry.entries[id]; ok && current.state == Input && current.source == Cue {
+		current.question = true
+		registry.entries[id] = current
+	}
+}
+
 // Forget drops a session's state, for example when it stops.
 func (registry *Registry) Forget(id string) {
 	registry.mu.Lock()
@@ -113,7 +128,7 @@ func (registry *Registry) Get(id string) View {
 		return View{State: Unknown}
 	}
 	age := now.Sub(current.reported)
-	view := View{State: current.state, Source: current.source, HasDraft: current.hasDraft, AgeMS: age.Milliseconds(), SinceMS: now.Sub(current.since).Milliseconds()}
+	view := View{State: current.state, Source: current.source, HasDraft: current.hasDraft, Question: current.question, AgeMS: age.Milliseconds(), SinceMS: now.Sub(current.since).Milliseconds()}
 	if age > FreshFor {
 		view.State, view.Source = Unknown, ""
 		return view

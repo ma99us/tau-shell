@@ -232,7 +232,7 @@ type WailsApp = {
   SetAutoResumeAll(enabled: boolean): Promise<void>;
   SetSessionOrder(ids: string[]): Promise<void>;
   NotifyAttention(id: string, kind: "input" | "done"): Promise<void>;
-  ReportSessionState(id: string, state: string, source: string, hasDraft: boolean): Promise<void>;
+  ReportSessionState(id: string, state: string, source: string, hasDraft: boolean, question: boolean): Promise<void>;
   ProvideScreen(request: string, rows: string[]): Promise<void>;
   SetQueuedPrompts(count: number): Promise<void>;
   RecordQueueSend(session: string, outcome: string): Promise<void>;
@@ -243,7 +243,7 @@ type WailsApp = {
   UpdateTool(id: string): Promise<InstallResult>;
   GetGitBranch(sessionId: string): Promise<string>;
   GetGitStatus(sessionId: string): Promise<GitStatus | null>;
-  SyncGit(sessionId: string): Promise<void>;
+  SyncGit(sessionId: string): Promise<string>;
   GetHarnessActivity(sessionId: string): Promise<string>;
   ListProjectDir(sessionId: string, rel: string, showAll: boolean): Promise<ProjectListing>;
   ReadProjectFile(sessionId: string, rel: string): Promise<ProjectFile>;

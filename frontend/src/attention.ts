@@ -62,6 +62,16 @@ export function answerPlan(tool: string, terminal: Terminal | undefined, title: 
   return { keys: ["\r"], reason: "" };
 }
 
+// A waiting harness shows either a permission prompt or a question/choice list. Only
+// the two verified harnesses can tell them apart; anything else is "unknown" and is
+// never treated as a question.
+export function promptKind(tool: string, terminal: Terminal): "permission" | "question" | "unknown" {
+  const reader = findHarness(tool)?.phoneAnswer;
+  if (reader === "copilot-permission") return copilotPermission(lastRows(terminal, 24)).permission ? "permission" : "question";
+  if (reader === "claude-permission") return lastTextRows(terminal, 2).some((row) => claudePermissionFooter.test(row)) ? "permission" : "question";
+  return "unknown";
+}
+
 // Enter picks the highlighted option, and Claude's trust prompt highlights "No, exit"
 // by default, so Yes is sent only when the highlighted row is a Yes choice.
 export function highlightedIsYes(rows: string[]): boolean {
@@ -178,9 +188,9 @@ export type ControlSendPlan = { allowed: true } | { allowed: false; reason: stri
 // Re-check on the live screen for a send that arrived over the control channel.
 // Go already required a confirmed state; the window refuses again because the
 // screen may have changed in between. Nothing is typed unless this allows it.
-export function controlSendPlan(signal: HarnessSignal, submit: boolean, draft: string): ControlSendPlan {
+export function controlSendPlan(signal: HarnessSignal, submit: boolean, draft: string, question = false): ControlSendPlan {
   if (signal === undefined) return { allowed: false, reason: "the harness shows no readable state" };
-  if (signal === "input") return { allowed: false, reason: "the harness is waiting for an answer" };
+  if (signal === "input") return question ? { allowed: true } : { allowed: false, reason: "the harness is waiting for an answer" };
   if (submit && signal !== "idle") return { allowed: false, reason: "the harness is working" };
   if (submit && draft.trim()) return { allowed: false, reason: "there is unsent text in the input line" };
   return { allowed: true };

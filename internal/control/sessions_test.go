@@ -154,6 +154,23 @@ func TestAnswerOnlyConfirmedClaudePrompts(t *testing.T) {
 	}
 }
 
+func TestSendAllowsConfirmedQuestionOnly(t *testing.T) {
+	sessions, states, delivered := sessionsWith(true)
+	states.Report("s1", agentstate.Input, agentstate.Cue, false)
+	if r := sessions.HandleSend(sendArgs(t, "2", false)); r.OK || len(*delivered) != 0 {
+		t.Fatalf("a permission or unclassified prompt must refuse text: %+v", r)
+	}
+	states.Report("s1", agentstate.Input, agentstate.Cue, false)
+	states.MarkQuestion("s1")
+	if r := sessions.HandleSend(sendArgs(t, "2", false)); !r.OK || len(*delivered) != 1 {
+		t.Fatalf("a confirmed question takes a reply: %+v", r)
+	}
+	states.Report("s1", agentstate.Input, agentstate.Cue, false)
+	if r := sessions.HandleSend(sendArgs(t, "2", false)); r.OK {
+		t.Fatal("the next report without the flag must refuse again")
+	}
+}
+
 func TestStopOnlyStopsRunningSessions(t *testing.T) {
 	for _, running := range []bool{false, true} {
 		sessions, _, _ := sessionsWith(running)

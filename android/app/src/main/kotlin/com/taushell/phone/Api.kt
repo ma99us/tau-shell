@@ -9,6 +9,8 @@ data class Activity(
     val state: String,
     val confirmed: Boolean,
     val hasDraft: Boolean,
+    /** A waiting harness shows a question or choice list, not a permission prompt. */
+    val question: Boolean = false,
 )
 
 data class SessionItem(
@@ -52,6 +54,7 @@ object Parse {
                     state = activity?.optString("state") ?: "unknown",
                     confirmed = activity?.optBoolean("confirmed") ?: false,
                     hasDraft = activity?.optBoolean("hasDraft") ?: false,
+                    question = activity?.optBoolean("question") ?: false,
                 ),
                 lastError = item.optString("lastError"),
             )

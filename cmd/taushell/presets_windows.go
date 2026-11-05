@@ -80,8 +80,9 @@ func (application *App) GetGitStatus(sessionID string) (*presets.RepoStatus, err
 	return &status, nil
 }
 
-// SyncGit commits all pending changes, rebases onto upstream and pushes.
-func (application *App) SyncGit(sessionID string) (err error) {
+// SyncGit commits all pending changes, rebases onto upstream and pushes. It
+// returns a short summary of what happened.
+func (application *App) SyncGit(sessionID string) (summary string, err error) {
 	defer func() {
 		if err != nil {
 			diagnostics.Error("git sync failed", err, "session_id", sessionID)
@@ -89,7 +90,7 @@ func (application *App) SyncGit(sessionID string) (err error) {
 	}()
 	config, err := session.FindConfig(application.configDirectory, sessionID)
 	if err != nil {
-		return err
+		return "", err
 	}
 	return presets.GitSync(context.Background(), config.WorkingDir)
 }

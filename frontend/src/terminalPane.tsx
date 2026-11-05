@@ -6,7 +6,7 @@ import { gitParts, gitTooltip } from "./gitChip";
 import { parseOsc52 } from "./osc52";
 import { Icon } from "./icons";
 import { theme } from "./theme/theme";
-import { composeInjection, controlSendPlan, readDraft, readHarnessSignal } from "./attention";
+import { composeInjection, controlSendPlan, promptKind, readDraft, readHarnessSignal } from "./attention";
 import { SessionUsage, formatTokens, formatUSD, hasUsage, usageTooltip } from "./usage";
 import { HarnessToolbar, InterruptButton, planSend, sendNotice } from "./harnessActions";
 import type { QueueHooks } from "./promptQueue";
@@ -124,7 +124,8 @@ export function insertAtPrompt(session: Session, text: string): string {
 export function controlSend(session: Session, text: string, submit: boolean): string {
   const terminal = terminalInstances.get(session.id);
   if (!terminal || !session.runningHere) return "the session has no open terminal";
-  const plan = controlSendPlan(readHarnessSignal(session.tool, terminal, terminalTitles.get(session.id) ?? ""), submit, readDraft(terminal));
+  const signal = readHarnessSignal(session.tool, terminal, terminalTitles.get(session.id) ?? "");
+  const plan = controlSendPlan(signal, submit, readDraft(terminal), signal === "input" && promptKind(session.tool, terminal) === "question");
   if (!plan.allowed) return plan.reason;
   const injected = composeInjection(readDraft(terminal), text, submit);
   if (injected.includes("\n")) terminal.paste(injected);
@@ -150,13 +151,14 @@ export function interruptSession(session: Session, keys: string[]) {
   terminal.focus();
 }
 
-function GitChip({ session, git, onChange, onError }: { session: Session; git: GitStatus; onChange: (status: GitStatus) => void; onError: (error: unknown) => void }) {
+function GitChip({ session, git, onChange, onError, onNotice }: { session: Session; git: GitStatus; onChange: (status: GitStatus) => void; onError: (error: unknown) => void; onNotice?: (message: string) => void }) {
   const [syncing, setSyncing] = useState(false);
   const parts = gitParts(git);
-  // Sync result is shown by re-reading the status; failures surface through onError.
+  // The Go host returns the summary; failures surface through onError.
   const sync = () => {
     setSyncing(true);
-    app().SyncGit(session.id).catch(onError)
+    app().SyncGit(session.id)
+      .then((summary) => onNotice?.(summary), onError)
       .then(() => app().GetGitStatus(session.id))
       .then((next) => { if (next) onChange(next); }, onError)
       .finally(() => setSyncing(false));
@@ -179,13 +181,14 @@ function UsageChips({ usage }: { usage: SessionUsage }) {
   </>;
 }
 
-export function TerminalPane({ session, peers, visible, busy, harness, onSend, onInterrupt, onLaunch, onResumeConversation, onError }: {
+export function TerminalPane({ session, peers, visible, busy, harness, onSend, onNotice, onInterrupt, onLaunch, onResumeConversation, onError }: {
   session?: Session;
   peers?: Session[];
   visible: boolean;
   busy: boolean;
   harness?: { widgets: HarnessWidgets; modelSupported: boolean };
   onSend?: (text: string, submit: boolean, label: string) => void;
+  onNotice?: (message: string) => void;
   onInterrupt: () => void;
   onLaunch: (session: Session, mode: "start" | "restore" | "fresh") => void;
   onResumeConversation: (session: Session, harnessSessionId: string) => void;
@@ -339,7 +342,7 @@ export function TerminalPane({ session, peers, visible, busy, harness, onSend, o
     <div className="terminal-toolbar">
       <span className={`status-dot ${session.runningHere ? "online" : ""}`} />{session.tool}{harness && onSend && <InterruptButton interrupt={onInterrupt} />}
       <Sep /><span className="toolbar-path-group"><span className="toolbar-path">{session.workingDir}</span><button className="text-button icon-button path-reveal" title="Open the project folder in File Explorer" aria-label="Open the project folder in File Explorer" onClick={() => app().RevealProjectRoot(session.id).catch(onError)}><Icon name="reveal" size={14} /></button></span>
-      {git?.branch && <><Sep /><GitChip session={session} git={git} onChange={setGit} onError={onError} /></>}
+      {git?.branch && <><Sep /><GitChip session={session} git={git} onChange={setGit} onError={onError} onNotice={onNotice} /></>}
       {model && <><Sep /><span className={`toolbar-model ${isExpensiveModel(model) ? "expensive" : ""}`} title={isExpensiveModel(model) ? "Expensive model (last recorded by the harness)" : "Model last recorded by the harness"}>{model}</span></>}
       {hasUsage(usage?.total) && <UsageChips usage={usage!} />}
       <span className={`terminal-status ${!session.runningHere && session.status === "failed" ? "status-warn-text" : ""}`}>{session.runningHere ? "" : statusLabel(session.status) || "Not started"}</span>

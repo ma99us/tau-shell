@@ -57,12 +57,17 @@ func (application *App) agentStates() *agentstate.Registry {
 }
 
 // ReportSessionState is called by the window about once a second per running
-// session. Only the state is sent, never terminal content.
-func (application *App) ReportSessionState(id, state, source string, hasDraft bool) error {
+// session. Only the state is sent, never terminal content. question is true
+// when a waiting harness shows a question rather than a permission prompt.
+func (application *App) ReportSessionState(id, state, source string, hasDraft, question bool) error {
 	if !agentstate.Valid(agentstate.State(state), agentstate.Source(source)) {
 		return fmt.Errorf("invalid session state %q from %q", state, source)
 	}
-	application.agentStates().Report(id, agentstate.State(state), agentstate.Source(source), hasDraft)
+	states := application.agentStates()
+	states.Report(id, agentstate.State(state), agentstate.Source(source), hasDraft)
+	if question {
+		states.MarkQuestion(id)
+	}
 	return nil
 }
 

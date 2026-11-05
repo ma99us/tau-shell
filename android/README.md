@@ -5,7 +5,9 @@ sessions, shows their state and sends preset or typed prompts through the PC's
 guarded `send` path. It also shows the visible terminal text (off with
 `mobile.screen: false`), raises alerts, and offers Yes/No buttons that answer a Claude
 Code or Copilot CLI permission prompt (Yes = Enter only when the highlighted choice is the plain Yes, No = Esc;
-other harnesses are not supported). The Home screen lists compact session tiles under a
+other harnesses are not supported). When the waiting harness shows a question or choice list instead (the window
+positively ruled out a permission prompt), the buttons give way to the normal prompt box: type the reply, for
+example the option number, and send it. Choice lists are not parsed into buttons. The Home screen lists compact session tiles under a
 fixed header; a tile opens a full-screen session view with fixed top and bottom bars and
 only the terminal text scrolling. Experimental; see
 [docs/v3/implementation/04-mobile-companion-plan.md](../docs/v3/implementation/04-mobile-companion-plan.md)

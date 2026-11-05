@@ -121,8 +121,16 @@ func TestGitSyncCommitsAndPushes(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(work, "b.txt"), []byte("two\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := GitSync(context.Background(), work); err != nil {
+	summary, err := GitSync(context.Background(), work)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if summary != "master: committed local changes, pushed 1 commit. Workspace clean." && summary != "main: committed local changes, pushed 1 commit. Workspace clean." {
+		t.Fatalf("unexpected summary %q", summary)
+	}
+	again, err := GitSync(context.Background(), work)
+	if err != nil || !strings.HasSuffix(again, ": already in sync, nothing to do. Workspace clean.") {
+		t.Fatalf("second sync: %q, %v", again, err)
 	}
 	status, _ := GitStatus(context.Background(), work)
 	if status.Dirty || status.Ahead != 0 || status.Behind != 0 {
@@ -131,7 +139,7 @@ func TestGitSyncCommitsAndPushes(t *testing.T) {
 }
 
 func TestGitSyncRejectsNonRepository(t *testing.T) {
-	if err := GitSync(context.Background(), t.TempDir()); err == nil {
+	if _, err := GitSync(context.Background(), t.TempDir()); err == nil {
 		t.Fatal("expected an error outside a repository")
 	}
 }
