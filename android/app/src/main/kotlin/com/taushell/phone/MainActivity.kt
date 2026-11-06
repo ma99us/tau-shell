@@ -37,6 +37,7 @@ class MainActivity : Activity(), SessionActions {
     private var latest: List<SessionItem> = emptyList()
     private var pairing: Pairing? = null
     private val cards = LinkedHashMap<String, SessionCard>()
+    private val promptHistory = LinkedHashMap<String, MutableList<String>>()
     private var list: LinearLayout? = null
     private var banner: TextView? = null
     private var empty: TextView? = null
@@ -368,7 +369,24 @@ class MainActivity : Activity(), SessionActions {
         }
     }
 
-    override fun presets(): List<String> = (store.presets + pcPresets).distinct()
+    override fun quickReplies(): List<String> = (store.presets + pcPresets).distinct()
+
+    override fun sessionPresets(item: SessionItem, done: (Result<List<PromptPreset>>) -> Unit) {
+        val current = pairing ?: return
+        io.execute {
+            val outcome = current.client().sessionPresets(item.id)
+            ui.post { done(outcome) }
+        }
+    }
+
+    override fun promptHistory(id: String): List<String> = promptHistory[id]?.toList().orEmpty()
+
+    override fun rememberPrompt(id: String, text: String) {
+        val history = promptHistory.getOrPut(id) { mutableListOf() }
+        history.remove(text)
+        history.add(0, text)
+        if (history.size > 20) history.removeAt(history.lastIndex)
+    }
 
     override fun muted(id: String) = id in store.muted
 

@@ -267,18 +267,50 @@ func parseLatestPortableGit(data []byte) (gitRelease, gitAsset, string, error) {
 }
 
 func InstallManagedTool(ctx context.Context, layout ManagedToolLayout, spec Spec) (string, error) {
+	return InstallManagedToolVersion(ctx, layout, spec, "")
+}
+
+func InstallManagedToolVersion(ctx context.Context, layout ManagedToolLayout, spec Spec, expectedVersion string) (string, error) {
 	client := managedHTTPClient()
 	switch spec.Install.ManagedStrategy {
 	case ManagedNodeLTS:
-		return installNodeLTS(ctx, client, layout)
+		return installNodeLTS(ctx, client, layout, expectedVersion)
 	case ManagedPortableGit:
-		return installPortableGit(ctx, client, layout)
+		return installPortableGit(ctx, client, layout, expectedVersion)
 	default:
 		return "", fmt.Errorf("tool %s has no managed install strategy", spec.ID)
 	}
 }
 
-func installNodeLTS(ctx context.Context, client *http.Client, layout ManagedToolLayout) (string, error) {
+func LatestManagedToolVersion(ctx context.Context, spec Spec) (string, error) {
+	client := managedHTTPClient()
+	switch spec.Install.ManagedStrategy {
+	case ManagedNodeLTS:
+		index, err := getBytes(ctx, client, nodeIndexURL, maxMetadataBytes)
+		if err != nil {
+			return "", err
+		}
+		release, err := parseLatestNodeLTS(index)
+		if err != nil {
+			return "", err
+		}
+		return strings.TrimPrefix(release.Version, "v"), nil
+	case ManagedPortableGit:
+		metadata, err := getBytes(ctx, client, gitReleaseAPIURL, maxMetadataBytes)
+		if err != nil {
+			return "", err
+		}
+		release, _, _, err := parseLatestPortableGit(metadata)
+		if err != nil {
+			return "", err
+		}
+		return strings.TrimPrefix(release.TagName, "v"), nil
+	default:
+		return "", fmt.Errorf("tool %s has no managed version strategy", spec.ID)
+	}
+}
+
+func installNodeLTS(ctx context.Context, client *http.Client, layout ManagedToolLayout, expectedVersion string) (string, error) {
 	index, err := getBytes(ctx, client, nodeIndexURL, maxMetadataBytes)
 	if err != nil {
 		return "", err
@@ -288,6 +320,9 @@ func installNodeLTS(ctx context.Context, client *http.Client, layout ManagedTool
 		return "", err
 	}
 	version := strings.TrimPrefix(release.Version, "v")
+	if expectedVersion != "" && version != expectedVersion {
+		return "", fmt.Errorf("Node.js LTS changed from confirmed version %s to %s; check for updates again", expectedVersion, version)
+	}
 	filename := "node-" + release.Version + "-win-x64.zip"
 	archiveURL := "https://nodejs.org/dist/" + release.Version + "/" + filename
 	manifestURL := "https://nodejs.org/dist/" + release.Version + "/SHASUMS256.txt"
@@ -394,7 +429,7 @@ func verifyNodeInstall(ctx context.Context, directory, expectedVersion string) e
 	return nil
 }
 
-func installPortableGit(ctx context.Context, client *http.Client, layout ManagedToolLayout) (string, error) {
+func installPortableGit(ctx context.Context, client *http.Client, layout ManagedToolLayout, expectedVersion string) (string, error) {
 	metadata, err := getBytes(ctx, client, gitReleaseAPIURL, maxMetadataBytes)
 	if err != nil {
 		return "", err
@@ -404,6 +439,9 @@ func installPortableGit(ctx context.Context, client *http.Client, layout Managed
 		return "", err
 	}
 	version := strings.TrimPrefix(release.TagName, "v")
+	if expectedVersion != "" && version != expectedVersion {
+		return "", fmt.Errorf("Git for Windows release changed from confirmed version %s to %s; check for updates again", expectedVersion, version)
+	}
 	if active, err := layout.ActiveVersion(Git); err == nil && active == version {
 		if verifyPortableGit(ctx, filepath.Join(layout.GitVersionDir(version), "cmd", "git.exe")) == nil {
 			return fmt.Sprintf("Git for Windows %s is already active.", version), nil

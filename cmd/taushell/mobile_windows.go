@@ -169,6 +169,7 @@ func (application *App) applyMobile(enabled bool) error {
 			}
 			return current.Mobile.Presets
 		},
+		SessionPresets: application.GetPresets,
 		Audit: func(device, op, session, outcome string) {
 			audit.Add(control.AuditEntry{Time: time.Now(), Image: "phone " + device, Op: op, Session: session, Outcome: outcome})
 		},

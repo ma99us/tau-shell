@@ -23,7 +23,7 @@ var (
 	DiscoveryReaders   = names("codex-rollout", "opencode-db")
 	ModelReaders       = names("claude-jsonl", "copilot-events", "gsd-jsonl", "codex-rollout", "opencode-db")
 	TitleReaders       = names("claude-ai-title", "copilot-workspace")
-	ActivityReaders    = names("copilot-events")
+	ActivityReaders    = names("codex-rollout", "copilot-events", "gsd-jsonl")
 	UsageReaders       = names("claude-jsonl", "copilot-events", "gsd-jsonl", "codex-rollout", "opencode-db")
 	PhoneAnswerReaders = names("claude-permission", "copilot-permission")
 )
@@ -183,8 +183,14 @@ func (item *Manifest) Validate() error {
 			return fail(fmt.Sprintf("skills.personal_dirs[%d]", index), "%v", err)
 		}
 	}
+	if item.Skills.PluginDirOption != "" && item.Skills.DirectoryOption != "" {
+		return fail("skills", "plugin_dir_option and directory_option are mutually exclusive")
+	}
 	if option := item.Skills.PluginDirOption; option != "" && !strings.HasPrefix(option, "--") {
 		return fail("skills.plugin_dir_option", "must start with --")
+	}
+	if option := item.Skills.DirectoryOption; option != "" && !strings.HasPrefix(option, "--") {
+		return fail("skills.directory_option", "must start with --")
 	}
 	return item.validateInstallAndBrand(fail)
 }

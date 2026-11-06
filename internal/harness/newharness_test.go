@@ -51,7 +51,7 @@ func TestSkillDirectoryRoutesOnlyForVerifiedAdapters(t *testing.T) {
 		{session.ClaudeCode, true},
 		{session.CopilotCLI, true},
 		{session.GSD, false},
-		{session.Codex, false},
+		{session.Codex, true},
 		{session.OpenCode, false},
 	} {
 		adapter, err := For(test.harness)

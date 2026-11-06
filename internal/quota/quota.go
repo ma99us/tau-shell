@@ -21,6 +21,7 @@ type Runner func(ctx context.Context) ([]byte, error)
 var ErrUnavailable = errors.New("copilot quota unavailable")
 
 type Snapshot struct {
+	Account     string  `json:"account"`
 	Plan        string  `json:"plan"`
 	Unlimited   bool    `json:"unlimited"`
 	Entitlement float64 `json:"entitlement"`
@@ -37,19 +38,25 @@ type Snapshot struct {
 }
 
 type response struct {
+	Login          string `json:"login"`
+	AccessTypeSKU  string `json:"access_type_sku"`
 	Plan           string `json:"copilot_plan"`
 	ResetDateUTC   string `json:"quota_reset_date_utc"`
 	ResetDate      string `json:"quota_reset_date"`
 	QuotaSnapshots struct {
-		Premium *struct {
-			Unlimited       bool    `json:"unlimited"`
-			Entitlement     float64 `json:"entitlement"`
-			QuotaRemaining  float64 `json:"quota_remaining"`
-			PercentRemain   float64 `json:"percent_remaining"`
-			OveragePermited bool    `json:"overage_permitted"`
-			CreditsUsed     float64 `json:"credits_used"`
-		} `json:"premium_interactions"`
+		Chat    *quotaSnapshot `json:"chat"`
+		Premium *quotaSnapshot `json:"premium_interactions"`
 	} `json:"quota_snapshots"`
+}
+
+type quotaSnapshot struct {
+	Unlimited       bool    `json:"unlimited"`
+	Entitlement     float64 `json:"entitlement"`
+	QuotaRemaining  float64 `json:"quota_remaining"`
+	Remaining       float64 `json:"remaining"`
+	PercentRemain   float64 `json:"percent_remaining"`
+	OveragePermited bool    `json:"overage_permitted"`
+	CreditsUsed     float64 `json:"credits_used"`
 }
 
 // Fetch reads and parses the quota; now is injected for projection tests.
@@ -66,27 +73,35 @@ func Parse(data []byte, now time.Time) (Snapshot, error) {
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		return Snapshot{}, fmt.Errorf("%w: unexpected response", ErrUnavailable)
 	}
-	premium := parsed.QuotaSnapshots.Premium
-	if premium == nil {
-		return Snapshot{}, fmt.Errorf("%w: no premium quota in response", ErrUnavailable)
+	quota := parsed.QuotaSnapshots.Premium
+	if parsed.AccessTypeSKU == "free_limited_copilot" {
+		quota = parsed.QuotaSnapshots.Chat
+	}
+	if quota == nil {
+		return Snapshot{}, fmt.Errorf("%w: no applicable quota in response", ErrUnavailable)
+	}
+	remaining := quota.QuotaRemaining
+	if remaining == 0 && quota.Remaining > 0 {
+		remaining = quota.Remaining
 	}
 	snapshot := Snapshot{
+		Account:     parsed.Login,
 		Plan:        parsed.Plan,
-		Unlimited:   premium.Unlimited,
-		Entitlement: premium.Entitlement,
-		Remaining:   premium.QuotaRemaining,
-		OveragesOK:  premium.OveragePermited,
+		Unlimited:   quota.Unlimited,
+		Entitlement: quota.Entitlement,
+		Remaining:   remaining,
+		OveragesOK:  quota.OveragePermited,
 		ResetDate:   parsed.ResetDate,
 	}
-	if snapshot.Unlimited || premium.Entitlement <= 0 {
+	if snapshot.Unlimited || quota.Entitlement <= 0 {
 		return snapshot, nil
 	}
-	snapshot.Used = premium.CreditsUsed
+	snapshot.Used = quota.CreditsUsed
 	if snapshot.Used == 0 {
-		snapshot.Used = premium.Entitlement - premium.QuotaRemaining
+		snapshot.Used = quota.Entitlement - remaining
 	}
-	snapshot.PercentUsed = 100 - premium.PercentRemain
-	snapshot.OverLimit = snapshot.Used > premium.Entitlement
+	snapshot.PercentUsed = 100 - quota.PercentRemain
+	snapshot.OverLimit = snapshot.Used > quota.Entitlement
 
 	reset, err := time.Parse(time.RFC3339, parsed.ResetDateUTC)
 	if err != nil {

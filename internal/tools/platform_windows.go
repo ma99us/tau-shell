@@ -43,33 +43,48 @@ func RunNpm(ctx context.Context, args ...string) error {
 	return runNpm(ctx, false, args...)
 }
 
+// RunNpmOutput runs npm without a visible window and returns its combined output.
+func RunNpmOutput(ctx context.Context, args ...string) (string, error) {
+	output, err := runNpmCommand(ctx, false, args...)
+	return string(output), err
+}
+
 func RunNpmInConsole(ctx context.Context, args []string) error {
 	return runNpm(ctx, true, args...)
 }
 
 func runNpm(ctx context.Context, visible bool, args ...string) error {
+	_, err := runNpmCommand(ctx, visible, args...)
+	return err
+}
+
+func runNpmCommand(ctx context.Context, visible bool, args ...string) ([]byte, error) {
 	node, err := exec.LookPath("node.exe")
 	if err != nil {
-		return fmt.Errorf("Node.js executable not found: %w", err)
+		return nil, fmt.Errorf("Node.js executable not found: %w", err)
 	}
 	npm, err := exec.LookPath("npm.cmd")
 	if err != nil {
-		return fmt.Errorf("npm.cmd not found: %w", err)
+		return nil, fmt.Errorf("npm.cmd not found: %w", err)
 	}
 	cli, err := npmCLIPath(node, npm)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	command := exec.CommandContext(ctx, node, append([]string{cli}, args...)...)
 	if visible {
 		command.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NEW_CONSOLE}
-	} else {
-		hideWindow(command)
+		if err := command.Run(); err != nil {
+			return nil, fmt.Errorf("run npm: %w", err)
+		}
+		return nil, nil
 	}
-	if err := command.Run(); err != nil {
-		return fmt.Errorf("run npm: %w", err)
+	hideWindow(command)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		return output, fmt.Errorf("run npm: %w", err)
 	}
-	return nil
+	return output, nil
 }
 
 func npmCLIPath(node, npm string) (string, error) {

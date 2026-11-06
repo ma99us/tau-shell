@@ -137,6 +137,12 @@ object Labels {
         return letters.ifEmpty { item.name.firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "?" }
     }
 
+    fun totalSpent(item: SessionItem): String? =
+        item.totalUsd?.takeIf { it.isFinite() }?.let {
+            val amount = if (it <= 0 && item.unpriced) "?" else String.format(java.util.Locale.US, "$%.2f", it)
+            "Est. $amount${if (item.unpriced && amount != "?") "+" else ""}"
+        }
+
     /** Short state text; an unconfirmed reading is marked so it is never taken as fact. */
     fun state(item: SessionItem): String {
         if (!item.running) return "Stopped"

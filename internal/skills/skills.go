@@ -1,8 +1,7 @@
 // Package skills assembles the Agent Skills TauShell offers to harness
 // sessions. Skills come from several sources (a local checkout, a fetched
 // GitHub repository, a bundled snapshot), are validated, merged by
-// precedence, and materialized into an immutable per-harness plugin folder
-// that each harness loads with --plugin-dir.
+// precedence, and materialized for each harness's per-launch skill route.
 package skills
 
 import (
@@ -265,6 +264,16 @@ func collectFiles(skill Skill) ([]pluginFile, error) {
 // running sessions never see their plugin change. A skill that cannot be read
 // is skipped and reported in the returned warnings.
 func Materialize(root string, chosen []Skill) (dir string, warnings []string, err error) {
+	return materialize(root, chosen, true)
+}
+
+// MaterializeAgentSkills writes standard .agents/skills folders for harnesses
+// that discover skills from an added working directory.
+func MaterializeAgentSkills(root string, chosen []Skill) (dir string, warnings []string, err error) {
+	return materialize(root, chosen, false)
+}
+
+func materialize(root string, chosen []Skill, plugin bool) (dir string, warnings []string, err error) {
 	var files []pluginFile
 	for _, skill := range chosen {
 		skillFiles, err := collectFiles(skill)
@@ -273,6 +282,11 @@ func Materialize(root string, chosen []Skill) (dir string, warnings []string, er
 			continue
 		}
 		files = append(files, skillFiles...)
+	}
+	if !plugin {
+		for index := range files {
+			files[index].rel = path.Join(".agents", files[index].rel)
+		}
 	}
 	if len(files) == 0 {
 		return "", warnings, nil
@@ -303,10 +317,13 @@ func Materialize(root string, chosen []Skill) (dir string, warnings []string, er
 		}
 		return os.WriteFile(full, data, 0o600)
 	}
-	manifest := []byte(`{"name":"` + PluginName + `","description":"Skills provided by TauShell","version":"1.0.0"}` + "\n")
-	failure := write(".claude-plugin/plugin.json", manifest)
-	if failure == nil {
-		failure = write("plugin.json", manifest)
+	var failure error
+	if plugin {
+		manifest := []byte(`{"name":"` + PluginName + `","description":"Skills provided by TauShell","version":"1.0.0"}` + "\n")
+		failure = write(".claude-plugin/plugin.json", manifest)
+		if failure == nil {
+			failure = write("plugin.json", manifest)
+		}
 	}
 	for _, f := range files {
 		if failure != nil {

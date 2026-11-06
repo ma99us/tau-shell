@@ -28,6 +28,20 @@ func TestParseProjectsMonthEndUsage(t *testing.T) {
 	}
 }
 
+func TestParseUsesChatQuotaForFreeLimitedAccount(t *testing.T) {
+	data := `{"login":"ma99us","access_type_sku":"free_limited_copilot","copilot_plan":"individual","quota_snapshots":{"chat":{"entitlement":200,"remaining":83,"percent_remaining":41.5,"unlimited":false},"premium_interactions":{"entitlement":0,"remaining":0,"percent_remaining":0,"unlimited":false}}}`
+	snapshot, err := Parse([]byte(data), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Account != "ma99us" || snapshot.Plan != "individual" {
+		t.Fatalf("unexpected account info: %+v", snapshot)
+	}
+	if snapshot.Entitlement != 200 || snapshot.Remaining != 83 || snapshot.Used != 117 || snapshot.PercentUsed != 58.5 {
+		t.Fatalf("unexpected free-tier quota: %+v", snapshot)
+	}
+}
+
 func TestParseDoesNotProjectTooEarly(t *testing.T) {
 	snapshot, err := Parse([]byte(sample), time.Date(2026, 10, 1, 6, 0, 0, 0, time.UTC))
 	if err != nil || snapshot.CanProject {

@@ -116,7 +116,7 @@ export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAl
         </div>
       </div>
       <div className="section-title"><div><h2>Your sessions</h2></div>{!loaded && <span className="spinner" role="status" aria-label="Loading sessions" />}<label className="check-option" title="Group sessions by workspace, or list them all in one row of cards"><input type="checkbox" role="switch" checked={grouped} onChange={(event) => changeGrouped(event.target.checked)} />Group by workspace</label></div>
-      {quota && !quota.unlimited && <p className={`home-usage home-quota${quota.canProject && quota.projected > quota.entitlement ? " warn" : ""}`} title={`Copilot plan: ${quota.plan}. Read through your GitHub CLI sign-in. ${quota.daysLeft} days left in the cycle.`}>Copilot: <b className="kv">{Math.round(quota.used)} / {Math.round(quota.entitlement)} credits ({Math.round(quota.percentUsed)}%)</b>, resets {quota.resetDate}{quota.canProject ? <>, on pace for <b className="kv">~{Math.round(quota.projected)}</b></> : ""}</p>}
+      {quota && !quota.unlimited && <p className={`home-usage home-quota${quota.canProject && quota.projected > quota.entitlement ? " warn" : ""}`} title={`${quota.account ? `Copilot account: ${quota.account}. ` : ""}Plan: ${quota.plan}. Read through your GitHub CLI sign-in. ${quota.daysLeft} days left in the cycle.`}>Copilot{quota.account ? ` (${quota.account})` : ""}: <b className="kv">{Math.round(quota.used)} / {Math.round(quota.entitlement)} credits ({Math.round(quota.percentUsed)}%)</b>, resets {quota.resetDate}{quota.canProject ? <>, on pace for <b className="kv">~{Math.round(quota.projected)}</b></> : ""}</p>}
       {summary && hasUsage(summary.month) && <p className="home-usage" title={monthTooltip(summary)}>This month: <b className="kv">{usageText(summary.month)}</b>{harnessIds().map((tool) => hasUsage(summary.monthByTool?.[tool]) ? <span key={tool}> | {harnessShort(tool)} <b className="kv">{usageText(summary.monthByTool![tool])}</b></span> : null)}</p>}
       {sessions.length === 0 ? (!loaded ? <div className="loading-card" role="status"><span className="spinner" aria-hidden="true" /><span className="muted">Loading sessions...</span></div> : <div className="empty-card"><div className="empty-icon">+</div><h3>No sessions yet</h3><p>Create a session to connect a project folder to an AI harness such as Claude Code or GitHub Copilot CLI.</p>      <button className="primary-button" onClick={onNew}>New session</button></div>) :
         <>{(grouped ? workspaces : [{ group: ungrouped, sessions }]).map((workspace) => <div className="home-group" key={workspace.group.key}>
@@ -270,7 +270,10 @@ function ToolRow({ tool, actions }: { tool: ToolStatus; actions: ToolActions }) 
     tool.installed && tool.support === "unknown" && tool.version ? "version support not tested" : "";
   const unavailableCapabilities = (tool.capabilities ?? []).filter((capability) => !capability.available && !capability.optional);
   const installing = actions.installing === tool.id;
-  const title = [tool.error, ...(tool.warnings ?? [])].filter(Boolean).join("\n");
+  const supportWarnings = (tool.warnings ?? []).filter((warning) =>
+    !(tool.support === "untested" && warning.includes("outside the tested range")) &&
+    !(tool.support === "below-minimum" && warning.includes("below the minimum supported version")));
+  const title = [tool.error, ...supportWarnings].filter(Boolean).join("\n");
   const companionVersions = (tool.companions ?? []).map((companion) => `${companion.name} ${companion.version || (companion.installed ? "installed" : "not found")}`);
   const label = tool.id === "node" && tool.version ? [`Node ${tool.version}`, ...companionVersions].join(" | ") :
     tool.installed ? tool.version || "Installed" : "Not found";
@@ -279,10 +282,10 @@ function ToolRow({ tool, actions }: { tool: ToolStatus; actions: ToolActions }) 
     ...(tool.companions ?? []).map((companion) => companion.executablePath && `${companion.name}: ${companion.executablePath}`),
   ].filter((path): path is string => !!path);
   const pathLabel = executablePaths.join(" | ");
-  const needsManagedInstall = !!tool.install.managedStrategy && !usable;
+  const availableUpdate = actions.updates[tool.id];
+  const needsManagedInstall = !!tool.install.managedStrategy && !usable && !availableUpdate;
   const needsInstall = !tool.installed || needsManagedInstall;
-  const canUpdateManaged = tool.managed && usable && !!tool.install.managedStrategy;
-  const warning = [...new Set([supportNote, tool.error, ...(tool.warnings ?? []),
+  const warning = [...new Set([supportNote, tool.error, ...supportWarnings,
     unavailableCapabilities.length > 0 ? `missing: ${unavailableCapabilities.map((capability) => capability.option).join(", ")}` : "",
   ].filter(Boolean))].join("; ");
   return <div className="tool-row" title={title || undefined}>
@@ -291,9 +294,8 @@ function ToolRow({ tool, actions }: { tool: ToolStatus; actions: ToolActions }) 
       <div className="tool-heading"><strong title={tool.name}>{tool.name}</strong><span className="tool-version">{label}</span></div>
       {pathLabel && <code className="tool-path" title={executablePaths.join("\n")}>{pathLabel}</code>}
       {warning && <span className="tool-warning tool-support-note">{warning}</span>}
-      {(needsInstall || actions.updates[tool.id] || canUpdateManaged) && <div className="tool-actions">
-    {canUpdateManaged && <button className="secondary-button tool-action" disabled={installing || actions.installing !== ""} title={installHint(tool, actions.status)} onClick={() => actions.onInstall(tool)}>{installing ? "Updating..." : "Update"}</button>}
-    {tool.installed && actions.updates[tool.id] && <button className="secondary-button tool-action" disabled={installing || actions.installing !== ""} title={`Update ${tool.name} to ${actions.updates[tool.id]} with winget (asks first)`} onClick={() => actions.onUpdate(tool)}>{installing ? "Updating..." : `Update to ${actions.updates[tool.id]}`}</button>}
+      {(needsInstall || availableUpdate) && <div className="tool-actions">
+    {tool.installed && availableUpdate && <button className="secondary-button tool-action" disabled={installing || actions.installing !== ""} title={`Update ${tool.name} to ${availableUpdate}; TauShell asks before changing anything`} onClick={() => actions.onUpdate(tool)}>{installing ? "Updating..." : `Update to ${availableUpdate}`}</button>}
     {needsInstall && <button className="secondary-button tool-action" disabled={installing || actions.installing !== ""} title={installHint(tool, actions.status)} onClick={() => actions.onInstall(tool)}>
       {installing ? "Installing..." : canAutoInstall(tool, actions.status) ? "Install" : "Setup instructions"}
     </button>}

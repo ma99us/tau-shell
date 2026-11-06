@@ -73,7 +73,7 @@ status.
 | OpenAI Codex CLI | `codex` (ID discovered from the rollout log) | `codex resume <id>` |
 | OpenCode | `opencode` (ID discovered from `opencode.db`) | `opencode --session <id>` |
 
-Codex and OpenCode choose their own conversation IDs. TauShell records the ID after launch by matching the new conversation to the session's working directory, skipping IDs owned by other sessions; an ambiguous match records nothing and the session shows "Resume ID unknown". Tested: GSD 1.22.0, OpenCode 1.19.5 (CLI help and database schema), Codex 0.165.0 (CLI help only; no signed-in Codex session was available, so the rollout format, discovery and usage parsing are unverified against a live Codex).
+Codex and OpenCode choose their own conversation IDs. TauShell records the ID after launch by matching the new conversation to the session's working directory, skipping IDs owned by other sessions; an ambiguous match records nothing and the session shows "Resume ID unknown". Codex 0.166.0 was verified through TauShell and ConPTY: it created a resumable ID, answered prompts, stopped gracefully, restored the same conversation and recalled prior context. Its `task_started`/`task_complete` rollout events were observed as working/idle activity.
 
 The locally installed Claude Code 2.1.263 and Copilot CLI 1.0.96-2 help output documents these options. This is CLI-contract discovery only; successful conversation restoration still requires a controlled integration test. Avoid `--continue` for managed restore because it selects the most recent session rather than TauShell's recorded session.
 
@@ -87,9 +87,16 @@ quality-of-life actions TauShell may offer for a running session: slash
 order (Copilot CLI needs Esc twice; Claude Code one Esc), and the `CompactText`
 command. The UI shows a widget only for adapters that declare it, and the
 Model menu additionally requires the `--model` capability probe. These are
-keystrokes typed into the harness: they are not confirmed by it, and the lists
-are tied to the tested version range. Adding a harness means declaring them or
-leaving `Widgets` nil, in which case the terminal simply has no widgets.
+keystrokes typed into the harness, not a harness-confirmed action. If the
+composer is empty, TauShell submits the action; if it already contains a draft,
+TauShell appends the action and leaves it unsent for the user to review. The
+lists are tied to the tested version range. Codex 0.166.0's declared command
+widgets are limited to `/compact` and `/status`; its live test also verified
+single-Esc interruption, opening the model picker, switching to another
+available model, and successful compaction. `/new` and `/help` are not exposed
+because their behavior was not verified. Adding a harness means declaring
+verified actions or leaving `Widgets` nil, in which case the terminal has no
+widgets.
 
 ### Skill library
 
@@ -104,12 +111,18 @@ left out so the personal copy wins.
 
 At launch and resume the session manager asks the library for a content-hashed
 plugin folder (`.claude-plugin/plugin.json`, `plugin.json`, `skills/<name>`) and
-appends `--plugin-dir <dir>` after the adapter's own arguments. It is skipped
-when the session sets `skills: false`, when the adapter has no verified skill
-directory route, when `--help` does not list
-`--plugin-dir`, or when preparing fails; each case is logged and never blocks
-launch. Tested: Copilot CLI 1.0.105 lists the skills; Claude Code 2.1.312
-validates the manifest only. `--resume` combined with `--plugin-dir` and
-same-name duplicates across sources are untested.
+appends the adapter's declared skill-directory option. Copilot CLI and Claude
+Code use `--plugin-dir <dir>`. Codex uses `--add-dir <dir>` and receives a
+per-launch `.agents/skills` copy so it cannot modify a shared skill snapshot.
+The route is skipped when the session sets `skills: false`, when the adapter
+has no verified route, when the relevant CLI help does not list the option, or
+when preparing fails; each case is logged and never blocks launch. Codex
+0.166.0's native project and additional-directory discovery were first checked
+with disposable `codex exec --ephemeral` probes; the TauShell per-launch skill
+route then returned its expected response in the live ConPTY test. That test
+uses and removes a temporary Codex profile trusting only its disposable
+project. Copilot CLI 1.0.105 lists skills; Claude Code 2.1.312 validates the
+manifest only. Resume with skill directories and same-name duplicates across
+sources remain untested.
 
 Future adapters may add supported actions and state hints, but tool-specific behavior must remain out of the core session manager.

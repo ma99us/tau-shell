@@ -13,6 +13,7 @@ probes:
 capabilities:
   - { name: Start and resume a TauShell session file, option: "--session" }
   - { name: Select a model, option: "--model", optional: true }
+  - { name: Set a thinking level, option: "--thinking", optional: true }
 launch:
   reserved_args: ["--session", "--session-dir", "--continue", "-c", "--no-session"]
 # GSD 1.12.0 added --session: TauShell names the session file and reopens it.
@@ -36,12 +37,15 @@ widgets:
   compact_text: "/compact"
   clear_text: "/new"
 model: gsd-jsonl
+activity: gsd-jsonl
 usage:
   reader: gsd-jsonl
   records_own_cost: true
 config_file:
   paths: ["{env:GSD_HOME|~/.gsd}/agent/settings.json"]
   create: true
+skills:
+  personal_dirs: ["~/.agents/skills"]
 install:
   vendor_url: https://github.com/open-gsd/gsd-pi#install
   npm_package: "@opengsd/gsd-pi"

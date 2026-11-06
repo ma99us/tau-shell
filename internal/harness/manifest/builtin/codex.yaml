@@ -7,8 +7,8 @@ order: 30
 probes:
   version_args: ["--version"]
   help_args: ["--help"]
-  tested_from: "0.165.0"
-  tested_before: "0.166.0"
+  tested_from: "0.166.0"
+  tested_before: "0.167.0"
 capabilities:
   - { name: Resume a conversation, option: resume }
   - { name: Select a model, option: "--model", optional: true }
@@ -30,18 +30,19 @@ graceful_exit:
 widgets:
   commands:
     - { label: Compact conversation, text: "/compact" }
-    - { label: New conversation, text: "/new" }
     - { label: Show status, text: "/status" }
-    - { label: Help, text: "/help" }
   interrupt_keys: ["\x1b"]
   compact_text: "/compact"
-  clear_text: "/new"
 model: codex-rollout
+activity: codex-rollout
 usage:
   reader: codex-rollout
 config_file:
   paths: ["{env:CODEX_HOME|~/.codex}/config.toml"]
   create: true
+skills:
+  directory_option: --add-dir
+  personal_dirs: ["~/.agents/skills"]
 install:
   vendor_url: https://github.com/openai/codex#installing-and-running-codex-cli
   npm_package: "@openai/codex"

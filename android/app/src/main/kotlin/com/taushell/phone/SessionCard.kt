@@ -13,7 +13,10 @@ interface SessionActions {
     fun start(item: SessionItem, mode: String, done: (Result<Unit>) -> Unit)
     fun screen(item: SessionItem, done: (Result<List<String>>) -> Unit)
     fun answer(item: SessionItem, answer: String, done: (Result<Unit>) -> Unit)
-    fun presets(): List<String>
+    fun quickReplies(): List<String>
+    fun sessionPresets(item: SessionItem, done: (Result<List<PromptPreset>>) -> Unit)
+    fun promptHistory(id: String): List<String>
+    fun rememberPrompt(id: String, text: String)
     fun muted(id: String): Boolean
     fun setMuted(id: String, value: Boolean)
 }

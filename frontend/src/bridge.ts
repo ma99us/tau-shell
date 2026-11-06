@@ -1,6 +1,7 @@
 import type { SessionUsage, UsageSummary } from "./usage";
 
 export type CopilotQuota = {
+  account: string;
   plan: string;
   unlimited: boolean;
   entitlement: number;
@@ -97,7 +98,7 @@ export type ResolvedPreset = {
 };
 
 export type InstallResult = {
-  outcome: "installed" | "cancelled" | "winget-unavailable" | "prerequisite-required" | "failed";
+  outcome: "installed" | "cancelled" | "winget-unavailable" | "npm-unavailable" | "prerequisite-required" | "failed";
   message: string;
   vendorUrl?: string;
   prerequisiteId?: "node";

@@ -33,38 +33,63 @@ func CurrentActivity(tool session.Harness, harnessSessionID string, now time.Tim
 		return ""
 	}
 	item, ok := manifest.Get(string(tool))
-	if !ok || item.Activity != "copilot-events" {
+	if !ok {
 		return ""
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
+	switch item.Activity {
+	case "copilot-events":
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		lines, ok := readActivityTail(filepath.Join(home, ".copilot", "session-state", harnessSessionID, "events.jsonl"))
+		if !ok {
+			return ""
+		}
+		return copilotActivityFromLines(lines, now)
+	case "codex-rollout":
+		path := CodexRolloutFile(harnessSessionID)
+		if path == "" {
+			return ""
+		}
+		lines, ok := readActivityTail(path)
+		if !ok {
+			return ""
+		}
+		return codexActivityFromLines(lines, now)
+	case "gsd-jsonl":
+		lines, ok := readActivityTail(GSDSessionPath(harnessSessionID))
+		if !ok {
+			return ""
+		}
+		return gsdActivityFromLines(lines, now)
+	default:
 		return ""
 	}
-	return copilotActivity(filepath.Join(home, ".copilot", "session-state", harnessSessionID, "events.jsonl"), now)
 }
 
-func copilotActivity(path string, now time.Time) string {
+func readActivityTail(path string) ([][]byte, bool) {
 	file, err := os.Open(path)
 	if err != nil {
-		return ""
+		return nil, false
 	}
 	defer file.Close()
 	info, err := file.Stat()
 	if err != nil {
-		return ""
+		return nil, false
 	}
 	start := info.Size() - activityTailBytes
 	if start < 0 {
 		start = 0
 	}
 	if _, err := file.Seek(start, io.SeekStart); err != nil {
-		return ""
+		return nil, false
 	}
 	data, err := io.ReadAll(file)
 	if err != nil {
-		return ""
+		return nil, false
 	}
-	return copilotActivityFromLines(bytes.Split(data, []byte("\n")), now)
+	return bytes.Split(data, []byte("\n")), true
 }
 
 // copilotActivityFromLines walks the lifecycle events: a user message, a turn
@@ -91,6 +116,91 @@ func copilotActivityFromLines(lines [][]byte, now time.Time) string {
 		case "assistant.turn_end":
 			next = ActivityIdle
 		default:
+			continue
+		}
+		stamp, err := time.Parse(time.RFC3339Nano, entry.Timestamp)
+		if err != nil {
+			continue
+		}
+		state, lastEvent = next, stamp
+	}
+	if state == ActivityIdle && now.Sub(lastEvent) < copilotTurnGap {
+		return ActivityWorking
+	}
+	return state
+}
+
+func codexActivityFromLines(lines [][]byte, now time.Time) string {
+	state, lastEvent := "", time.Time{}
+	for _, line := range lines {
+		line = bytes.TrimSpace(line)
+		if len(line) == 0 {
+			continue
+		}
+		var entry struct {
+			Type      string `json:"type"`
+			Timestamp string `json:"timestamp"`
+			Payload   struct {
+				Type string `json:"type"`
+			} `json:"payload"`
+		}
+		if json.Unmarshal(line, &entry) != nil || entry.Type != "event_msg" {
+			continue
+		}
+		var next string
+		switch entry.Payload.Type {
+		case "task_started":
+			next = ActivityWorking
+		case "task_complete":
+			next = ActivityIdle
+		default:
+			continue
+		}
+		stamp, err := time.Parse(time.RFC3339Nano, entry.Timestamp)
+		if err != nil {
+			continue
+		}
+		state, lastEvent = next, stamp
+	}
+	if state == ActivityIdle && now.Sub(lastEvent) < copilotTurnGap {
+		return ActivityWorking
+	}
+	return state
+}
+
+func gsdActivityFromLines(lines [][]byte, now time.Time) string {
+	state, lastEvent := "", time.Time{}
+	for _, line := range lines {
+		line = bytes.TrimSpace(line)
+		if len(line) == 0 {
+			continue
+		}
+		var entry struct {
+			Type      string `json:"type"`
+			Timestamp string `json:"timestamp"`
+			Message   struct {
+				Role       string `json:"role"`
+				StopReason string `json:"stopReason"`
+			} `json:"message"`
+		}
+		if json.Unmarshal(line, &entry) != nil || entry.Type != "message" {
+			continue
+		}
+		var next string
+		switch entry.Message.Role {
+		case "user", "tool":
+			next = ActivityWorking
+		case "assistant":
+			if entry.Message.StopReason == "toolUse" {
+				next = ActivityWorking
+			} else if entry.Message.StopReason == "stop" || entry.Message.StopReason == "length" ||
+				entry.Message.StopReason == "error" || entry.Message.StopReason == "aborted" {
+				next = ActivityIdle
+			}
+		default:
+			continue
+		}
+		if next == "" {
 			continue
 		}
 		stamp, err := time.Parse(time.RFC3339Nano, entry.Timestamp)

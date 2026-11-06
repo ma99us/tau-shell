@@ -28,14 +28,14 @@ type Manifest struct {
 	Capabilities []Capability `yaml:"capabilities" json:"-"`
 	Launch       Launch       `yaml:"launch" json:"-"`
 	Session      Session      `yaml:"session" json:"-"`
-	// ResumeCheck, Model, Title and PhoneAnswer name built-in readers; an
-	// empty name means the harness does not offer that feature.
+	// ResumeCheck, Model, Activity, Title and PhoneAnswer name built-in readers;
+	// an empty name means the harness does not offer that feature.
 	ResumeCheck  string      `yaml:"resume_check,omitempty" json:"-"`
 	GracefulExit []ExitStep  `yaml:"graceful_exit,omitempty" json:"-"`
 	Widgets      *Widgets    `yaml:"widgets,omitempty" json:"-"`
 	Cues         []Cue       `yaml:"cues,omitempty" json:"cues"`
 	Model        string      `yaml:"model,omitempty" json:"-"`
-	Activity     string      `yaml:"activity,omitempty" json:"-"`
+	Activity     string      `yaml:"activity,omitempty" json:"activity,omitempty"`
 	Title        string      `yaml:"title,omitempty" json:"-"`
 	Usage        Usage       `yaml:"usage,omitempty" json:"-"`
 	Skills       Skills      `yaml:"skills,omitempty" json:"-"`
@@ -125,8 +125,18 @@ type Usage struct {
 }
 
 type Skills struct {
+	// PluginDirOption is retained for existing manifests; new routes can use
+	// DirectoryOption for any harness-specific skill directory.
 	PluginDirOption string   `yaml:"plugin_dir_option,omitempty"`
+	DirectoryOption string   `yaml:"directory_option,omitempty"`
 	PersonalDirs    []string `yaml:"personal_dirs,omitempty"`
+}
+
+func (skills Skills) SkillDirOption() string {
+	if skills.DirectoryOption != "" {
+		return skills.DirectoryOption
+	}
+	return skills.PluginDirOption
 }
 
 type ConfigFile struct {

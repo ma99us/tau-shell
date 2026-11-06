@@ -82,8 +82,8 @@
       "--help"
     ],
     "Minimum": "",
-    "TestedFrom": "0.165.0",
-    "TestedBefore": "0.166.0",
+    "TestedFrom": "0.166.0",
+    "TestedBefore": "0.167.0",
     "Capabilities": [
       {
         "name": "Resume a conversation",
@@ -102,16 +102,8 @@
           "text": "/compact"
         },
         {
-          "label": "New conversation",
-          "text": "/new"
-        },
-        {
           "label": "Show status",
           "text": "/status"
-        },
-        {
-          "label": "Help",
-          "text": "/help"
         }
       ],
       "models": [],
@@ -119,7 +111,7 @@
         "\u001b"
       ],
       "compactText": "/compact",
-      "clearText": "/new"
+      "clearText": ""
     },
     "Companions": null,
     "Install": {
@@ -222,6 +214,11 @@
       {
         "name": "Select a model",
         "option": "--model",
+        "optional": true
+      },
+      {
+        "name": "Set a thinking level",
+        "option": "--thinking",
         "optional": true
       }
     ],

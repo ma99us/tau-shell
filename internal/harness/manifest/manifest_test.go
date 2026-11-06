@@ -51,6 +51,8 @@ func TestDecodeRejectsInvalidUserManifests(t *testing.T) {
 		"missing resume":      {replace(`  resume_args: ["--resume", "{id}"]`, ""), "session.resume_args"},
 		"unknown placeholder": {replace("{id}\"]\ninstall", "{secret}\"]\ninstall"), "placeholder"},
 		"unknown reader":      {validUser + "model: nope\n", "unknown reader"},
+		"two skills routes":   {validUser + "skills:\n  plugin_dir_option: --plugin-dir\n  directory_option: --add-dir\n", "mutually exclusive"},
+		"bad skills route":    {validUser + "skills:\n  directory_option: add-dir\n", "must start with --"},
 		"http vendor":         {replace("https://example.com/demo", "http://example.com/demo"), "https"},
 		"winget for user":     {replace("  vendor_url: https://example.com/demo", "  vendor_url: https://example.com/demo\n  winget_id: A.B"), "built-in"},
 		"vendor mark":         {replace("mark: monogram", "mark: claude"), "monogram"},
@@ -70,6 +72,9 @@ func TestDecodeRejectsInvalidUserManifests(t *testing.T) {
 	}
 	if _, err := Decode([]byte(validUser), false); err != nil {
 		t.Fatalf("valid user manifest rejected: %v", err)
+	}
+	if _, err := Decode([]byte(validUser+"skills:\n  directory_option: --add-dir\n"), false); err != nil {
+		t.Fatalf("valid skill route rejected: %v", err)
 	}
 }
 

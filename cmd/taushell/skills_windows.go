@@ -95,7 +95,7 @@ type SkillRow struct {
 type SkillsView struct {
 	Status skills.Status `json:"status"`
 	Skills []SkillRow    `json:"skills"`
-	// Unsupported lists installed tools whose version has no --plugin-dir.
+	// Unsupported lists installed tools whose version lacks its skill-directory option.
 	Unsupported []string `json:"unsupported,omitempty"`
 }
 
@@ -109,7 +109,7 @@ func (application *App) skillsView(ctx context.Context) SkillsView {
 	view := SkillsView{Status: application.skills.Status(), Skills: []SkillRow{}}
 	index := map[string]int{}
 	for _, item := range manifest.All() {
-		if item.Skills.PluginDirOption == "" {
+		if item.Skills.SkillDirOption() == "" {
 			continue
 		}
 		tool := session.Harness(item.ID)
@@ -128,7 +128,7 @@ func (application *App) skillsView(ctx context.Context) SkillsView {
 		if err != nil {
 			continue
 		}
-		if executable, err := adapter.FindExecutable(); err == nil && !harness.SupportsPluginDir(ctx, executable, item.Skills.PluginDirOption) {
+		if executable, err := adapter.FindExecutable(); err == nil && !harness.SupportsSkillDirectoryOption(ctx, executable, item.Skills.SkillDirOption()) {
 			view.Unsupported = append(view.Unsupported, string(tool))
 		}
 	}

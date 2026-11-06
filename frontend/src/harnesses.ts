@@ -16,6 +16,7 @@ export type HarnessInfo = {
   short: string;
   executable: string;
   cues?: HarnessCue[];
+  activity?: string;
   phoneAnswer?: string;
   brand: { mark: string; text?: string; color?: string };
   builtin: boolean;
@@ -42,6 +43,7 @@ export const findHarness = (id: string) => registry.find((harness) => harness.id
 export const harnessName = (id: string) => findHarness(id)?.name ?? id;
 export const harnessShort = (id: string) => findHarness(id)?.short ?? id;
 export const isHarness = (id: string) => findHarness(id) !== undefined;
+export const hasActivityReader = (id: string) => !!findHarness(id)?.activity;
 
 // Patterns were validated by the host; one this engine cannot compile is skipped.
 export function cuePattern(cue: HarnessCue): RegExp | null {

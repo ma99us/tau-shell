@@ -48,12 +48,12 @@ func (application *App) installer() tools.Installer {
 		Confirm:   application.confirmInstall,
 		RunWinget: tools.RunWingetInConsole,
 		RunNpm:    tools.RunNpmInConsole,
-		RunManaged: func(ctx context.Context, spec tools.Spec) (string, error) {
+		RunManaged: func(ctx context.Context, spec tools.Spec, version string) (string, error) {
 			layout, err := tools.ManagedToolLayoutFromEnvironment()
 			if err != nil {
 				return "", err
 			}
-			return tools.InstallManagedTool(ctx, layout, spec)
+			return tools.InstallManagedToolVersion(ctx, layout, spec, version)
 		},
 		ConfirmUpdate: application.confirmUpdate,
 		RefreshPath:   tools.RefreshProcessPath,

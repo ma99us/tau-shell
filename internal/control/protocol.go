@@ -84,7 +84,7 @@ type WaitArgs struct {
 
 // WaitResult says whether the state was reached within this request.
 type WaitResult struct {
-	Matched  bool             `json:"matched"`
+	Matched  bool            `json:"matched"`
 	Activity agentstate.View `json:"activity"`
 }
 
@@ -153,6 +153,8 @@ type SessionInfo struct {
 	WorkingDir  string          `json:"workingDir"`
 	Color       string          `json:"color,omitempty"`
 	LastError   string          `json:"lastError,omitempty"`
+	TotalUSD    float64         `json:"totalUsd"`
+	Unpriced    bool            `json:"unpriced"`
 	Activity    agentstate.View `json:"activity"`
 }
 

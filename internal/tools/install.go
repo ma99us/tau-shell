@@ -13,6 +13,7 @@ const (
 	InstallSucceeded            InstallOutcome = "installed"
 	InstallCancelled            InstallOutcome = "cancelled"
 	InstallWingetUnavailable    InstallOutcome = "winget-unavailable"
+	InstallNpmUnavailable       InstallOutcome = "npm-unavailable"
 	InstallPrerequisiteRequired InstallOutcome = "prerequisite-required"
 	InstallFailed               InstallOutcome = "failed"
 )
@@ -33,9 +34,9 @@ type Installer struct {
 	Confirm    func(spec Spec) (bool, error)
 	RunWinget  func(ctx context.Context, winget string, args []string) error
 	RunNpm     func(ctx context.Context, args []string) error
-	RunManaged func(ctx context.Context, spec Spec) (string, error)
+	RunManaged func(ctx context.Context, spec Spec, version string) (string, error)
 	// ConfirmUpdate asks the user before an upgrade; only Upgrade uses it.
-	ConfirmUpdate func(spec Spec, available string) (bool, error)
+	ConfirmUpdate func(spec Spec, available string, current Status) (bool, error)
 	// RefreshPath picks up PATH entries added by the installer.
 	RefreshPath func() error
 	Detect      func(ctx context.Context, spec Spec) Status
@@ -94,7 +95,7 @@ func (installer Installer) Install(ctx context.Context, id ID) (InstallResult, e
 		if installer.RunManaged == nil {
 			return InstallResult{}, fmt.Errorf("no managed installer is configured for %s", spec.Name)
 		}
-		message, runErr := installer.RunManaged(ctx, spec)
+		message, runErr := installer.RunManaged(ctx, spec, "")
 		var refreshErr error
 		if installer.RefreshPath != nil {
 			refreshErr = installer.RefreshPath()
@@ -112,6 +113,9 @@ func (installer Installer) Install(ctx context.Context, id ID) (InstallResult, e
 	}
 	winget, err := installer.LookPath(executable)
 	if err != nil {
+		if label == "npm" {
+			return InstallResult{Outcome: InstallNpmUnavailable, Message: "npm is not available.", VendorURL: spec.Install.VendorURL}, nil
+		}
 		return InstallResult{
 			Outcome:   InstallWingetUnavailable,
 			Message:   fmt.Sprintf("%s is not available. Install %s using the official setup instructions.", label, spec.Name),

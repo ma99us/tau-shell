@@ -91,6 +91,33 @@ func TestSendDeliversWhenIdleHeldAndRejectsBadInput(t *testing.T) {
 	}
 }
 
+func TestMobileSendSubmitsDuringConfirmedWorkButStillProtectsPrompts(t *testing.T) {
+	sessions, states, delivered := sessionsWith(true)
+	states.Report("s1", agentstate.Working, agentstate.Cue, false)
+	if response := sessions.HandleSend(sendArgs(t, "desktop send", false)); response.OK {
+		t.Fatal("local control send should continue refusing during work")
+	}
+	if response := sessions.HandleMobileSend(sendArgs(t, "phone send", false)); !response.OK || len(*delivered) != 1 {
+		t.Fatalf("mobile send should submit during confirmed work: %+v delivered=%v", response, *delivered)
+	}
+
+	states.Report("s1", agentstate.Idle, agentstate.Cue, true)
+	time.Sleep(agentstate.IdleFor + 10*time.Millisecond)
+	states.Report("s1", agentstate.Idle, agentstate.Cue, true)
+	if response := sessions.HandleMobileSend(sendArgs(t, "phone with existing draft", false)); !response.OK || len(*delivered) != 2 {
+		t.Fatalf("mobile send should submit alongside an existing draft: %+v delivered=%v", response, *delivered)
+	}
+
+	states.Report("s1", agentstate.Input, agentstate.Cue, false)
+	if response := sessions.HandleMobileSend(sendArgs(t, "permission text", false)); response.OK ||
+		response.Error.Code != CodeRefused || !strings.Contains(response.Error.Message, "waiting for an answer") {
+		t.Fatalf("mobile send must not type into a permission prompt: %+v", response)
+	}
+	if len(*delivered) != 2 {
+		t.Fatalf("permission prompt text was delivered: %v", *delivered)
+	}
+}
+
 func TestWaitMatchesOnlyConfirmedState(t *testing.T) {
 	sessions, states, _ := sessionsWith(true)
 	states.Report("s1", agentstate.Working, agentstate.Cue, false)

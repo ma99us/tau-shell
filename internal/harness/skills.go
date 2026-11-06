@@ -9,29 +9,27 @@ import (
 	"time"
 )
 
-// PluginDirArgs returns the arguments that load a plugin folder for one
-// launch. The option comes from the harness manifest; the folder is a
-// separate value.
-func PluginDirArgs(option, dir string) []string {
+// SkillDirectoryArgs attaches a harness-specific skill folder for one launch.
+func SkillDirectoryArgs(option, dir string) []string {
 	return []string{option, dir}
 }
 
 var (
-	pluginProbeMu    sync.Mutex
-	pluginProbeCache = map[string]bool{}
+	skillOptionProbeMu    sync.Mutex
+	skillOptionProbeCache = map[string]bool{}
 )
 
-// SupportsPluginDir reports whether the harness executable lists the option
+// SupportsSkillDirectoryOption reports whether the executable lists the option
 // in its help output. The answer is cached per executable file version and
 // option so an upgrade is probed again.
-func SupportsPluginDir(ctx context.Context, executable, option string) bool {
+func SupportsSkillDirectoryOption(ctx context.Context, executable, option string) bool {
 	key := executable + "|" + option
 	if info, err := os.Stat(executable); err == nil {
 		key += "|" + info.ModTime().UTC().Format(time.RFC3339Nano)
 	}
-	pluginProbeMu.Lock()
-	supported, known := pluginProbeCache[key]
-	pluginProbeMu.Unlock()
+	skillOptionProbeMu.Lock()
+	supported, known := skillOptionProbeCache[key]
+	skillOptionProbeMu.Unlock()
 	if known {
 		return supported
 	}
@@ -44,8 +42,8 @@ func SupportsPluginDir(ctx context.Context, executable, option string) bool {
 		return false
 	}
 	supported = strings.Contains(string(output), option)
-	pluginProbeMu.Lock()
-	pluginProbeCache[key] = supported
-	pluginProbeMu.Unlock()
+	skillOptionProbeMu.Lock()
+	skillOptionProbeCache[key] = supported
+	skillOptionProbeMu.Unlock()
 	return supported
 }

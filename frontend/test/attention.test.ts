@@ -3,8 +3,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import type { Terminal } from "@xterm/xterm";
-import { answerPlan, attentionEdge, composeInjection, controlSendPlan, copilotPermission, hasCueSignal, highlightedIsYes, nextActivity, promptKind, readHarnessSignal, reportedState, staleWorkingMs, workingWindowMs } from "../src/attention.ts";
-import { setHarnesses, type HarnessInfo } from "../src/harnesses.ts";
+import { answerPlan, attentionEdge, composeInjection, controlSendPlan, copilotPermission, hasCueSignal, highlightedIsYes, nextActivity, planSend, promptKind, readHarnessSignal, reportedState, staleWorkingMs, workingWindowMs } from "../src/attention.ts";
+import { hasActivityReader, setHarnesses, type HarnessInfo } from "../src/harnesses.ts";
 
 // The same JSON the host serves; a Go test keeps it equal to the built-in manifests.
 setHarnesses(JSON.parse(readFileSync(new URL("./fixtures/harnesses.json", import.meta.url), "utf8")) as HarnessInfo[]);
@@ -13,6 +13,7 @@ test("cues and phone answers come from the manifests", () => {
   assert.equal(hasCueSignal("claude-code"), true);
   assert.equal(hasCueSignal("copilot-cli"), true);
   assert.equal(hasCueSignal("gsd"), false);
+  assert.equal(hasActivityReader("gsd"), true);
   assert.equal(hasCueSignal("unknown-harness"), false);
   assert.equal(readHarnessSignal("gsd", fakeTerminal(["", "? help"]), "\u2733"), undefined);
   assert.match(answerPlan("gsd", undefined, "", "yes").reason, /only verified/);
@@ -51,7 +52,7 @@ test("reportedState marks only harness cues as cue and stale working as unknown"
   assert.deepEqual(reportedState(undefined, quiet), { state: "idle", source: "heuristic" });
 });
 
-test("controlSendPlan refuses unreadable, waiting, busy and drafted screens", () => {
+test("controlSendPlan refuses unsafe control sends and allows explicit mobile sends during work", () => {
   assert.equal(controlSendPlan(undefined, false, "").allowed, false);
   assert.equal(controlSendPlan("input", false, "").allowed, false);
   assert.equal(controlSendPlan("working", true, "").allowed, false);
@@ -59,6 +60,9 @@ test("controlSendPlan refuses unreadable, waiting, busy and drafted screens", ()
   assert.equal(controlSendPlan("idle", true, "").allowed, true);
   assert.equal(controlSendPlan("working", false, "draft").allowed, true);
   assert.equal(controlSendPlan("input", true, "", true).allowed, true);
+  assert.equal(controlSendPlan("working", true, "", false, true).allowed, true);
+  assert.equal(controlSendPlan("idle", true, "half typed", false, true).allowed, true);
+  assert.equal(controlSendPlan("input", true, "", false, true).allowed, false);
 });
 
 test("promptKind separates permission prompts from questions on verified harnesses only", () => {
@@ -120,6 +124,12 @@ test("cue tools ignore output timing when the cue is missing", () => {
   assert.equal(nextActivity(idle, undefined, now - 10, now, false, false).working, true);
 });
 
+test("activity readers ignore idle redraws and trust their working state", () => {
+  const now = 100_000;
+  assert.equal(nextActivity(idle, undefined, now - 10, now, false, false, true).working, false);
+  assert.equal(nextActivity(idle, "working", undefined, now, false, false, true).working, true);
+});
+
 test("without a cue, recent output means working", () => {
   const now = 100_000;
   assert.equal(nextActivity(idle, undefined, now - workingWindowMs + 1, now, false).working, true);
@@ -144,7 +154,12 @@ test("alerts fire once on edges", () => {
 });
 
 test("injected text joins the draft", () => {
+  assert.equal(planSend("idle", true, "existing prompt"), "insert");
+  assert.equal(planSend("idle", true, ""), "submit");
   assert.equal(composeInjection("", "/compact", true), "/compact");
+  assert.equal(composeInjection("existing prompt", "/compact", false), "existing prompt /compact");
+  assert.equal(composeInjection("existing prompt", "/model gpt-6-luna", true), "existing prompt /model gpt-6-luna");
+  assert.equal(composeInjection("existing prompt ", "/compact", false), "existing prompt /compact");
   assert.equal(composeInjection("fix it", "add tests", true), ". add tests");
   assert.equal(composeInjection("", "review", false), "review. ");
 });

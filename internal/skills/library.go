@@ -2,7 +2,9 @@ package skills
 
 import (
 	"context"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -315,7 +317,7 @@ func (l *Library) Presets() []presets.Preset {
 // Prepare materializes the enabled skills for a harness and returns the
 // plugin folder, or "" when there is nothing to load. Skills the user already
 // has personally are left out so their copy wins.
-func (l *Library) Prepare(harness string) (dir string, names []string, warnings []string, err error) {
+func (l *Library) Prepare(harness, launchToken string) (dir string, names []string, warnings []string, err error) {
 	if !l.config.Enabled {
 		return "", nil, nil, nil
 	}
@@ -331,7 +333,17 @@ func (l *Library) Prepare(harness string) (dir string, names []string, warnings 
 		chosen = append(chosen, skill)
 		names = append(names, skill.Name)
 	}
-	dir, warnings, err = Materialize(filepath.Join(l.dir, "plugins", harness), chosen)
+	root := filepath.Join(l.dir, "plugins", harness)
+	if harness == "codex" {
+		if launchToken == "" {
+			return "", names, warnings, errors.New("Codex skill preparation requires a launch token")
+		}
+		launchHash := sha256.Sum256([]byte(launchToken))
+		root = filepath.Join(l.dir, "plugins", "codex-"+hex.EncodeToString(launchHash[:8]))
+		dir, warnings, err = MaterializeAgentSkills(root, chosen)
+	} else {
+		dir, warnings, err = Materialize(root, chosen)
+	}
 	return dir, names, warnings, err
 }
 

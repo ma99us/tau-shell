@@ -169,23 +169,32 @@ replace quotas. Verified in the real window with live numbers.
 
 ## Later phases
 
-### Postponed: GSD, OpenCode and Codex verification gaps
+### Remaining: harness live verification gaps
 
-**Postponed by decision (2026-11-02); not being worked on now.** Launch, resume
-ID discovery, graceful stop and restore are verified live for GSD and OpenCode
-(see `21-engineering-handoff.md`). These items stay open and cannot be closed
-without model access or an account:
+Launch, resume ID discovery, graceful stop and restore are verified live for
+GSD, OpenCode and Codex 0.166.0 (see `21-engineering-handoff.md`). Codex's
+TauShell skill route and working/idle activity are also verified live.
+GSD 1.18.0 additionally passed live thinking/model detection, usage recording,
+working/idle activity, model-picker selection, successful compaction, and
+single-Escape interruption. Its install is below the manifest-tested range
+(1.22.0 to 1.23.0). A disposable native project-skill probe returned its
+sentinel once but was inconsistent; rerun it only with
+`TAUSHELL_LIVE_GSD_SKILLS=1`, since an undiscovered skill can trigger broad
+filesystem searches.
+Remaining work:
 
 | Gap | Applies to | Blocker |
 |---|---|---|
-| Model replies and usage/cost ingestion not proven live | GSD, OpenCode | The Copilot gateway rejected GSD's models and OpenCode's free model returned Forbidden from this network. Needs a working provider key. |
-| Everything live (launch, resume ID, stop, restore, rollout format, usage) | Codex | Not signed in; needs an OpenAI sign-in or API key. |
-| Attention cues (working / input / idle) | GSD, OpenCode, Codex | Cues must be captured while a model turn runs, so they need working model access. Until then they use output-timing fallback (`hasCueSignal` in `frontend/src/attention.ts` is false for them). |
-| Interrupt keys | GSD, OpenCode, Codex | Needs a running model turn to interrupt. |
-| Per-launch skills | GSD, OpenCode, Codex | No skill option appears in their `--help`, so no verified route exists to wire. |
+| Alternate-model reply / OpenCode model reply and usage not proven live | GSD, OpenCode | GSD's alternate-model selection changed the recorded model, but its follow-up reply was not verified. OpenCode's free model returned Forbidden from this network; needs a working provider key. |
+| Attention cues (working / input / idle) | OpenCode | Cues must be captured while a model turn runs, so they need working model access. Until then they use output-timing fallback (`hasCueSignal` in `frontend/src/attention.ts` is false). |
+| Interrupt keys | OpenCode | Needs a running model turn to interrupt. GSD and Codex single-Esc interruption were verified against controlled running tool calls. |
+| End-to-end skill response | GSD, OpenCode | GSD native project-skill loading was inconsistent; OpenCode has no verified per-launch skill route. |
+| Start a distinct Codex conversation with `/new` | Codex | The live probe did not establish that `/new` starts a new conversation, so it is not exposed as a widget. |
 
-Pick these up together when provider access is available. Probe with
+Use the opt-in probe
 `TAUSHELL_LIVE=gsd|opencode|codex go test ./internal/sessionhost -run TestLiveHarness -v`.
+Set `TAUSHELL_LIVE_GSD_SKILLS=1` to additionally run the disposable GSD
+project-skill probe.
 
 ### Deferred alternative spike: direct ConPTY harness launch
 

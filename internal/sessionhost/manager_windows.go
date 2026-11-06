@@ -132,7 +132,7 @@ func (manager *Manager) launchEnvironment(config session.Config) (map[string]str
 // SkillProvider supplies the plugin folder holding TauShell's skills for a
 // harness. It never needs to succeed for a session to launch.
 type SkillProvider interface {
-	Prepare(harness string) (dir string, names, warnings []string, err error)
+	Prepare(harness, launchToken string) (dir string, names, warnings []string, err error)
 }
 
 // SetSkills enables loading TauShell's skill library into new launches.
@@ -142,11 +142,11 @@ func (manager *Manager) SetSkills(provider SkillProvider) {
 	manager.skills = provider
 }
 
-// skillArgs returns the --plugin-dir arguments for one launch, or nil when
+// skillArgs returns the skill-directory arguments for one launch, or nil when
 // skills are off, unsupported, or unavailable. Problems are logged, never
 // fatal. Skill-provider access is copied under manager.mu; probing and
 // preparation deliberately run without the global manager lock.
-func (manager *Manager) skillArgs(ctx context.Context, adapter harness.Adapter, config session.Config, executable string) []string {
+func (manager *Manager) skillArgs(ctx context.Context, adapter harness.Adapter, config session.Config, executable, launchToken string) []string {
 	manager.mu.Lock()
 	provider := manager.skills
 	manager.mu.Unlock()
@@ -160,12 +160,12 @@ func (manager *Manager) skillArgs(ctx context.Context, adapter harness.Adapter, 
 	if !ok {
 		return nil
 	}
-	option := item.Skills.PluginDirOption
-	if !harness.SupportsPluginDir(ctx, executable, option) {
-		diagnostics.Warn("harness does not support --plugin-dir; launching without TauShell skills", errors.New("unsupported flag"), "tool", config.Tool)
+	option := item.Skills.SkillDirOption()
+	if !harness.SupportsSkillDirectoryOption(ctx, executable, option) {
+		diagnostics.Warn("harness does not support its skill-directory option; launching without TauShell skills", errors.New("unsupported flag"), "tool", config.Tool, "option", option)
 		return nil
 	}
-	dir, names, warnings, err := provider.Prepare(string(config.Tool))
+	dir, names, warnings, err := provider.Prepare(string(config.Tool), launchToken)
 	if err != nil {
 		diagnostics.Warn("prepare TauShell skills failed; launching without them", err, "tool", config.Tool)
 		return nil
@@ -176,8 +176,8 @@ func (manager *Manager) skillArgs(ctx context.Context, adapter harness.Adapter, 
 	if dir == "" {
 		return nil
 	}
-	diagnostics.Info("TauShell skills attached", "session_id", config.ID, "tool", config.Tool, "plugin_dir", dir, "skills", strings.Join(names, ","))
-	return harness.PluginDirArgs(option, dir)
+	diagnostics.Info("TauShell skills attached", "session_id", config.ID, "tool", config.Tool, "skill_dir", dir, "skills", strings.Join(names, ","))
+	return harness.SkillDirectoryArgs(option, dir)
 }
 
 func New(configDirectory, databasePath string, emit func(Event)) (*Manager, error) {
@@ -529,7 +529,7 @@ func (manager *Manager) start(ctx context.Context, id string, restoring, fresh b
 	}
 	launchedAt := time.Now()
 	args := adapter.Argv(config.LaunchArgs, restoring, runtime.HarnessSessionID)
-	args = append(args, manager.skillArgs(ctx, adapter, config, harnessExecutable)...)
+	args = append(args, manager.skillArgs(ctx, adapter, config, harnessExecutable, runtime.LaunchToken)...)
 	command := harness.PowerShellInvocation(harnessExecutable, args, config.UTF8Enabled())
 	if columns < 2 || rows < 2 {
 		columns, rows = 80, 24

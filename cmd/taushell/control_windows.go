@@ -141,8 +141,13 @@ func (application *App) controlSessions() control.Sessions {
 			if err != nil {
 				return nil, err
 			}
+			usageSummary, usageErr := application.manager.UsageSummary(ctx)
+			if usageErr != nil {
+				diagnostics.Warn("phone session usage unavailable", usageErr)
+			}
 			infos := make([]control.SessionInfo, 0, len(snapshots))
 			for _, snapshot := range snapshots {
+				sessionUsage := usageSummary.Sessions[snapshot.ID]
 				infos = append(infos, control.SessionInfo{
 					ID:          snapshot.ID,
 					Name:        snapshot.Name,
@@ -152,6 +157,8 @@ func (application *App) controlSessions() control.Sessions {
 					WorkingDir:  snapshot.WorkingDir,
 					Color:       snapshot.Color,
 					LastError:   snapshot.LastError,
+					TotalUSD:    sessionUsage.USD,
+					Unpriced:    sessionUsage.Unpriced,
 				})
 			}
 			return infos, nil
@@ -174,6 +181,10 @@ func (application *App) controlSessions() control.Sessions {
 		Deliver: func(id, text string, submit bool) error {
 			// The window types through xterm so input accounting matches real typing.
 			application.emit("control-send", map[string]any{"id": id, "text": text, "submit": submit})
+			return nil
+		},
+		DeliverMobile: func(id, text string, submit bool) error {
+			application.emit("control-send", map[string]any{"id": id, "text": text, "submit": submit, "allowBusySubmit": true})
 			return nil
 		},
 	}
@@ -257,4 +268,3 @@ func (application *App) GetControlStatus() ControlStatus {
 	}
 	return status
 }
-

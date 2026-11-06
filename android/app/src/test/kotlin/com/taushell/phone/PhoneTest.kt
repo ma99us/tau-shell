@@ -76,7 +76,7 @@ class ParseTest {
     @Test
     fun readsSessionsAndActivity() {
         val json = """{"ok":true,"data":[{"id":"s1","name":"API","tool":"copilot-cli","status":"running","runningHere":true,
-            "workingDir":"C:\\p\\api-server","color":"#4f8cff","activity":{"state":"idle","confirmed":true,"hasDraft":false,"ageMs":5,"sinceMs":9}},
+            "workingDir":"C:\\p\\api-server","color":"#4f8cff","totalUsd":1.25,"unpriced":true,"activity":{"state":"idle","confirmed":true,"hasDraft":false,"ageMs":5,"sinceMs":9}},
             {"id":"s2","name":"Old","tool":"gsd","status":"stopped","runningHere":false,"workingDir":"","activity":{"state":"stopped","confirmed":false,"ageMs":0,"sinceMs":0}}]}"""
         val result = Parse.sessions(json) as Result.Ok
         assertEquals(2, result.value.size)
@@ -84,6 +84,10 @@ class ParseTest {
         assertTrue(result.value[0].activity.confirmed)
         assertEquals("Idle", Labels.state(result.value[0]))
         assertEquals("Stopped", Labels.state(result.value[1]))
+        assertEquals(1.25, result.value[0].totalUsd)
+        assertEquals(true, result.value[0].unpriced)
+        assertEquals(null, result.value[1].totalUsd)
+        assertEquals("Est. $1.25+", Labels.totalSpent(result.value[0]))
         assertEquals("AS", Labels.initials(result.value[0]))
     }
 
@@ -111,6 +115,24 @@ class ParseTest {
     fun parsesPcPresets() {
         assertEquals(listOf("Run the tests"), (Parse.presets("""{"ok":true,"data":{"presets":["Run the tests"," "]}}""") as Result.Ok).value)
         assertEquals(emptyList<String>(), (Parse.presets("""{"ok":true,"data":{"presets":[]}}""") as Result.Ok).value)
+    }
+
+    @Test
+    fun parsesSessionPresetsWithSubmitAndSourceMetadata() {
+        val result = Parse.sessionPresets(
+            """{"ok":true,"data":{"presets":[
+                {"name":"Review","text":"Review the app","submit":true},
+                {"name":"Draft","text":"Draft a reply","submit":false,"remote":true},
+                {"name":" ","text":"ignored"}
+            ]}}""",
+        ) as Result.Ok
+        assertEquals(
+            listOf(
+                PromptPreset("Review", "Review the app", true, false),
+                PromptPreset("Draft", "Draft a reply", false, true),
+            ),
+            result.value,
+        )
     }
 
     @Test

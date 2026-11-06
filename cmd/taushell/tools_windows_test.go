@@ -104,3 +104,40 @@ func TestNpmHarnessConfirmationDisclosesLifecycleScripts(t *testing.T) {
 		}
 	}
 }
+
+func TestUpdateConfirmationsIncludeTargetAndNpmLifecycleWarning(t *testing.T) {
+	for _, test := range []struct {
+		id   tools.ID
+		want []string
+	}{
+		{tools.NodeJS, []string{"26.14.0", "signed SHA-256 manifest", "per-user managed version"}},
+		{tools.Git, []string{"2.56.0.windows.4", "SHA-256", "per-user managed version"}},
+		{tools.Codex, []string{"0.166.0", `npm install --global --prefix C:\Users\me\npm @openai/codex@0.166.0`, "lifecycle scripts as your user"}},
+	} {
+		t.Run(string(test.id), func(t *testing.T) {
+			var shown runtime.MessageDialogOptions
+			application := &App{
+				showMessageDialog: func(_ context.Context, options runtime.MessageDialogOptions) (string, error) {
+					shown = options
+					return "No", nil
+				},
+			}
+			spec, ok := tools.Lookup(test.id)
+			if !ok {
+				t.Fatalf("tool %s was not found", test.id)
+			}
+			confirmed, err := application.confirmUpdate(spec, test.want[0], tools.Status{ExecutablePath: `C:\Users\me\npm\codex.cmd`})
+			if err != nil || confirmed {
+				t.Fatalf("confirmation = %v, err %v", confirmed, err)
+			}
+			if shown.DefaultButton != "No" || shown.CancelButton != "No" {
+				t.Fatalf("confirmation defaults = %+v", shown)
+			}
+			for _, want := range test.want[1:] {
+				if !strings.Contains(shown.Message, want) {
+					t.Errorf("confirmation missing %q:\n%s", want, shown.Message)
+				}
+			}
+		})
+	}
+}

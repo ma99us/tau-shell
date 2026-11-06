@@ -1,6 +1,6 @@
 import { Fragment, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { app, HarnessWidgets, ResolvedPreset, Session } from "./bridge";
-import { hasCueSignal, type HarnessSignal } from "./attention";
+import { hasCueSignal, type SendPlan } from "./attention";
 import { QueuePanel, useQueueLength } from "./queuePanel";
 import { Icon } from "./icons";
 
@@ -8,13 +8,6 @@ import { Icon } from "./icons";
 //  - "blocked": a permission/selection prompt is open; typed text could answer it.
 //  - "submit": the harness is idle, so type the text and press Enter.
 //  - "insert": type the text only; the user presses Enter when ready.
-export type SendPlan = "blocked" | "submit" | "insert";
-
-export function planSend(signal: HarnessSignal, submit: boolean): SendPlan {
-  if (signal === "input") return "blocked";
-  return submit && signal === "idle" ? "submit" : "insert";
-}
-
 export function sendNotice(plan: SendPlan, label: string): string {
   if (plan === "blocked") return "Not sent: the harness is waiting for an answer. Answer it in the terminal first.";
   if (plan === "submit") return `Sent ${label}. TauShell cannot confirm the harness applied it.`;
@@ -155,7 +148,7 @@ export function HarnessToolbar({ session, peers, widgets, modelSupported, send, 
     </ToolbarMenu>}
     <button className="text-button terminal-action icon-button" title="Compact: compact the conversation" aria-label="Compact: compact the conversation" onClick={() => send(widgets.compactText, true, widgets.compactText)}><Icon name="compact" /></button>
     <button className="text-button terminal-action icon-button" title="Clear: clear the conversation (asks first)" aria-label="Clear: clear the conversation (asks first)" onClick={() => setConfirmClear(true)}><Icon name="clear" /></button>
-        {confirmClear &&  <div className="modal-backdrop"><div className="modal confirm-modal">
+        {confirmClear && widgets.clearText && <div className="modal-backdrop"><div className="modal confirm-modal">
           <div className="modal-heading"><div><p className="eyebrow">CLEAR CONVERSATION</p><h2>Clear the current context?</h2></div></div>
           <p className="muted">This sends <strong>{widgets.clearText}</strong> to <strong>{session.name}</strong>. The harness will discard the current conversation context, and it cannot be brought back from within the harness.</p>
           <div className="modal-actions"><button className="secondary-button" autoFocus onClick={() => setConfirmClear(false)}>Cancel</button><button className="danger-button" onClick={() => { setConfirmClear(false); send(widgets.clearText, true, widgets.clearText); }}>Clear context</button></div>

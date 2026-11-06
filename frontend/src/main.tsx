@@ -8,7 +8,7 @@ import { Activity, AttentionKind, answerPlan, attentionEdge, combineSignal, hasC
 import { moveId } from "./order";
 import { CommandPalette, PaletteItem } from "./harnessActions";
 import { GearIcon, HomeIcon } from "./harnessIcons";
-import { setHarnesses } from "./harnesses";
+import { hasActivityReader, setHarnesses } from "./harnesses";
 import appIcon from "./assets/appicon.png";
 import { errorDetails, reportFrontendFailure, isStoppedSessionError } from "./errors";
 import { AppDialog, ShutdownPopup, RenameDialog } from "./dialogs";
@@ -94,7 +94,7 @@ function App() {
         }
         if (signal === undefined && at === undefined) return;
         const old = previous[id] ?? { working: false, input: false, unseen: false };
-        const { working, input, unseen } = nextActivity(old, signal, at, now, selectedRef.current === id && watching, hasCueSignal(session.tool));
+        const { working, input, unseen } = nextActivity(old, signal, at, now, selectedRef.current === id && watching, hasCueSignal(session.tool), hasActivityReader(session.tool));
         // Go never sees terminal content, only this state and whether a draft is typed.
         const reported = reportedState(signal, { working, input, unseen });
         const terminal = terminalInstances.get(id);
@@ -259,9 +259,9 @@ function App() {
       const target = sessionsRef.current.find((session) => session.id === request.id);
       if (target && !target.runningHere) void launch(target, request.mode);
     }, -1);
-    runtime.EventsOnMultiple("control-send", (request: { id: string; text: string; submit: boolean }) => {
+    runtime.EventsOnMultiple("control-send", (request: { id: string; text: string; submit: boolean; allowBusySubmit?: boolean }) => {
       const target = sessionsRef.current.find((session) => session.id === request.id);
-      const refused = target ? controlSend(target, request.text, request.submit) : "the session is gone";
+      const refused = target ? controlSend(target, request.text, request.submit, request.allowBusySubmit) : "the session is gone";
       // The reason names no text; the sender sees success once the window has accepted the hand-off.
       if (refused) showError("control.send", new Error(`A control-channel send was refused: ${refused}.`));
     }, -1);

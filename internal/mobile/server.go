@@ -18,6 +18,7 @@ import (
 
 	"github.com/ma99us/tau-shell/internal/control"
 	"github.com/ma99us/tau-shell/internal/pairing"
+	"github.com/ma99us/tau-shell/internal/presets"
 )
 
 // SNI names select the certificate: "pair.taushell" for the one-time pairing
@@ -53,6 +54,7 @@ type Backend interface {
 	HandleList() control.Response
 	HandleWait(json.RawMessage) control.Response
 	HandleSend(json.RawMessage) control.Response
+	HandleMobileSend(json.RawMessage) control.Response
 	HandleStart(json.RawMessage) control.Response
 	HandleScreen(json.RawMessage) control.Response
 	HandleAnswer(json.RawMessage) control.Response
@@ -67,6 +69,8 @@ type Server struct {
 	Audit func(device, op, session, outcome string)
 	// Presets returns the PC-configured quick replies; nil means none.
 	Presets func() []string
+	// SessionPresets returns resolved TauShell presets for the addressed session.
+	SessionPresets func(string) ([]presets.Resolved, error)
 	// Clock and PairWait are overridable for tests.
 	Clock    func() time.Time
 	PairWait time.Duration
@@ -138,6 +142,7 @@ func (server *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/sessions/{id}/start", server.device("start", server.handleStart))
 	mux.HandleFunc("POST /v1/sessions/{id}/answer", server.device("answer", server.handleAnswer))
 	mux.HandleFunc("GET /v1/sessions/{id}/screen", server.device("screen", server.handleScreen))
+	mux.HandleFunc("GET /v1/sessions/{id}/presets", server.device("presets", server.handleSessionPresets))
 	mux.HandleFunc("GET /v1/presets", server.device("presets", server.handlePresets))
 	return mux
 }
@@ -152,6 +157,28 @@ func (server *Server) handlePresets(writer http.ResponseWriter, _ *http.Request,
 		}
 	}
 	data, _ := json.Marshal(map[string][]string{"presets": presets})
+	writeResponse(writer, control.Response{OK: true, Data: data})
+}
+
+func (server *Server) handleSessionPresets(writer http.ResponseWriter, request *http.Request, device pairing.Device) {
+	sessionID := request.PathValue("id")
+	if server.SessionPresets == nil {
+		writeResponse(writer, control.Failure(control.CodeDisabled, "session presets are not available"))
+		return
+	}
+	items, err := server.SessionPresets(sessionID)
+	if err != nil {
+		server.audit(device.ID, "presets", sessionID, control.CodeInternal)
+		writeResponse(writer, control.Failure(control.CodeInternal, "could not load session prompts"))
+		return
+	}
+	data, err := json.Marshal(map[string][]presets.Resolved{"presets": items})
+	if err != nil {
+		server.audit(device.ID, "presets", sessionID, control.CodeInternal)
+		writeResponse(writer, control.Failure(control.CodeInternal, "could not encode session prompts"))
+		return
+	}
+	server.audit(device.ID, "presets", sessionID, "ok")
 	writeResponse(writer, control.Response{OK: true, Data: data})
 }
 
@@ -312,7 +339,7 @@ func (server *Server) handleSend(writer http.ResponseWriter, request *http.Reque
 		return
 	}
 	args, _ := json.Marshal(control.SendArgs{Session: session, Text: body.Text, InsertOnly: body.InsertOnly})
-	response := server.Backend.HandleSend(args)
+	response := server.Backend.HandleMobileSend(args)
 	server.audit(device.ID, "send", session, outcome(response))
 	writeResponse(writer, response)
 }

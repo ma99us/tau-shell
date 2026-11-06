@@ -20,6 +20,8 @@ type Sessions struct {
 	States *agentstate.Registry
 	// Deliver hands text to the UI, which types it through the terminal.
 	Deliver func(sessionID, text string, submit bool) error
+	// DeliverMobile submits phone prompts through the window's mobile-send path.
+	DeliverMobile func(sessionID, text string, submit bool) error
 	// Launch asks the window to start or restore a stopped session.
 	Launch func(sessionID, mode string) error
 	// Stop starts a graceful stop of a running session and returns without
@@ -107,6 +109,16 @@ func (sessions Sessions) HandleWait(raw json.RawMessage) Response {
 // HandleSend refuses unless the session is confirmed ready, so a working turn
 // is never interrupted and a permission prompt never receives text.
 func (sessions Sessions) HandleSend(raw json.RawMessage) Response {
+	return sessions.handleSend(raw, false)
+}
+
+// HandleMobileSend submits an explicit phone send during confirmed work or idle
+// input, matching Enter in the desktop terminal while preserving a typed draft.
+func (sessions Sessions) HandleMobileSend(raw json.RawMessage) Response {
+	return sessions.handleSend(raw, true)
+}
+
+func (sessions Sessions) handleSend(raw json.RawMessage, allowMobileSubmit bool) Response {
 	var args SendArgs
 	if err := json.Unmarshal(raw, &args); err != nil || args.Session == "" || args.Text == "" {
 		return Failure(CodeBadRequest, "send needs a session and text")
@@ -118,10 +130,22 @@ func (sessions Sessions) HandleSend(raw json.RawMessage) Response {
 	if failure != nil {
 		return Response{Error: failure}
 	}
-	if reason := Refusal(item, args.InsertOnly); reason != "" {
+	activity := item.Activity
+	reason := Refusal(item, args.InsertOnly)
+	mobileSubmit := allowMobileSubmit && !args.InsertOnly &&
+		activity.Confirmed && activity.Source == agentstate.Cue &&
+		(activity.State == agentstate.Working || activity.State == agentstate.Idle)
+	if mobileSubmit {
+		reason = ""
+	}
+	if reason != "" {
 		return Failure(CodeRefused, reason)
 	}
-	if err := sessions.Deliver(item.ID, args.Text, !args.InsertOnly); err != nil {
+	deliver := sessions.Deliver
+	if allowMobileSubmit && sessions.DeliverMobile != nil {
+		deliver = sessions.DeliverMobile
+	}
+	if err := deliver(item.ID, args.Text, !args.InsertOnly); err != nil {
 		return Failure(CodeInternal, "the window could not accept the text")
 	}
 	return OK(nil)

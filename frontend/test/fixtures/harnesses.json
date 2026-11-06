@@ -26,6 +26,7 @@
         "pattern": "\\? help"
       }
     ],
+    "activity": "copilot-events",
     "phoneAnswer": "copilot-permission",
     "brand": {
       "mark": "copilot",
@@ -74,6 +75,7 @@
     "short": "Codex",
     "executable": "codex",
     "cues": null,
+    "activity": "codex-rollout",
     "brand": {
       "mark": "monogram",
       "text": "Cx",
@@ -81,7 +83,7 @@
     },
     "builtin": true,
     "path": "builtin/codex.yaml",
-    "hash": "a02f1bf38979932c1eb56476d844ed84d4577b4581967a1c5e906583f543f7d9"
+    "hash": "0959f5c13f093baa1630221958073f487da23b5e5a1ba229a258a7fc22655e2f"
   },
   {
     "id": "opencode",
@@ -104,6 +106,7 @@
     "short": "GSD",
     "executable": "gsd",
     "cues": null,
+    "activity": "gsd-jsonl",
     "brand": {
       "mark": "monogram",
       "text": "G",
@@ -111,6 +114,6 @@
     },
     "builtin": true,
     "path": "builtin/gsd.yaml",
-    "hash": "85621725607bffcfa74dd75799918904cecf0101f7eb54081ab694b5261e4a4b"
+    "hash": "7996cc91322f7858d997bed61a54a3cc0d4b038574686d42c1a416c763aec9a3"
   }
 ]

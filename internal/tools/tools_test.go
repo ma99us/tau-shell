@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"os/exec"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -66,8 +68,8 @@ func TestDeclaredSpecsAreValid(t *testing.T) {
 		}
 		if spec.Widgets != nil {
 			widgets := spec.Widgets
-			if widgets == nil || len(widgets.Commands) == 0 || len(widgets.InterruptKeys) == 0 || widgets.CompactText == "" || widgets.ClearText == "" {
-				t.Errorf("%s: harness must declare widget commands, models, interrupt keys and compact text", spec.ID)
+			if len(widgets.Commands) == 0 || len(widgets.InterruptKeys) == 0 || widgets.CompactText == "" {
+				t.Errorf("%s: harness must declare widget commands, interrupt keys and compact text", spec.ID)
 			}
 		}
 	}
@@ -322,6 +324,7 @@ func TestDetectAllPreservesOrder(t *testing.T) {
 type installHarness struct {
 	wingetPath     string
 	managedMessage string
+	managedVersion string
 	managedErr     error
 	runNpmCalls    int
 	runNpmArgs     []string
@@ -354,8 +357,9 @@ func (harness *installHarness) installer() Installer {
 			harness.runArgs = args
 			return harness.runErr
 		},
-		RunManaged: func(context.Context, Spec) (string, error) {
+		RunManaged: func(_ context.Context, _ Spec, version string) (string, error) {
 			harness.managedCalls++
+			harness.managedVersion = version
 			return harness.managedMessage, harness.managedErr
 		},
 		RunNpm: func(_ context.Context, args []string) error {
@@ -487,6 +491,100 @@ func TestManagedInstallRequiresConfirmationAndRedetection(t *testing.T) {
 	result, err = harness.installer().Install(context.Background(), Git)
 	if err != nil || result.Outcome != InstallCancelled || harness.managedCalls != 0 || harness.detectCalls != 0 {
 		t.Fatalf("declined managed install = %+v, err %v, calls %d/%d", result, err, harness.managedCalls, harness.detectCalls)
+	}
+}
+
+func TestManagedUpgradeRequiresManagedInstallAndConfirmation(t *testing.T) {
+	harness := &installHarness{
+		confirm: true,
+		detected: Status{ID: NodeJS, Installed: true, Managed: true, Version: "26.14.0", VersionOutput: "v26.14.0",
+			Support: SupportUnknown, ExecutablePath: `C:\TauShell\tools\node\26.14.0\node.exe`},
+		managedMessage: "Verified signed Node LTS archive.",
+	}
+	installer := harness.installer()
+	installer.ConfirmUpdate = func(_ Spec, version string, _ Status) (bool, error) {
+		if version != "26.14.0" {
+			t.Fatalf("confirmation version = %q", version)
+		}
+		return true, nil
+	}
+	result, err := installer.Update(context.Background(), NodeJS, "26.14.0")
+	if err != nil || result.Outcome != InstallSucceeded || harness.managedCalls != 1 || harness.managedVersion != "26.14.0" {
+		t.Fatalf("managed update = %+v, err %v, runs %d, version %q", result, err, harness.managedCalls, harness.managedVersion)
+	}
+	if harness.detectCalls != 2 || harness.refreshCalls != 1 {
+		t.Fatalf("detect/refresh calls = %d/%d", harness.detectCalls, harness.refreshCalls)
+	}
+}
+
+func TestManagedUpgradeFailsWhenRequestedVersionWasNotActivated(t *testing.T) {
+	harness := &installHarness{
+		confirm: true,
+		detected: Status{ID: Git, Installed: true, Managed: true, Version: "2.56.0",
+			VersionOutput: "git version 2.55.0.windows.1", Support: SupportUnknown,
+			ExecutablePath: `C:\TauShell\tools\git\2.55.0.windows.1\cmd\git.exe`},
+	}
+	installer := harness.installer()
+	installer.ConfirmUpdate = func(Spec, string, Status) (bool, error) { return true, nil }
+	result, err := installer.Update(context.Background(), Git, "2.56.0.windows.4")
+	if err != nil || result.Outcome != InstallFailed || !strings.Contains(result.Message, "expected 2.56.0.windows.4") {
+		t.Fatalf("unverified managed update = %+v, err %v", result, err)
+	}
+}
+
+func TestNpmUpgradePinsVersionAndVerifiesDetectedHarness(t *testing.T) {
+	harness := &installHarness{wingetPath: `C:\npm.cmd`, confirm: true, detected: usableStatus()}
+	harness.detected.Version = "0.166.0"
+	harness.detected.VersionOutput = "codex-cli 0.166.0"
+	installer := harness.installer()
+	installer.ConfirmUpdate = func(_ Spec, version string, _ Status) (bool, error) {
+		if version != "0.166.0" {
+			t.Fatalf("confirmation version = %q", version)
+		}
+		return true, nil
+	}
+	result, err := installer.Update(context.Background(), Codex, "0.166.0")
+	if err != nil || result.Outcome != InstallSucceeded {
+		t.Fatalf("npm update = %+v, err %v", result, err)
+	}
+	want := []string{"install", "--global", "--prefix", filepath.Dir(harness.detected.ExecutablePath), "@openai/codex@0.166.0"}
+	if !reflect.DeepEqual(harness.runNpmArgs, want) {
+		t.Fatalf("npm args = %v, want %v", harness.runNpmArgs, want)
+	}
+	if harness.confirmCalls != 0 || harness.runNpmCalls != 1 || harness.detectCalls != 2 {
+		t.Fatalf("confirm/npm/detect = %d/%d/%d", harness.confirmCalls, harness.runNpmCalls, harness.detectCalls)
+	}
+}
+
+func TestNpmUpgradeDeclineDoesNotRunOrAcceptStaleVersion(t *testing.T) {
+	harness := &installHarness{wingetPath: `C:\npm.cmd`, detected: usableStatus()}
+	harness.detected.Version = "0.165.0"
+	harness.detected.VersionOutput = "codex-cli 0.165.0"
+	installer := harness.installer()
+	installer.ConfirmUpdate = func(Spec, string, Status) (bool, error) { return false, nil }
+	result, err := installer.Update(context.Background(), Codex, "0.166.0")
+	if err != nil || result.Outcome != InstallCancelled || harness.runNpmCalls != 0 {
+		t.Fatalf("declined npm update = %+v, err %v, runs %d", result, err, harness.runNpmCalls)
+	}
+
+	harness = &installHarness{wingetPath: `C:\npm.cmd`, confirm: true, detected: usableStatus()}
+	harness.detected.Version = "0.165.0"
+	harness.detected.VersionOutput = "codex-cli 0.165.0"
+	installer = harness.installer()
+	installer.ConfirmUpdate = func(Spec, string, Status) (bool, error) { return true, nil }
+	result, err = installer.Update(context.Background(), Codex, "0.166.0")
+	if err != nil || result.Outcome != InstallFailed || !strings.Contains(result.Message, "did not reach requested version") {
+		t.Fatalf("unverified npm update = %+v, err %v", result, err)
+	}
+}
+
+func TestNpmUpdateWithoutNpmIsReportedWithoutPrompt(t *testing.T) {
+	harness := &installHarness{detected: usableStatus()}
+	harness.detected.VersionOutput = "codex-cli 0.165.0"
+	installer := harness.installer()
+	result, err := installer.Update(context.Background(), Codex, "0.166.0")
+	if err != nil || result.Outcome != InstallNpmUnavailable || harness.confirmCalls != 0 || harness.runNpmCalls != 0 {
+		t.Fatalf("npm-unavailable update = %+v, err %v, confirm/run %d/%d", result, err, harness.confirmCalls, harness.runNpmCalls)
 	}
 }
 

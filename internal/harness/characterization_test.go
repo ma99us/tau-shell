@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ma99us/tau-shell/internal/harness/manifest"
 	"github.com/ma99us/tau-shell/internal/session"
 )
 
@@ -29,7 +30,7 @@ func TestHarnessCharacterization(t *testing.T) {
 			[]ExitStep{{"\x03", 400 * ms}, {"/exit", 200 * ms}, {"\r", 0}}},
 		session.GSD: {"gsd", nil, []string{"--session", gsdPath}, []string{"--session", gsdPath}, false, false,
 			[]ExitStep{{"\x1b", 400 * ms}, {"/quit", 300 * ms}, {"\r", 0}}},
-		session.Codex: {"codex", []string{"--dangerously-bypass-approvals-and-sandbox"}, nil, []string{"resume", "abc"}, true, false,
+		session.Codex: {"codex", []string{"--dangerously-bypass-approvals-and-sandbox"}, nil, []string{"resume", "abc"}, true, true,
 			[]ExitStep{{"\x1b", 400 * ms}, {"/exit", 300 * ms}, {"\r", 0}}},
 		session.OpenCode: {"opencode", []string{"--auto"}, nil, []string{"--session", "abc"}, true, false,
 			[]ExitStep{{"\x1b", 300 * ms}, {"\x1b", 400 * ms}, {"/exit", 300 * ms}, {"\r", 0}}},
@@ -56,6 +57,14 @@ func TestHarnessCharacterization(t *testing.T) {
 		}
 		if got := adapter.HasSkillDirectoryRoute(); got != w.skillDir {
 			t.Errorf("%s skill dir = %t", id, got)
+		}
+		if id == session.Codex {
+			item, ok := manifest.Get(string(id))
+			if !ok {
+				t.Error("Codex manifest is missing")
+			} else if item.Skills.SkillDirOption() != "--add-dir" {
+				t.Errorf("Codex skill directory option = %q, want --add-dir", item.Skills.SkillDirOption())
+			}
 		}
 		if got := adapter.GracefulExit(); !reflect.DeepEqual(got, w.exit) {
 			t.Errorf("%s exit = %#v, want %#v", id, got, w.exit)

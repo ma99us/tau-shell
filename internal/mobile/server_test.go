@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -16,20 +17,24 @@ import (
 	"github.com/ma99us/tau-shell/internal/agentstate"
 	"github.com/ma99us/tau-shell/internal/control"
 	"github.com/ma99us/tau-shell/internal/pairing"
+	"github.com/ma99us/tau-shell/internal/presets"
 )
 
 type plainSealer struct{}
 
-func (plainSealer) Seal(plain []byte) ([]byte, error)  { return append([]byte("s:"), plain...), nil }
-func (plainSealer) Open(sealed []byte) ([]byte, error) { return bytes.TrimPrefix(sealed, []byte("s:")), nil }
+func (plainSealer) Seal(plain []byte) ([]byte, error) { return append([]byte("s:"), plain...), nil }
+func (plainSealer) Open(sealed []byte) ([]byte, error) {
+	return bytes.TrimPrefix(sealed, []byte("s:")), nil
+}
 
 type rig struct {
-	server   *Server
-	address  string
-	states   *agentstate.Registry
-	mu       sync.Mutex
-	audit    []string
-	deliverd []string
+	server    *Server
+	address   string
+	states    *agentstate.Registry
+	mu        sync.Mutex
+	audit     []string
+	deliverd  []string
+	submitted []bool
 
 	registryPath string
 	listener     net.Listener
@@ -52,6 +57,7 @@ func newRig(t *testing.T) *rig {
 			state.mu.Lock()
 			defer state.mu.Unlock()
 			state.deliverd = append(state.deliverd, id)
+			state.submitted = append(state.submitted, submit)
 			return nil
 		},
 		Launch: func(string, string) error { return nil },
@@ -210,6 +216,31 @@ func TestPresetsComeFromThePCAndSkipBlanks(t *testing.T) {
 	}
 }
 
+func TestSessionPresetsAreResolvedPerSession(t *testing.T) {
+	r := newRig(t)
+	r.server.SessionPresets = func(sessionID string) ([]presets.Resolved, error) {
+		if sessionID != "s1" {
+			return nil, errors.New("unknown session")
+		}
+		return []presets.Resolved{
+			{Name: "Review", Text: "Review demo", Submit: true},
+			{Name: "Draft", Text: "Draft for demo", Submit: false, Remote: true},
+		}, nil
+	}
+	device := r.pair(t)
+	name := DeviceName(device.DeviceID)
+	status, body, err := r.call(t, name, device.Fingerprint, "GET", "/v1/sessions/s1/presets", device.Token, "")
+	if err != nil || status != 200 ||
+		!strings.Contains(body, `"name":"Review","text":"Review demo","submit":true`) ||
+		!strings.Contains(body, `"name":"Draft","text":"Draft for demo","submit":false,"remote":true`) {
+		t.Fatalf("session presets: %d %v %s", status, err, body)
+	}
+	status, body, err = r.call(t, name, device.Fingerprint, "GET", "/v1/sessions/nope/presets", device.Token, "")
+	if err != nil || status != 500 || !strings.Contains(body, `"code":"internal"`) {
+		t.Fatalf("unknown session presets: %d %v %s", status, err, body)
+	}
+}
+
 func TestPairThenListAndGuardedSend(t *testing.T) {
 	r := newRig(t)
 	device := r.pair(t)
@@ -222,13 +253,19 @@ func TestPairThenListAndGuardedSend(t *testing.T) {
 
 	r.states.Report("s1", agentstate.Working, agentstate.Cue, false)
 	status, body, _ = r.call(t, name, device.Fingerprint, "POST", "/v1/sessions/s1/send", device.Token, `{"text":"secret prompt"}`)
-	if status != 409 {
-		t.Fatalf("a submit while working must be refused with 409, got %d %s", status, body)
+	if status != 200 || len(r.submitted) != 1 || !r.submitted[0] {
+		t.Fatalf("a mobile send while working must submit, got %d %s submitted=%v", status, body, r.submitted)
 	}
 	status, _, _ = r.call(t, name, device.Fingerprint, "POST", "/v1/sessions/s1/send", device.Token, `{"text":"draft","insertOnly":true}`)
-	if status != 200 || len(r.deliverd) != 1 {
+	if status != 200 || len(r.deliverd) != 2 || r.submitted[1] {
 		t.Fatalf("insert-only while working is allowed: %d, delivered %d", status, len(r.deliverd))
 	}
+	r.states.Report("s1", agentstate.Input, agentstate.Cue, false)
+	status, _, _ = r.call(t, name, device.Fingerprint, "POST", "/v1/sessions/s1/send", device.Token, `{"text":"must not go into permission"}`)
+	if status != 409 || len(r.deliverd) != 2 {
+		t.Fatalf("permission prompts still refuse text: %d delivered=%d", status, len(r.deliverd))
+	}
+	r.states.Report("s1", agentstate.Idle, agentstate.Cue, false)
 	if status, _, _ = r.call(t, name, device.Fingerprint, "POST", "/v1/sessions/nope/send", device.Token, `{"text":"x"}`); status != 404 {
 		t.Fatalf("unknown session: %d", status)
 	}

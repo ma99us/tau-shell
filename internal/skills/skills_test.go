@@ -103,14 +103,17 @@ func TestLibraryPrepareSkipsPersonalAndDisabled(t *testing.T) {
 	}
 	config := DefaultConfig()
 	config.Repo = ""
-	library, err := NewLibrary(filepath.Join(home, "tau"), config, map[string][]string{"claude-code": {personal}})
+	library, err := NewLibrary(filepath.Join(home, "tau"), config, map[string][]string{
+		"claude-code": {personal},
+		"codex":       {personal},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := library.SetEnabled("windows-screenshot", false); err != nil {
 		t.Fatal(err)
 	}
-	dir, names, _, err := library.Prepare("claude-code")
+	dir, names, _, err := library.Prepare("claude-code", "claude-launch")
 	if err != nil || dir == "" {
 		t.Fatalf("prepare: %q %v", dir, err)
 	}
@@ -121,6 +124,28 @@ func TestLibraryPrepareSkipsPersonalAndDisabled(t *testing.T) {
 	}
 	if !library.Available("claude-code")["pr-to-main"] {
 		t.Fatal("personal skill must count as available")
+	}
+	codexDir, codexNames, _, err := library.Prepare("codex", "codex-launch")
+	if err != nil || codexDir == "" {
+		t.Fatalf("prepare Codex skills: %q %v", codexDir, err)
+	}
+	if len(codexNames) == 0 {
+		t.Fatal("expected bundled Codex skills")
+	}
+	for _, name := range codexNames {
+		if name == "pr-to-main" {
+			t.Fatalf("personal Codex skill must not be shadowed: %v", codexNames)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(codexDir, ".agents", "skills", codexNames[0], "SKILL.md")); err != nil {
+		t.Fatalf("missing Codex Agent Skill: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(codexDir, ".claude-plugin", "plugin.json")); !os.IsNotExist(err) {
+		t.Fatalf("Codex skill folder must not be a Claude plugin, got %v", err)
+	}
+	otherCodexDir, _, _, err := library.Prepare("codex", "other-codex-launch")
+	if err != nil || otherCodexDir == codexDir {
+		t.Fatalf("Codex launches must get isolated skill folders: %q %q %v", codexDir, otherCodexDir, err)
 	}
 	reopened, _ := NewLibrary(filepath.Join(home, "tau"), config, nil)
 	for _, entry := range reopened.List("claude-code") {

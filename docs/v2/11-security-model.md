@@ -158,12 +158,28 @@ Home offers a newer GitHub release (pre-releases included) only after a click on
 
 ## Tool update checks
 
-At startup and then daily, TauShell runs `winget list --id <package> --exact
---upgrade-available` (no console window, read-only) for installed tools with a
-declared winget package. A tile shows "Update to <version>" only when winget
-reports one; tools not installed through winget get no button. Updating runs
-`winget upgrade` in a visible console only after a native confirmation; it is
-never automatic. Failed checks are logged and show nothing.
+At startup, on Home refresh, and then daily, TauShell checks for available updates
+without installing anything. It uses `winget list --id <package> --exact
+--upgrade-available` for declared winget packages, the official Node.js LTS
+index and Git for Windows stable release metadata for TauShell-managed copies,
+and `npm view <package> version` for installed harnesses with a declared npm
+package. Managed Node.js/Git checks compare against TauShell's active managed
+version; system-installed copies are not updated by TauShell. npm checks do not
+track who installed a harness: any detected harness with a declared npm package
+may be updated in the npm global bin folder containing its detected executable.
+TauShell passes that folder as npm's explicit prefix so a managed Node.js
+installation does not redirect an update away from a system-installed harness.
+
+A tool row shows "Update to <version>" only when a newer version is detected.
+Every update requires native confirmation. winget and npm run in a visible
+console; npm's exact package version is passed as a discrete argument and may
+execute package lifecycle scripts as the current user. Node.js and Git reuse
+the managed archive installers: Node's signed checksum manifest and Git's
+release SHA-256 digest are verified, new versioned copies are activated only
+after verification, and the previous managed version remains in its directory.
+Failed checks are logged and show no update action; an update is not reported as
+successful until TauShell re-detects the tool and verifies the requested
+version.
 
 ## Price updates
 
@@ -189,12 +205,23 @@ to disable fetching, or `skills.enabled: false` to disable the library. The
 snapshot is a moving branch, not a signed release; pin `skills.ref` to a tag or
 commit to freeze it.
 
+Codex receives its TauShell-managed skills through `--add-dir`, which exposes
+that directory as writable to the harness. TauShell creates an isolated
+per-launch `.agents/skills` copy rather than passing the reusable library
+snapshot; treat the Codex process as able to modify its own copy. Full
+interactive skill use was verified with Codex 0.166.0. Its opt-in live test
+uses a temporary profile that trusts only the disposable test project and
+removes the profile afterward; the user's normal Codex configuration is not
+modified.
+
 ## Copilot quota
 
 The Home quota chip makes one outbound call, `gh api /copilot_internal/user`,
 through the user's own GitHub CLI sign-in. TauShell never reads or stores the
-token and never logs response bodies; failures are logged once without detail
-and the chip is hidden. It is on by default and disabled with
+token and never logs response bodies; it shows the account login returned by
+that endpoint next to the quota. Free-limited accounts use the `chat` quota
+snapshot; other plans use `premium_interactions`. Failures are logged once
+without detail and the chip is hidden. It is on by default and disabled with
 `quota: { copilot: false }` in `~/.tau_shell/config.yaml`.
 
 ## Control channel

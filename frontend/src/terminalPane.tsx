@@ -6,9 +6,9 @@ import { gitParts, gitTooltip } from "./gitChip";
 import { parseOsc52 } from "./osc52";
 import { Icon } from "./icons";
 import { theme } from "./theme/theme";
-import { composeInjection, controlSendPlan, promptKind, readDraft, readHarnessSignal } from "./attention";
+import { composeInjection, controlSendPlan, planSend, promptKind, readDraft, readHarnessSignal } from "./attention";
 import { SessionUsage, formatTokens, formatUSD, hasUsage, usageTooltip } from "./usage";
-import { HarnessToolbar, InterruptButton, planSend, sendNotice } from "./harnessActions";
+import { HarnessToolbar, InterruptButton, sendNotice } from "./harnessActions";
 import type { QueueHooks } from "./promptQueue";
 import { FileDrawer } from "./fileDrawer";
 import { ConversationsDrawer } from "./conversationsDrawer";
@@ -97,12 +97,13 @@ export function sendToSession(session: Session, text: string, submit: boolean, l
     fail(`${session.name} is not running, so nothing was sent.`);
     return;
   }
-  const plan = planSend(readHarnessSignal(session.tool, terminal, terminalTitles.get(session.id) ?? ""), submit);
+  const draft = readDraft(terminal);
+  const plan = planSend(readHarnessSignal(session.tool, terminal, terminalTitles.get(session.id) ?? ""), submit, draft);
   if (plan === "blocked") {
     fail(sendNotice(plan, label));
     return;
   }
-  const injected = composeInjection(readDraft(terminal), text, plan === "submit");
+  const injected = composeInjection(draft, text, plan === "submit");
   if (injected.includes("\n")) terminal.paste(injected);
   else terminal.input(injected, true);
   // Enter goes separately so the harness has finished handling the pasted text.
@@ -121,11 +122,11 @@ export function insertAtPrompt(session: Session, text: string): string {
 }
 
 // Types text that arrived over the control channel. Returns why it was refused, or "" when typed.
-export function controlSend(session: Session, text: string, submit: boolean): string {
+export function controlSend(session: Session, text: string, submit: boolean, allowBusySubmit = false): string {
   const terminal = terminalInstances.get(session.id);
   if (!terminal || !session.runningHere) return "the session has no open terminal";
   const signal = readHarnessSignal(session.tool, terminal, terminalTitles.get(session.id) ?? "");
-  const plan = controlSendPlan(signal, submit, readDraft(terminal), signal === "input" && promptKind(session.tool, terminal) === "question");
+  const plan = controlSendPlan(signal, submit, readDraft(terminal), signal === "input" && promptKind(session.tool, terminal) === "question", allowBusySubmit);
   if (!plan.allowed) return plan.reason;
   const injected = composeInjection(readDraft(terminal), text, submit);
   if (injected.includes("\n")) terminal.paste(injected);

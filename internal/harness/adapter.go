@@ -166,7 +166,7 @@ func (adapter cliAdapter) CheckResume(harnessSessionID string) error {
 }
 
 func (adapter cliAdapter) HasSkillDirectoryRoute() bool {
-	return adapter.manifest.Skills.PluginDirOption != ""
+	return adapter.manifest.Skills.SkillDirOption() != ""
 }
 
 func (adapter cliAdapter) ID() session.Harness {

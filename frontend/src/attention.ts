@@ -5,6 +5,13 @@ import { cuePattern, findHarness } from "./harnesses.ts";
 // the harness itself says so; undefined when the harness gives no usable cue
 // (callers fall back to output timing).
 export type HarnessSignal = "working" | "idle" | "input" | undefined;
+export type SendPlan = "blocked" | "submit" | "insert";
+
+export function planSend(signal: HarnessSignal, submit: boolean, draft = ""): SendPlan {
+  if (signal === "input") return "blocked";
+  if (submit && draft.trim()) return "insert";
+  return submit && signal === "idle" ? "submit" : "insert";
+}
 
 export type AttentionKind = "input" | "done";
 export const minWorkMsForDone = 3000;
@@ -12,18 +19,19 @@ export const minWorkMsForDone = 3000;
 export type Activity = { working: boolean; input: boolean; unseen: boolean };
 // Output newer than this means the session is "working"; older means "quiet".
 export const workingWindowMs = 2500;
-// A harness "working" cue with no output for this long is treated as stale: a live
+// A visual "working" cue with no output for this long is treated as stale: a live
 // harness animates its cue (spinner/timer), which produces output.
 export const staleWorkingMs = 15000;
 
 // One poll step for a running session. The harness cue wins; output timing is the
 // fallback when the harness gives none. lastOutputAt excludes keystroke echo.
 // "seen" means the session is selected and TauShell has focus.
-export function nextActivity(old: Activity, signal: HarnessSignal, lastOutputAt: number | undefined, now: number, seen: boolean, cueTool = false): Activity {
+export function nextActivity(old: Activity, signal: HarnessSignal, lastOutputAt: number | undefined, now: number, seen: boolean, cueTool = false, activityReader = false): Activity {
   const outputAge = lastOutputAt === undefined ? Infinity : now - lastOutputAt;
-  // Tools with reliable cues never fall back to output timing: idle redraws
-  // (spinners, promos, clocks) would otherwise look like work and raise "done" alerts.
-  const working = signal === undefined ? !cueTool && outputAge < workingWindowMs : signal === "working" && outputAge <= staleWorkingMs;
+  // Reliable cues and log readers never fall back to output timing: idle redraws
+  // would otherwise look like work and raise false "done" alerts.
+  const working = signal === undefined ? !cueTool && !activityReader && outputAge < workingWindowMs :
+    signal === "working" && (activityReader || outputAge <= staleWorkingMs);
   const input = signal === "input";
   const unseen = seen ? false : old.unseen || (old.working && !working) || (input && !old.input);
   return { working, input, unseen };
@@ -167,7 +175,10 @@ export function readDraft(terminal: Terminal): string {
 // draft by ". " when needed, and leave ". " after an insert-only prompt so the
 // user can keep typing. Slash and shell commands are passed through untouched.
 export function composeInjection(draft: string, text: string, submit: boolean): string {
-  if (/^\s*[/!]/.test(text)) return text;
+  if (/^\s*[/!]/.test(text)) {
+    if (!draft.trim()) return text;
+    return `${draft}${/\s$/.test(draft) ? "" : " "}${text}`;
+  }
   let out = text;
   if (draft.trim()) {
     const endsWithSpace = /\s$/.test(draft);
@@ -188,11 +199,11 @@ export type ControlSendPlan = { allowed: true } | { allowed: false; reason: stri
 // Re-check on the live screen for a send that arrived over the control channel.
 // Go already required a confirmed state; the window refuses again because the
 // screen may have changed in between. Nothing is typed unless this allows it.
-export function controlSendPlan(signal: HarnessSignal, submit: boolean, draft: string, question = false): ControlSendPlan {
+export function controlSendPlan(signal: HarnessSignal, submit: boolean, draft: string, question = false, allowBusySubmit = false): ControlSendPlan {
   if (signal === undefined) return { allowed: false, reason: "the harness shows no readable state" };
   if (signal === "input") return question ? { allowed: true } : { allowed: false, reason: "the harness is waiting for an answer" };
-  if (submit && signal !== "idle") return { allowed: false, reason: "the harness is working" };
-  if (submit && draft.trim()) return { allowed: false, reason: "there is unsent text in the input line" };
+  if (submit && signal !== "idle" && !(allowBusySubmit && signal === "working")) return { allowed: false, reason: "the harness is working" };
+  if (submit && draft.trim() && !allowBusySubmit) return { allowed: false, reason: "there is unsent text in the input line" };
   return { allowed: true };
 }
 

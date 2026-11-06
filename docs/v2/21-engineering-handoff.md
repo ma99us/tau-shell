@@ -1,6 +1,6 @@
 # Engineering Handoff
 
-**Updated:** 2026-11-01
+**Updated:** 2026-11-05
 **Project state:** Phase 1 desktop migration in progress; not release-ready.
 
 This is the implementation handoff for the next engineering session. The
@@ -19,29 +19,48 @@ regression-test plans, see the
   live separately in SQLite.
 - Claude Code, GitHub Copilot CLI, GSD, OpenAI Codex CLI and OpenCode have
   built-in launch/restore adapters. The last three were added after the others
-  (GSD 1.22.0, Codex 0.165.0, OpenCode 1.19.5 installed for probing). Codex and
-  OpenCode use discovered resume IDs (`Adapter.DiscoverSessionID`); GSD uses a
-  TauShell-owned session file path. Verified by unit tests only: argv shapes,
-  Codex rollout and OpenCode database discovery (temp fixtures, including the
-  Windows `file:` read-only SQLite path), GSD/Codex usage parsing, OpenCode
-  usage ingestion, OpenAI prices.
+  (GSD 1.18.0 currently installed for probing; manifest-tested range starts at
+  1.22.0; Codex 0.166.0 and OpenCode 1.19.5). Codex and OpenCode use discovered
+  resume IDs (`Adapter.DiscoverSessionID`); GSD uses a TauShell-owned session
+  file path. Codex rollout discovery and assistant response parsing have been
+  probed live, while unit tests cover argv shapes, rollout parsing, activity
+  events, OpenCode database discovery (temp fixtures, including the Windows
+  `file:` read-only SQLite path), GSD/Codex usage parsing, OpenCode usage
+  ingestion, and OpenAI prices.
   Live results (opt-in `TAUSHELL_LIVE=gsd|opencode|codex go test
   ./internal/sessionhost -run TestLiveHarness`, drives the real manager and
   ConPTY): OpenCode and GSD launch, accept injected prompts, record their
   resume ID (OpenCode ~14 s via read-only `opencode.db`; GSD session file),
   report the current model, stop gracefully (`/exit` or `/quit`, about 1 s)
-  and restore into the earlier conversation. OpenCode exits non-zero after
-  `/exit` and `pwsh -Command` propagates that, so a requested quit with a
-  non-zero exit is reported as stopped. Not proven live: model replies and
-  usage/cost ingestion (the Copilot gateway rejected GSD models and the free
-  OpenCode model returned Forbidden from this network), Codex entirely (not
-  signed in), interrupt keys, Codex rollout format, and per-launch skills
-  (not wired: no verified route). Attention cues (`readHarnessSignal`)
-  return no signal for them; generic silence timing applies. These gaps are
-  postponed; see "Postponed: GSD, OpenCode and Codex verification gaps" in
-  `20-mvp-backlog.md`.
-  Restore is explicit and must not be reported as successful unless the
-  harness actually resumes.
+  and restore into the earlier conversation. GSD 1.18.0 additionally passed
+  live model/thinking detection (`medium`), usage recording, working/idle
+  activity, restored conversation recall, model picker selection and return to
+  the original model, successful compaction with sufficient disposable
+  history, and single-Esc interruption of a controlled tool call. Selecting
+  the alternate model changed the recorded model, but its follow-up reply was
+  not verified. A disposable project skill returned its sentinel once with
+  project preferences configured; repeated probes were inconsistent, so native
+  skill loading is not considered reliable. The skill probe is opt-in because
+  a missing skill can cause the harness to search the filesystem. GSD 1.18.0
+  is below the manifest-tested range; its installed help documents `--thinking`
+  and not `--yolo`, and TauShell launches it with no default arguments. OpenCode
+  exits non-zero after `/exit` and `pwsh -Command` propagates that, so a
+  requested quit with a non-zero exit is reported as stopped. OpenCode's
+  model replies and usage/cost ingestion remain unproven (its free model
+  returned Forbidden from this network). Codex 0.166.0
+  passed the opt-in live ConPTY test: TauShell attached a custom skill and
+  received its sentinel response, observed working and idle activity, captured
+  usage, stopped gracefully, restored the same conversation, and verified
+  cross-turn recall. The test trusts only its disposable project through a
+  temporary Codex profile, which is removed afterward. Codex skills use
+  isolated `.agents/skills` copies passed through `--add-dir`; the harness can
+  modify that copy. A restored session also returned the TauShell skill's
+  expected response. Codex 0.166.0's live probe verified single-Esc
+  interruption, `/status`, `/compact`, opening the model picker and switching
+  to another available model. Only `/status` and `/compact` are exposed as
+  command widgets; `/new` did not prove a distinct conversation was created,
+  and `/help` was not verified. See "Remaining: harness live verification
+  gaps" in `20-mvp-backlog.md`.
 - The desktop app is the only interactive TauShell interface. Bubble Tea has
   been removed. `list`, `start <session-id>`, and `restore <session-id>` remain
   standalone commands.
@@ -585,6 +604,9 @@ Verified on Copilot CLI 1.0.104 through the real session manager and ConPTY
 (rendered with pyte): `/model auto` and `/model claude-haiku-5.5` both changed
 the model and the footer, and bare `/model` opened the picker. Claude Code's
 `/model` was not exercised because its provider returns 401 on this PC.
+Codex 0.166.0's live test opened the picker and changed from the current model
+to another model present in its signed-in catalog; the next assistant turn's
+rollout confirmed the selected model.
 
 ## Declarative harness manifests (implemented)
 
@@ -595,16 +617,16 @@ CLI). Log parsing stays in named Go readers chosen by plain string. See
 [`23-adding-a-harness.md`](23-adding-a-harness.md).
 
 Verified: `go test ./...`, frontend tests and build; characterization and
-golden tests freeze the old adapter behavior; live GSD and OpenCode launch,
-resume and restore; a user manifest loads, is refused until confirmed, then
-passes the trust gate (CLI). Also checked live on 2026-11-03 in a disposable
-profile driven by Windows UI Automation: the Home "Not confirmed" row and
-Confirm button (the session launched afterwards), the error row for an
-invalid manifest, the phone address picker (lists the PC's addresses and writes
-`mobile.interface` to that profile's config), the workspace group Resume and
-Stop (with its confirmation), and `ctl start/read/stop`. Not verified: Codex
-live (no signed-in session), OpenCode and GSD cues, and manifests load at
-startup only.
+golden tests freeze the old adapter behavior; live GSD, OpenCode and Codex
+launch, resume and restore; a user manifest loads, is refused until confirmed,
+then passes the trust gate (CLI). Also checked live on 2026-11-03 in a
+disposable profile driven by Windows UI Automation: the Home "Not confirmed"
+row and Confirm button (the session launched afterwards), the error row for
+an invalid manifest, the phone address picker (lists the PC's addresses and
+writes `mobile.interface` to that profile's config), the workspace group
+Resume and Stop (with its confirmation), and `ctl start/read/stop`. Not
+verified: OpenCode cues and reliable GSD native skill loading. Manifest
+changes require a restart. GSD activity and interruption were verified live.
 
 ## Harness widgets (implemented)
 
@@ -625,13 +647,13 @@ insert-only unless the harness is idle. Not verified live: Claude Code's slash
 commands, `/model`, and Esc interrupt (provider 401); its command list comes
 from Claude Code's documented built-ins. The idle/input detection reuses the
 attention cues, which are heuristic: when no cue is available the text is only
-inserted.
+inserted. For toolbar and palette commands, a nonempty composer draft receives
+the action appended but is not submitted; with an empty composer, TauShell
+submits it. The shared send-planning behavior has focused frontend tests.
 
-Known limits: text is appended to whatever is already typed in the prompt;
-there is no success confirmation from the harness; the frontend has no
-automated tests, so the toolbar, palette, and shortcuts were verified by
-build/type-check and the delivery path by the real-harness probe, not by
-driving the packaged window.
+Known limits: there is no general success confirmation from the harness. The
+frontend unit test covers draft-aware delivery, but the packaged toolbar,
+palette, and shortcuts have not been driven end to end.
 
 ## Recommended next actions
 

@@ -23,9 +23,18 @@ data class SessionItem(
     val color: String,
     val activity: Activity,
     val lastError: String,
+    val totalUsd: Double? = null,
+    val unpriced: Boolean = false,
 )
 
 data class PairResult(val deviceId: String, val token: String, val fingerprint: String, val expires: String)
+
+data class PromptPreset(
+    val name: String,
+    val text: String,
+    val submit: Boolean,
+    val remote: Boolean,
+)
 
 sealed class Result<out T> {
     data class Ok<T>(val value: T) : Result<T>()
@@ -57,6 +66,12 @@ object Parse {
                     question = activity?.optBoolean("question") ?: false,
                 ),
                 lastError = item.optString("lastError"),
+                totalUsd = if (item.has("totalUsd") && !item.isNull("totalUsd")) {
+                    item.optDouble("totalUsd").takeIf { it.isFinite() }
+                } else {
+                    null
+                },
+                unpriced = item.optBoolean("unpriced"),
             )
         })
     }
@@ -73,6 +88,23 @@ object Parse {
         if (!root.optBoolean("ok")) return failure(root)
         val items = root.optJSONObject("data")?.optJSONArray("presets") ?: return Result.Ok(emptyList())
         return Result.Ok((0 until items.length()).map { items.optString(it) }.filter { it.isNotBlank() })
+    }
+
+    fun sessionPresets(json: String): Result<List<PromptPreset>> {
+        val root = JSONObject(json)
+        if (!root.optBoolean("ok")) return failure(root)
+        val items = root.optJSONObject("data")?.optJSONArray("presets") ?: return Result.Ok(emptyList())
+        return Result.Ok((0 until items.length()).mapNotNull { index ->
+            val item = items.optJSONObject(index) ?: return@mapNotNull null
+            val name = item.optString("name").trim()
+            val text = item.optString("text")
+            if (name.isBlank() || text.isBlank()) null else PromptPreset(
+                name = name,
+                text = text,
+                submit = item.optBoolean("submit"),
+                remote = item.optBoolean("remote"),
+            )
+        })
     }
 
     fun ack(json: String): Result<Unit> {
@@ -162,6 +194,9 @@ class PcClient(
         parsed(call("GET", "/v1/sessions/${enc(session)}/screen?rows=$rows", null, 15_000), Parse::screen)
 
     fun presets(): Result<List<String>> = parsed(call("GET", "/v1/presets", null, 15_000), Parse::presets)
+
+    fun sessionPresets(session: String): Result<List<PromptPreset>> =
+        parsed(call("GET", "/v1/sessions/${enc(session)}/presets", null, 15_000), Parse::sessionPresets)
 
     /** Answers a permission prompt with a fixed yes or no; the PC re-checks the prompt. */
     fun answer(session: String, answer: String): Result<Unit> {
