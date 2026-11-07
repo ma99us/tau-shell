@@ -26,6 +26,9 @@ $env:ANDROID_HOME = 'C:\path\to\Android\sdk'
 The APK is `app\build\outputs\apk\debug\app-debug.apk`. For a release build, put a
 keystore in the git-ignored `keystore.properties` (`storeFile`, `storePassword`,
 `keyAlias`, `keyPassword`) and run `:app:assembleRelease`.
+The default app version comes from `../frontend/package.json`; `versionCode`
+is `major*10000 + minor*100 + patch`. For a different build version, pass
+`-PappVersion=<version>`; an optional `-PappVersionCode` must match that scheme.
 
 ## Install and pair
 

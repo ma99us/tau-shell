@@ -10,15 +10,20 @@ Windows desktop host (Go + WebView2)
   -> ConPTY -> PowerShell 7 -> AI harness CLI
 ```
 
-The desktop UI is the sole interactive experience; the Bubble Tea CLI/TUI has
-been removed. `list`, `start`, and `restore` remain available as standalone
-CLI operations. The current Windows host uses Wails v2 with bundled React and
-xterm.js assets. The UI host, session manager, and harness adapters are
-distinct: the renderer does not own process lifecycle or construct
-provider-specific commands. The renderer calls local typed Wails bindings and
-subscribes to Wails runtime events; Phase 1 has no REST server or WebSocket
-listener. The host and terminal stack remain provisional until the Windows 10
-feasibility gate passes with supported harnesses.
+The desktop UI is the sole full desktop frontend; the Bubble Tea CLI/TUI has
+been removed. `list`, `start`, `restore`, and `ctl` remain available as
+standalone CLI operations. The Windows host uses Wails v2 with bundled React
+and xterm.js assets. The UI host, session manager, and harness adapters are distinct: the
+renderer does not own process lifecycle or construct provider-specific
+commands. The desktop renderer calls local typed Wails bindings and subscribes
+to Wails runtime events. Separately, an experimental, off-by-default phone
+server exposes an HTTPS API on one configured local address; it is not a
+WebSocket listener or a general server mode. See the
+[API overview](13-api-specification.md) and
+[phone security model](11-security-model.md#phone-server-experimental-off-by-default).
+The Windows 10 production terminal path has passed the recorded fixture and
+hosted-harness checks, subject to the limits in the
+[backlog](20-mvp-backlog.md#open-phase-1-backlog).
 
 Each live session has an independent PowerShell/ConPTY process tree. xterm.js
 is mounted per open tab and receives ConPTY output as base64-encoded bytes;
@@ -29,9 +34,12 @@ per-session/global settings can restore eligible sessions on startup. Live sessi
 continue running when their tab is not selected. A running session always has a tab and cannot be closed without being stopped. The xterm instance stays mounted so it continues consuming output and
 can reopen the same screen. A browser-only mocked-bridge smoke exercised
 background output, split UTF-8/emoji, ANSI, alternate screen, terminal queries,
-mouse reporting, resize, and input. It does not verify those behaviors through
-the production Wails/WebView2/ConPTY path, and output delivery under load still
-requires end-to-end testing.
+mouse reporting, resize, and input. That browser-only check does not exercise
+the production path. A separate production-window fixture verified rendering,
+typed input, resize, cursor and device-status reports, and bundled-ConPTY
+mouse reports, with the backend-specific limits documented in the
+[ConPTY notes](02-conpty-integration.md#repeatable-hosted-terminal-fixture).
+Output delivery under sustained load still requires end-to-end testing.
 
 The desktop app checks the Evergreen WebView2 Runtime before creating its
 window and directs the user to Microsoft's official installer when it is
@@ -59,5 +67,7 @@ also require confirmation and are re-detected afterwards.
 
 Local taskbar-flash and Windows-toast attention notifications are in Phase 1;
 see [`22-local-attention-notifications.md`](22-local-attention-notifications.md).
-Remote access, mobile UI, web dashboards/server mode, general third-party
-plugins, and distributed execution are outside Phase 1.
+General remote access, mobile UI, web dashboards/server mode, general
+third-party plugins, and distributed execution are outside Phase 1. The
+experimental opt-in phone server and Android companion already exist; their
+existence does not expand that scope.

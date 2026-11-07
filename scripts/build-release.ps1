@@ -8,6 +8,9 @@ taushell.exe with the version stamped in, bundles the pinned ConPTY, and writes
 dist\TauShell-<version>-windows-x64.zip plus dist\SHA256SUMS.txt.
 Requires Node/npm, Go, and Python with Pillow.
 
+- A frontend build updates frontend\package.json and package-lock.json to the
+  release version. With -SkipFrontend, those files must already match the
+  version used to build the frontend.
 -SkipPackage stops after staging the folder so the exe can be signed;
 -PackageOnly then zips the already staged (and signed) folder.
 #>
@@ -21,7 +24,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$Version = $Version.TrimStart('v')
+if ($Version.StartsWith('v')) { $Version = $Version.Substring(1) }
 if ($Version -notmatch '^\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$') {
     throw "Version '$Version' is not SemVer (x.y.z)"
 }
@@ -38,12 +41,15 @@ Push-Location $root
 try {
     if (-not $PackageOnly) {
         if (-not $SkipFrontend) {
+            Invoke-Step 'set frontend version' { node (Join-Path $PSScriptRoot 'frontend-version.mjs') set $Version }
             Push-Location frontend
             try {
                 Invoke-Step 'npm ci' { npm ci }
                 Invoke-Step 'frontend build' { npm run build }
                 Invoke-Step 'token check' { npm run check:tokens }
             } finally { Pop-Location }
+        } else {
+            Invoke-Step 'check frontend version' { node (Join-Path $PSScriptRoot 'frontend-version.mjs') check $Version }
         }
 
         Invoke-Step 'icon and version resources' { python build\windows\gen_icon.py $Version }

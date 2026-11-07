@@ -1,6 +1,7 @@
 package com.taushell.phone
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -45,6 +46,32 @@ class PairingLinkTest {
     }
 }
 
+class PromptHistoryTest {
+    @Test
+    fun putsNewestFirstAndMovesDuplicatesToTheTop() {
+        val history = PromptHistory.add(listOf("second", "first"), "third")
+        assertEquals(listOf("third", "second", "first"), history)
+        assertEquals(listOf("second", "third", "first"), PromptHistory.add(history, "second"))
+    }
+
+    @Test
+    fun keepsOnlyTheMostRecentTwentyPrompts() {
+        val history = PromptHistory.add((1..20).map { "prompt $it" }, "new prompt")
+        assertEquals(20, history.size)
+        assertEquals("new prompt", history.first())
+        assertEquals("prompt 19", history.last())
+    }
+}
+
+class SessionMutePolicyTest {
+    @Test
+    fun followsGlobalAlertsUnlessTheSessionIsExplicitlyMuted() {
+        assertTrue(isSessionMuted(globalAlertsEnabled = false, sessionExplicitlyMuted = false))
+        assertFalse(isSessionMuted(globalAlertsEnabled = true, sessionExplicitlyMuted = false))
+        assertTrue(isSessionMuted(globalAlertsEnabled = true, sessionExplicitlyMuted = true))
+    }
+}
+
 class HttpTest {
     private fun read(raw: String) = Http.read(raw.toByteArray(Charsets.ISO_8859_1).inputStream())
 
@@ -82,6 +109,7 @@ class ParseTest {
         assertEquals(2, result.value.size)
         assertEquals("idle", result.value[0].activity.state)
         assertTrue(result.value[0].activity.confirmed)
+        assertEquals(9L, result.value[0].activity.sinceMs)
         assertEquals("Idle", Labels.state(result.value[0]))
         assertEquals("Stopped", Labels.state(result.value[1]))
         assertEquals(1.25, result.value[0].totalUsd)
@@ -137,13 +165,13 @@ class ParseTest {
 
     @Test
     fun stateClockReportsThinkingTimeAndWhenItFinished() {
-        fun item(state: String) = SessionItem("s", "n", "claude-code", "running", true, "", "", Activity(state, true, false), "")
+        fun item(state: String, sinceMs: Long = 0) =
+            SessionItem("s", "n", "claude-code", "running", true, "", "", Activity(state, true, false, sinceMs = sinceMs), "")
         StateClock.observe(item("idle"), 0)
-        StateClock.observe(item("working"), 10_000)
-        StateClock.observe(item("working"), 20_000)
+        StateClock.observe(item("working", sinceMs = 15_000), 25_000)
         assertEquals("Thinking… 15s", StateClock.headline(item("working"), 25_000))
-        StateClock.observe(item("idle"), 90_000)
-        assertEquals("Idle · done 1m 5s ago", StateClock.headline(item("idle"), 155_000))
+        StateClock.observe(item("idle", sinceMs = 1_000), 90_000)
+        assertEquals("Idle · done 1m 6s ago", StateClock.headline(item("idle"), 155_000))
         assertEquals("Idle", StateClock.headline(SessionItem("x", "n", "t", "running", true, "", "", Activity("idle", true, false), ""), 1))
     }
     @Test

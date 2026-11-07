@@ -6,7 +6,14 @@ ConPTY hosts the normal PowerShell 7 process used by a TauShell session:
 TauShell -> ConPTY -> PowerShell 7 -> AI harness
 ```
 
-PowerShell and harnesses must continue to behave as interactive console applications. TauShell owns the pseudoconsole, passes terminal input to it, drains its virtual-terminal output, and resizes it when the viewport changes. The current interactive TUI implementation is a disposable prototype; its screen renderer is not the target architecture. The desktop GUI needs an independent terminal screen per session, rendered by a verified embedded terminal component inside WebView2. Output and terminal replies must be drained independently; only the selected tab receives user input. Rendering interprets terminal controls; it does not rewrite harness text or replace the harness interface with TauShell-owned chat UI.
+PowerShell and harnesses continue to behave as interactive console
+applications. TauShell owns the pseudoconsole, passes terminal input to it,
+drains its virtual-terminal output, and resizes it when the viewport changes.
+The Bubble Tea TUI was removed. The desktop hosts an independent xterm.js
+screen for each open session inside WebView2. Output and terminal replies are
+drained independently; only the selected tab receives user input. Rendering
+interprets terminal controls; it does not rewrite harness text or replace the
+harness interface with TauShell-owned chat UI.
 
 ## Phase 1 constraints
 
@@ -43,9 +50,10 @@ decision:
 	document quoting, `%`/`!`, spaces, Unicode paths, argument preservation, and
 	wrapper exit/child-process behavior. Do not construct an unvalidated shell
 	command from YAML arguments.
-- **Environment:** the current PowerShell invocation applies session variables
-	in its script. A direct launcher must construct and pass a Unicode Windows
-	environment block, define whether it inherits the TauShell environment, and
+- **Environment:** the current host passes session variables in the child's
+	environment block, not in the PowerShell command line. A direct launcher
+	must preserve that Unicode Windows environment handling, define inheritance
+	from the TauShell environment, and
 	test overrides and empty values. Keep secrets out of command lines and
 	diagnostics. A `cmd.exe` shim adds another command-line boundary and must not
 	undo that property.
@@ -89,7 +97,18 @@ Verified on Windows 10 build 19045 with PowerShell 7.6.6:
 - Wait for the child terminal to initialize before relying on a resize; an early resize can be superseded by the child's initial console setup.
 - Assign the suspended PowerShell process to a kill-on-close Job Object before resuming it. The cleanup fixture now launches a direct child process and verifies job termination stops it. A PowerShell `Start-Process` experiment showed a broker-style detached child can escape the job; such detached processes are intentionally unmanaged.
 
-The CLI host applies/restores UTF-8 code pages, enables/restores virtual-terminal output mode on the local console, and hosts ConPTY processes for sessions. Automated Windows tests in `internal/conpty/process_windows_test.go` launch PowerShell through ConPTY, assert supplementary-plane emoji input and Unicode/emoji output, verify ANSI output and exit codes, resize the pseudoconsole, and confirm job termination stops a direct child fixture. Process-close tests also verify owned handles/files are cleared and close is idempotent. Existing TUI-specific session-manager code and tests are migration references only. These stream/process tests remain useful where UI-independent; the Bubble Tea UI and its VT-screen rendering path are not part of the desktop app. The desktop terminal component must pass its own Windows 10 compatibility gate before readiness is claimed. A separate controlled Copilot restore smoke test is documented in the session restoration notes. Visual glyph compatibility remains dependent on the selected terminal component and available fonts.
+The CLI host applies/restores UTF-8 code pages, enables/restores
+virtual-terminal output mode on the local console, and hosts ConPTY processes
+for sessions. Automated Windows tests in `internal/conpty/process_windows_test.go`
+cover PowerShell startup, supplementary-plane emoji input, Unicode/emoji and
+ANSI output, exit codes, resize, and job termination of a direct child fixture.
+Process-close tests also verify owned handles/files are cleared and close is
+idempotent. These stream/process checks do not by themselves prove desktop
+rendering. The separate production-window fixture below and the recorded
+hosted-harness walkthroughs cover the desktop path, with the remaining limits
+in the [backlog](20-mvp-backlog.md#open-phase-1-backlog). A controlled Copilot
+restore smoke is documented in the [restoration notes](04-session-restoration.md).
+Visual glyph compatibility still depends on the terminal and available fonts.
 
 ## Repeatable hosted-terminal fixture
 
@@ -115,6 +134,10 @@ resize the window, and press `q` to exit.
 The event log records input lines, terminal query responses, mouse reports,
 observed dimensions, and byte counts for each input read without recording
 input contents.
+
+The following observations describe the initial inbox-ConPTY investigation;
+the later [bundled-ConPTY results](#bundled-conpty) resolve its protocol
+blockers without changing the inbox fallback's limitations.
 
 On Windows 10 build 19045, the fixture passed through the production Wails
 window, session bridge, PowerShell 7, ConPTY, and xterm.js. The embedded
@@ -147,16 +170,17 @@ both mouse-mode sequences. This shows that Windows ConPTY consumes these DECSET
 controls before xterm receives the stream. Unconditionally enabling xterm
 mouse tracking would change normal terminal selection/input behavior, so it is
 not an acceptable silent workaround. Supporting mouse modes across this
-PowerShell/ConPTY boundary needs an explicit architecture decision. The
-decided next step is a bundled-ConPTY spike: load a newer `conpty.dll` with
+PowerShell/ConPTY boundary needed an explicit architecture decision. The
+next step at the time was a bundled-ConPTY spike: load a newer `conpty.dll` with
 `OpenConsole.exe` behind a loader switch, keep inbox ConPTY as fallback, and
 compare both for mouse-mode passthrough, device-status/cursor-report delivery,
 and the residual console-host process handle. Adopt it only if mouse modes
 pass through. Device-
-status input still reaches the Go bridge but is not observed by the fixture;
-its loss and the source of the fixture-visible cursor report remain unresolved
-(hypothesis: inbox ConPTY answers these queries itself).
-Real-harness walkthroughs are also not established by these fixture runs.
+status input still reached the Go bridge but was not observed by the fixture;
+its loss and the source of the fixture-visible cursor report were then
+unresolved (hypothesis: inbox ConPTY answers these queries itself). The
+bundled comparison below confirms the inbox behavior. Fixture runs alone do
+not establish real-harness walkthroughs; those were recorded separately.
 
 An isolated browser-side xterm check confirmed that xterm.js emits
 `ESC[0n` for a device-status request and SGR mouse reports after mouse tracking
@@ -169,9 +193,9 @@ but is not observed by the fixture. Native pointer events reach the terminal
 container, but no mouse report reaches the bridge unless tracking is enabled
 directly in xterm; ConPTY's filtering of DECSET mouse-mode controls is
 confirmed. The source of the fixture-visible cursor-position reply is also
-unresolved because no matching bridge marker appeared. Resolve the protocol
-boundary before closing the feasibility gate. Fixture input-chunk byte counts
-are test-only metadata and do not include the input bytes themselves.
+unresolved at that stage because no matching bridge marker appeared. The
+bundled comparison below resolves that investigation. Fixture input-chunk byte
+counts are test-only metadata and do not include the input bytes themselves.
 
 This fixture tests the WebView2/xterm/bridge/PowerShell/ConPTY transport; it
 does not test either real harness's UI, CLI compatibility, authentication, or

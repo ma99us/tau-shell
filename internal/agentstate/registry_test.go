@@ -30,6 +30,20 @@ func TestIdleNeedsToHoldBeforeItIsConfirmed(t *testing.T) {
 	}
 }
 
+func TestSinceMSTracksTheCurrentSessionState(t *testing.T) {
+	registry, clock := fixed()
+	registry.Report("a", Working, Cue, false)
+	*clock = clock.Add(12 * time.Second)
+	if view := registry.Get("a"); view.SinceMS != 12_000 {
+		t.Fatalf("working state age = %dms, want 12000ms", view.SinceMS)
+	}
+
+	registry.Report("a", Idle, Cue, false)
+	if view := registry.Get("a"); view.State != Idle || view.SinceMS != 0 {
+		t.Fatalf("state change should reset its age: %+v", view)
+	}
+}
+
 func TestHeuristicStaleAndUnknownAreNeverConfirmed(t *testing.T) {
 	registry, clock := fixed()
 	registry.Report("h", Idle, Heuristic, false)

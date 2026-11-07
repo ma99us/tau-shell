@@ -35,6 +35,8 @@ func smokeScript(methods []string) string {
     home: Boolean(document.querySelector('.home')),
     missing: ` + string(list) + `.filter((name) => !app || typeof app[name] !== 'function'),
     banner: banner ? banner.textContent : '',
+    version: app && typeof app.GetAppVersion === 'function' ? await app.GetAppVersion() : '',
+    displayedVersion: document.querySelector('.home-version')?.textContent || '',
   };
   if (app) await app.SmokeReport(JSON.stringify(report));
 })();`

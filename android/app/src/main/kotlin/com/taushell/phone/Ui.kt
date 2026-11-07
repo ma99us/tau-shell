@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.os.SystemClock
 import android.text.InputType
 import android.util.TypedValue
 import android.view.Gravity
@@ -11,6 +12,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 
@@ -81,6 +84,30 @@ fun Context.button(label: String, primary: Boolean, onClick: () -> Unit): Button
         background = shape(Theme.bgControl, 8, Theme.border)
     }
     setOnClickListener { onClick() }
+}
+
+fun Context.iconButton(icon: Int, description: String, onClick: () -> Unit): ImageButton = ImageButton(this).apply {
+    contentDescription = description
+    tooltipText = description
+    setImageResource(icon)
+    setColorFilter(Theme.text4)
+    scaleType = ImageView.ScaleType.CENTER
+    setPadding(dp(12), dp(12), dp(12), dp(12))
+    minimumWidth = dp(48)
+    minimumHeight = dp(48)
+    stateListAnimator = null
+    background = shape(Theme.bgControl, 8, Theme.border)
+    setOnClickListener { onClick() }
+}
+
+fun Context.setIconButtonActive(button: ImageButton, active: Boolean) {
+    button.isSelected = active
+    button.setColorFilter(if (active) Theme.accent else Theme.text4)
+    button.background = shape(
+        if (active) Theme.accentBg else Theme.bgControl,
+        8,
+        if (active) Theme.accentBorder else Theme.border,
+    )
 }
 
 fun Context.field(hint: String, multiline: Boolean = false): EditText = EditText(this).apply {
@@ -175,12 +202,13 @@ object StateClock {
 
     private fun key(item: SessionItem) = if (item.running) item.activity.state else "stopped"
 
-    fun observe(item: SessionItem, now: Long = System.currentTimeMillis()) {
+    fun observe(item: SessionItem, now: Long = SystemClock.elapsedRealtime()) {
         val next = key(item)
         val previous = seen[item.id]
-        if (previous?.first == next) return
-        if (previous?.first == "working" && next == "idle") finished[item.id] = now
-        seen[item.id] = next to now
+        val since = item.activity.sinceMs?.coerceAtLeast(0)?.let { now - it }
+            ?: if (previous?.first == next) previous.second else now
+        if (previous?.first == "working" && next == "idle") finished[item.id] = since
+        seen[item.id] = next to since
     }
 
     fun elapsed(ms: Long): String {
@@ -193,9 +221,10 @@ object StateClock {
     }
 
     /** Text for the state pill and the session header. */
-    fun headline(item: SessionItem, now: Long = System.currentTimeMillis()): String {
+    fun headline(item: SessionItem, now: Long = SystemClock.elapsedRealtime()): String {
         val confirmed = item.running && item.activity.confirmed
-        val since = seen[item.id]?.second
+        val seenState = seen[item.id]
+        val since = seenState?.second?.takeIf { seenState.first == key(item) }
         return when {
             confirmed && item.activity.state == "working" -> "Thinking…" + (since?.let { " ${elapsed(now - it)}" } ?: "")
             confirmed && item.activity.state == "idle" -> finished[item.id]?.let { "Idle · done ${elapsed(now - it)} ago" } ?: "Idle"

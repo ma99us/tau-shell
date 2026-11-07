@@ -340,9 +340,23 @@ function App() {
     if (tabList) tabList.scrollBy({ left: direction * Math.max(160, tabList.clientWidth * 0.75), behavior: "smooth" });
   };
 
+  const activateTab = (id: string) => {
+    setSelected(id);
+    const focusTerminal = () => {
+      if (selectedRef.current !== id || document.querySelector(".modal, [role='dialog']")) return;
+      const panel = document.getElementById(`panel-${id}`);
+      const terminal = terminalInstances.get(id);
+      if (!panel || panel.classList.contains("hidden") || !terminal || document.activeElement === terminal.textarea) return;
+      terminal.focus();
+    };
+    requestAnimationFrame(() => requestAnimationFrame(focusTerminal));
+    // WebView2 can hand native focus over after the click when the window was not active.
+    window.setTimeout(focusTerminal, 150);
+  };
+
   const openTab = (session: Session) => {
     setTabs((current) => current.some((tab) => tab.id === session.id) ? current : [...current, { id: session.id, name: session.name }]);
-    setSelected(session.id);
+    activateTab(session.id);
   };
 
   const launch = async (session: Session, mode: "start" | "restore" | "fresh" | "conversation", conversationId = "") => {
@@ -732,7 +746,7 @@ function App() {
                 onClick={() => setSelected("")}
               ><HomeIcon /></button>
               {orderedTabs.map((tab) => (
-                <div className={`tab-item ${selected === tab.id ? "active" : ""} ${dragId === tab.id ? "dragging" : ""} ${dropClass(tab.id)}`} key={tab.id} role="presentation" {...dragProps(tab.id, true)} style={sessionColorStyle(colorOf(tab.id))} data-colored={colorOf(tab.id) ? "" : undefined} onContextMenu={(event) => { const session = sessions.find((current) => current.id === tab.id); if (session) openMenu(event, session); }}>
+                <div className={`tab-item ${selected === tab.id ? "active" : ""} ${dragId === tab.id ? "dragging" : ""} ${dropClass(tab.id)}`} key={tab.id} role="presentation" {...dragProps(tab.id, true)} style={sessionColorStyle(colorOf(tab.id))} data-colored="" onContextMenu={(event) => { const session = sessions.find((current) => current.id === tab.id); if (session) openMenu(event, session); }}>
                   <button
                     id={`tab-${tab.id}`}
                     className="tab tab-label"
@@ -742,7 +756,7 @@ function App() {
                     data-tab-id={tab.id}
                     tabIndex={selected === tab.id ? 0 : -1}
                     onKeyDown={handleTabKeyDown}
-                    onClick={() => setSelected(tab.id)}
+                    onClick={() => activateTab(tab.id)}
                   >{sessions.find((current) => current.id === tab.id) && <StateIcon session={sessions.find((current) => current.id === tab.id)!} activity={activity[tab.id]} />}{tab.name}</button>
                   <button className="tab-close" aria-label={`Close ${tab.name}`} onClick={() => closeTab(tab.id)}>x</button>
                 </div>
@@ -764,7 +778,7 @@ function App() {
               if (!tab && !session?.runningHere) return null;
               return (
                 <div id={`panel-${id}`} className={`terminal-tab-content ${tab && selected === id ? "" : "hidden"}`} role="tabpanel" aria-labelledby={`tab-${id}`} tabIndex={0} key={id}>
-                  <TerminalPane session={session} peers={sessions} visible={Boolean(tab && selected === id)} busy={busy} harness={session ? harnessFor(session) : undefined} onSend={session ? sendFor(session) : undefined} onNotice={(message) => session && setNotice({ sessionId: session.id, message, isError: false })} onInterrupt={() => { const harness = session && harnessFor(session); if (session && harness) interruptSession(session, harness.widgets.interruptKeys); }} onLaunch={launch} onResumeConversation={(target, conversationId) => void launch(target, "conversation", conversationId)} onError={(failure) => showError("ui.terminal", failure)} />
+                  <TerminalPane session={session} visible={Boolean(tab && selected === id)} busy={busy} harness={session ? harnessFor(session) : undefined} onSend={session ? sendFor(session) : undefined} onNotice={(message) => session && setNotice({ sessionId: session.id, message, isError: false })} onInterrupt={() => { const harness = session && harnessFor(session); if (session && harness) interruptSession(session, harness.widgets.interruptKeys); }} onLaunch={launch} onResumeConversation={(target, conversationId) => void launch(target, "conversation", conversationId)} onError={(failure) => showError("ui.terminal", failure)} />
                 </div>
               );
             })}

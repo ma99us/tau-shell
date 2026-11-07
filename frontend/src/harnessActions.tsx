@@ -60,11 +60,12 @@ export function fuzzyScore(query: string, text: string): number {
   return 100 + gaps;
 }
 
-function ToolbarMenu({ label, title, disabled, up, onOpen, children }: {
+function ToolbarMenu({ label, title, disabled, up, className, onOpen, children }: {
   label: ReactNode;
   title: string;
   disabled?: boolean;
   up?: boolean;
+  className?: string;
   onOpen?: () => void;
   children: (close: () => void) => ReactNode;
 }) {
@@ -79,7 +80,7 @@ function ToolbarMenu({ label, title, disabled, up, onOpen, children }: {
     return () => { window.removeEventListener("pointerdown", onPointer, true); window.removeEventListener("keydown", onKey); };
   }, [open]);
   return <div className="toolbar-menu" ref={root}>
-    <button className="text-button terminal-action icon-button" aria-haspopup="menu" aria-expanded={open} disabled={disabled} title={title} aria-label={title}
+    <button className={`text-button terminal-action icon-button${className ? ` ${className}` : ""}`} aria-haspopup="menu" aria-expanded={open} disabled={disabled} title={title} aria-label={title}
       onClick={() => { if (!open) onOpen?.(); setOpen(!open); }}>{label}</button>
     {open && <div className={`toolbar-popover ${up ? "up" : ""}`} role="menu">{children(() => setOpen(false))}</div>}
   </div>;
@@ -89,9 +90,8 @@ export function InterruptButton({ interrupt }: { interrupt: () => void }) {
   return <button className="text-button terminal-action icon-button interrupt-button" title="Interrupt: stop the harness (Esc)" aria-label="Interrupt: stop the harness (Esc)" onClick={interrupt}><Icon name="interrupt" size={14} /></button>;
 }
 
-export function HarnessToolbar({ session, peers, widgets, modelSupported, send, onError }: {
+export function HarnessToolbar({ session, widgets, modelSupported, send, onError }: {
   session: Session;
-  peers: Session[];
   widgets: HarnessWidgets;
   modelSupported: boolean;
   send: SendFn;
@@ -128,8 +128,8 @@ export function HarnessToolbar({ session, peers, widgets, modelSupported, send, 
         <button role="menuitem" onClick={() => { app().OpenPresetsFile().catch(onError); close(); }}>Edit presets...</button>
       </>}
     </ToolbarMenu>
-    {hasCueSignal(session.tool) && <ToolbarMenu label={<><Icon name="queue" />{queued > 0 && <span className="icon-badge">{queued}</span>}</>} title={queued > 0 ? `Queue (${queued}): prompts to send when the harness is idle` : "Queue: prompts to send when the harness is idle, or queue one for several sessions"} onOpen={loadPresets}>
-      {() => <QueuePanel session={session} peers={peers} presets={presets} />}
+    {hasCueSignal(session.tool) && <ToolbarMenu className={queued > 0 ? "queue-nonempty" : undefined} label={<><Icon name="queue" />{queued > 0 && <span className="icon-badge">{queued}</span>}</>} title={queued > 0 ? `Queue (${queued}): prompts to send when the harness is idle` : "Queue: prompts to send when the harness is idle"} onOpen={loadPresets}>
+      {() => <QueuePanel session={session} presets={presets} />}
     </ToolbarMenu>}
     <ToolbarMenu up label={<Icon name="commands" />} title="Commands: send a harness slash command">
       {(close) => widgets.commands.map((command) => <button role="menuitem" key={command.text} title={command.text}

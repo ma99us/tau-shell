@@ -21,3 +21,4 @@ docs\.todo
 # Local machine notes
 /LOCAL-ENVIRONMENT.md
 cmd/taushell/frontend/dist/
+tau-shell.code-workspace

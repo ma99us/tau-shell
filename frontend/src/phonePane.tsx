@@ -13,6 +13,7 @@ export function PhonePane({ onError }: { onError: (source: string, error: unknow
   const [offer, setOffer] = useState<PairingOffer | null>(null);
   const [busy, setBusy] = useState(false);
   const offerRef = useRef(offer);
+  const auditLog = useRef<HTMLUListElement>(null);
   offerRef.current = offer;
 
   const refresh = () => app().GetMobileStatus().then((next) => {
@@ -27,6 +28,11 @@ export function PhonePane({ onError }: { onError: (source: string, error: unknow
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const log = auditLog.current;
+    if (log) log.scrollTop = log.scrollHeight;
+  }, [status?.audit, status?.enabled]);
 
   const run = (source: string, action: () => Promise<unknown>) => {
     setBusy(true);
@@ -75,7 +81,7 @@ export function PhonePane({ onError }: { onError: (source: string, error: unknow
       </div>}
       {!offer && !awaiting && <button className="primary-button" disabled={busy}
         onClick={() => run("ui.phone-pair", async () => setOffer(await app().StartPairing()))}>Add phone</button>}
-      {status && (status.audit?.length ?? 0) > 0 && <ul className="control-audit-list">{[...status.audit].reverse().slice(0, 20).map((entry, index) => <li key={`${entry.time}-${index}`}>
+      {status && (status.audit?.length ?? 0) > 0 && <ul className="control-audit-list" ref={auditLog} aria-label="Phone connection log">{[...status.audit].reverse().slice(0, 20).map((entry, index) => <li key={`${entry.time}-${index}`}>
         <span className="muted">{new Date(entry.time).toLocaleTimeString()}</span> {entry.image} {entry.op} <span className={entry.outcome === "ok" ? "" : "warn"}>{entry.outcome}</span>
       </li>)}</ul>}
     </>}

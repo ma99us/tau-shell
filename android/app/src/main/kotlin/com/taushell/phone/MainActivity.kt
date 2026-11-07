@@ -23,6 +23,14 @@ import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import java.util.concurrent.Executors
 
+private const val REQUEST_POST_NOTIFICATIONS = 1
+
+private data class PendingAlertsEnable(
+    val toggle: Switch?,
+    val onGranted: () -> Unit,
+    val onDenied: () -> Unit,
+)
+
 class MainActivity : Activity(), SessionActions {
     private lateinit var store: Store
     private lateinit var root: FrameLayout
@@ -37,12 +45,12 @@ class MainActivity : Activity(), SessionActions {
     private var latest: List<SessionItem> = emptyList()
     private var pairing: Pairing? = null
     private val cards = LinkedHashMap<String, SessionCard>()
-    private val promptHistory = LinkedHashMap<String, MutableList<String>>()
     private var list: LinearLayout? = null
     private var banner: TextView? = null
     private var empty: TextView? = null
     private var refreshing = false
     private var pairingInFlight = false
+    private var pendingAlertsEnable: PendingAlertsEnable? = null
     private var pairStatus: TextView? = null
     private var linkField: android.widget.EditText? = null
     private var nameField: android.widget.EditText? = null
@@ -227,7 +235,7 @@ class MainActivity : Activity(), SessionActions {
         cards.clear()
         session = null
         openId = null
-        val gear = button("Settings", false) { showSettings() }
+        val gear = iconButton(R.drawable.ic_gear, "Settings") { showSettings() }
         val header = linear(this).apply {
             setPadding(dp(18), dp(16), dp(18), dp(8))
             addView(brand(gear))
@@ -358,17 +366,6 @@ class MainActivity : Activity(), SessionActions {
         }
     }
 
-    override fun answer(item: SessionItem, answer: String, done: (Result<Unit>) -> Unit) {
-        val current = pairing ?: return
-        io.execute {
-            val outcome = current.client().answer(item.id, answer)
-            ui.post {
-                done(outcome)
-                refresh()
-            }
-        }
-    }
-
     override fun quickReplies(): List<String> = (store.presets + pcPresets).distinct()
 
     override fun sessionPresets(item: SessionItem, done: (Result<List<PromptPreset>>) -> Unit) {
@@ -379,19 +376,29 @@ class MainActivity : Activity(), SessionActions {
         }
     }
 
-    override fun promptHistory(id: String): List<String> = promptHistory[id]?.toList().orEmpty()
+    override fun promptHistory(id: String): List<String> = store.promptHistory[id].orEmpty()
 
     override fun rememberPrompt(id: String, text: String) {
-        val history = promptHistory.getOrPut(id) { mutableListOf() }
-        history.remove(text)
-        history.add(0, text)
-        if (history.size > 20) history.removeAt(history.lastIndex)
+        store.promptHistory = store.promptHistory + (id to PromptHistory.add(promptHistory(id), text))
     }
 
-    override fun muted(id: String) = id in store.muted
+    override fun muted(id: String) = isSessionMuted(store.alerts, id in store.muted)
 
-    override fun setMuted(id: String, value: Boolean) {
-        store.muted = if (value) store.muted + id else store.muted - id
+    override fun setMuted(id: String, value: Boolean, done: (Result<Unit>) -> Unit) {
+        if (value) {
+            store.muted = store.muted + id
+            done(Result.Ok(Unit))
+            return
+        }
+        enableAlerts(
+            onGranted = {
+                store.muted = store.muted - id
+                done(Result.Ok(Unit))
+            },
+            onDenied = {
+                done(Result.Fail("permission_denied", "Allow Android notification permission to unmute this session."))
+            },
+        )
     }
 
     // Settings
@@ -401,7 +408,7 @@ class MainActivity : Activity(), SessionActions {
         ui.removeCallbacks(poll)
         cards.clear()
         val content = page()
-        content.addView(brand(button("Done", false) { showHome() }))
+        content.addView(brand(iconButton(R.drawable.ic_close, "Close settings") { showHome() }))
         content.addView(eyebrow("This PC"), lp().apply { topMargin = dp(24) })
         content.addView(text("${current.host}:${current.port}", 15f, Theme.text1), lp().apply { topMargin = dp(6) })
         content.addView(text("Pairing expires ${current.expires.ifEmpty { "unknown" }}. Pair again to renew.", 12f, Theme.text10), lp().apply { topMargin = dp(2) })
@@ -435,12 +442,68 @@ class MainActivity : Activity(), SessionActions {
     }
 
     private fun setAlerts(on: Boolean, toggle: Switch) {
-        if (on && Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
+        if (!on) {
+            store.alerts = false
+            MonitorService.stop(this)
+            setAlertsToggle(toggle, false)
+            return
         }
-        store.alerts = on
-        if (on) MonitorService.start(this) else MonitorService.stop(this)
-        toggle.isChecked = on
+        enableAlerts(
+            toggle = toggle,
+            onGranted = { setAlertsToggle(toggle, true) },
+            onDenied = {
+                setAlertsToggle(toggle, false)
+                Toast.makeText(this, "Allow Android notification permission to enable alerts.", Toast.LENGTH_SHORT).show()
+            },
+        )
+    }
+
+    private fun enableAlerts(
+        toggle: Switch? = null,
+        onGranted: () -> Unit,
+        onDenied: () -> Unit,
+    ) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            pendingAlertsEnable = PendingAlertsEnable(toggle, onGranted, onDenied)
+            toggle?.isEnabled = false
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_POST_NOTIFICATIONS)
+            return
+        }
+        store.alerts = true
+        MonitorService.start(this)
+        setAlertsToggle(toggle, true)
+        onGranted()
+    }
+
+    private fun setAlertsToggle(toggle: Switch?, enabled: Boolean) {
+        if (toggle == null) return
+        toggle.setOnCheckedChangeListener(null)
+        toggle.isEnabled = true
+        toggle.isChecked = enabled
+        toggle.setOnCheckedChangeListener { _, checked -> setAlerts(checked, toggle) }
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != REQUEST_POST_NOTIFICATIONS) return
+        val pending = pendingAlertsEnable ?: return
+        pendingAlertsEnable = null
+        val granted = Build.VERSION.SDK_INT < 33 ||
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            store.alerts = true
+            MonitorService.start(this)
+            setAlertsToggle(pending.toggle, true)
+            pending.onGranted()
+        } else {
+            store.alerts = false
+            MonitorService.stop(this)
+            setAlertsToggle(pending.toggle, false)
+            pending.onDenied()
+        }
     }
 
     private fun forgetPc() {

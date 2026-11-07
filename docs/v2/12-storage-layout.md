@@ -33,9 +33,14 @@ USD is a list-price estimate computed at read time from the price table, so a
 price update restates history. Records with no known price are marked
 unpriced and shown with a trailing `+`. No prompt text is stored.
 
-The YAML file is the source of intended session configuration. `internal/session/` stores TauShell-managed runtime metadata in SQLite, including the harness session UUID generated before first launch and launch/restore outcomes. Session start and discovered-ID claims use immediate SQLite transactions across TauShell processes. Session deletion renames YAML to a same-directory `.deleting` tombstone, then removes runtime/order state, detaches usage history, and records a journal row in one transaction. Startup restores a staged file without a journal or finalizes a journaled deletion. TauShell config creation/updates/deletion use a per-file Windows mutex; updates also recheck file bytes before replacement and return a conflict if an external edit was observed. This is not a cross-process compare-and-swap against editors that do not honor TauShell's mutex. Do not write runtime IDs back into hand-edited YAML.
+The YAML file is the source of intended session configuration. `internal/session/` stores TauShell-managed runtime metadata in SQLite, including harness conversation identifiers and launch/restore outcomes. Identifiers are TauShell-generated for some adapters and discovered after launch for others; see [session restoration](04-session-restoration.md#harness-resume-ids). Session start and discovered-ID claims use immediate SQLite transactions across TauShell processes. Session deletion renames YAML to a same-directory `.deleting` tombstone, then removes runtime/order state, detaches usage history, and records a journal row in one transaction. Startup restores a staged file without a journal or finalizes a journaled deletion. TauShell config creation/updates/deletion use a per-file Windows mutex; updates also recheck file bytes before replacement and return a conflict if an external edit was observed. This is not a cross-process compare-and-swap against editors that do not honor TauShell's mutex. Do not write runtime IDs back into hand-edited YAML.
 
-Secret vault, workspace/project registry, plugin packages, and terminal snapshots remain later-scope storage until their behavior is specified.
+Named secret values are stored separately in the current user's Windows
+Credential Manager, not in this directory or session YAML. YAML may reference
+their names for injection into a session environment; see the
+[security model](11-security-model.md#secret-vault). A workspace/project
+registry, general plugin-package registry, and terminal snapshots remain
+later-scope storage.
 
 ## Skill library
 
@@ -57,7 +62,8 @@ Missing or invalid placement falls back to the default window.
 
 The desktop opens Home by default; opted-in auto-resume settings may restore
 eligible sessions. Persisted tab IDs/order/selection remain presentation state
-separate from YAML and harness runtime metadata. See
-[`docs/v1/08-UI-Design.md`](../v1/08-UI-Design.md).
+separate from YAML and harness runtime metadata. See the
+[system architecture](01-system-architecture.md); the
+[V1 UI design](../v1/08-UI-Design.md) is historical context.
 
 The isolated [`spikes/session-config/`](../../spikes/session-config/) prototype verified strict YAML parsing, runtime UUID persistence across database reopen, and that runtime-state operations leave the original YAML file unchanged. The application now implements this separation; the schema and driver remain subject to Phase 1 validation.

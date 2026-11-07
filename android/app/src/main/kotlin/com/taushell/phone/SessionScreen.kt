@@ -10,6 +10,7 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.HorizontalScrollView
+import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.ScrollView
@@ -31,9 +32,18 @@ class SessionScreen(
     private val icon = TextView(context)
     private val name = context.text("", 16f, Theme.text1, true)
     private val subtitle = context.text("", 12f, Theme.text10)
-    private val mute = context.button("", false) {
-        actions.setMuted(item.id, !actions.muted(item.id))
-        renderMute()
+    private val mute: ImageButton = context.iconButton(R.drawable.ic_volume, "Mute session") {
+        mute.isEnabled = false
+        actions.setMuted(item.id, !actions.muted(item.id)) { outcome ->
+            mute.isEnabled = true
+            when (outcome) {
+                is Result.Ok -> renderMute()
+                is Result.Fail -> {
+                    renderMute()
+                    show(outcome.message, Theme.input)
+                }
+            }
+        }
     }
     private val stateBar = View(context)
     private val stateDot = context.dot(Theme.text10)
@@ -54,10 +64,10 @@ class SessionScreen(
         isHorizontalScrollBarEnabled = true
         isFillViewport = true
     }
-    private val wrap = context.button("Wrap: Off", false) { setWrap(!wrapEnabled) }
-    private val promptsButton = context.button("Prompts", false) { showPresets() }
+    private val wrap = context.iconButton(R.drawable.ic_wrap, "Enable text wrapping") { setWrap(!wrapEnabled) }
+    private val promptsButton = context.iconButton(R.drawable.ic_prompts, "Saved prompts") { showPresets() }
     private val prompt: AutoCompleteTextView = AutoCompleteTextView(context).apply {
-        hint = "Prompt (hold Send to type only)"
+        hint = "Prompt"
         setHintTextColor(Theme.text11)
         setTextColor(Theme.text1)
         setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 14f)
@@ -68,9 +78,12 @@ class SessionScreen(
         maxLines = 5
         threshold = 0
     }
-    private val send = context.button("Send", true) { submit(false) }
+    private val promptHistoryButton = context.iconButton(R.drawable.ic_history, "Prompt history") {
+        prompt.requestFocus()
+        prompt.post { if (prompt.adapter.count > 0) prompt.showDropDown() }
+    }.apply { visibility = View.GONE }
+    private val send = context.button("Send", true) { submit() }
     private val promptRow = LinearLayout(context)
-    private val answerRow = LinearLayout(context)
     private val startRow = LinearLayout(context)
     private val result = context.text("", 12f, Theme.text6)
     private val clearResult = Runnable { result.visibility = View.GONE }
@@ -94,17 +107,20 @@ class SessionScreen(
             addView(back, lp(ViewWrap, context.dp(40)))
             addView(icon, lp(context.dp(36), context.dp(36)).apply { leftMargin = context.dp(10) })
             addView(titles, lp(0, weight = 1f).apply { leftMargin = context.dp(10); rightMargin = context.dp(8) })
-            addView(totalSpent, lp(ViewWrap, ViewWrap).apply { rightMargin = context.dp(8) })
             addView(mute, lp(ViewWrap, context.dp(36)))
         }
-        mute.apply { minHeight = context.dp(36); minimumHeight = context.dp(36); setPadding(context.dp(10), 0, context.dp(10), 0); textSize = 12f }
         addView(top, lp())
         addView(stateBar, lp(height = context.dp(3)))
 
         val status = linear(context).apply {
             setBackgroundColor(Theme.bgPanel)
             setPadding(context.dp(14), context.dp(8), context.dp(14), context.dp(8))
-            addView(context.row(stateDot, stateText, gap = 8))
+            addView(LinearLayout(context).apply {
+                orientation = HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(context.row(stateDot, stateText, gap = 8), lp(0, ViewWrap, weight = 1f))
+                addView(totalSpent, lp(ViewWrap, ViewWrap))
+            }, lp())
             addView(notice, lp().apply { topMargin = context.dp(2) })
         }
         addView(status, lp())
@@ -114,14 +130,14 @@ class SessionScreen(
         vertical.addView(horizontal, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         vertical.setBackgroundColor(Theme.bgApp)
         vertical.setOnScrollChangeListener { _, _, _, _, _ ->
-            if (!applyingScreenUpdate) stickToLatest = isAtBottom()
+            if (!applyingScreenUpdate) stickToLatest = isAtBottomLeft()
+        }
+        horizontal.setOnScrollChangeListener { _, _, _, _, _ ->
+            if (!applyingScreenUpdate) stickToLatest = isAtBottomLeft()
         }
         addView(vertical, lp(height = 0, weight = 1f))
-        answerRow.addView(context.button("Yes", true) { answer("yes") }, lp(0, weight = 1f))
-        answerRow.addView(context.button("No", false) { answer("no") }, lp(0, weight = 1f).apply { leftMargin = context.dp(8) })
         startRow.addView(context.button("Resume", true) { startSession("restore") }, lp(0, weight = 1f))
         startRow.addView(context.button("Start fresh", false) { startSession("fresh") }, lp(0, weight = 1f).apply { leftMargin = context.dp(8) })
-        send.setOnLongClickListener { submit(true); true }
         promptRow.gravity = Gravity.BOTTOM
         promptRow.addView(prompt, lp(0, weight = 1f))
         promptRow.addView(send, lp(ViewWrap, ViewWrap).apply { leftMargin = context.dp(8) })
@@ -131,7 +147,12 @@ class SessionScreen(
             prompt.dismissDropDown()
             submitText(selected, false, clear = true)
         }
-        prompt.setOnClickListener { if (prompt.adapter.count > 0) prompt.showDropDown() }
+        // Long press opens history; with no history it keeps the normal select/paste menu.
+        prompt.setOnLongClickListener {
+            if (prompt.adapter.count == 0) return@setOnLongClickListener false
+            prompt.showDropDown()
+            true
+        }
 
         val bottom = linear(context).apply {
             setBackgroundColor(Theme.bgPanel)
@@ -139,11 +160,12 @@ class SessionScreen(
             addView(result, lp().apply { bottomMargin = context.dp(6) })
             addView(LinearLayout(context).apply {
                 gravity = Gravity.CENTER_VERTICAL
-                addView(wrap, lp(0, weight = 1f))
-                addView(promptsButton, lp(0, weight = 1f).apply { leftMargin = context.dp(6) })
+                addView(promptHistoryButton, lp(context.dp(48), context.dp(48)).apply { rightMargin = context.dp(8) })
+                addView(promptsButton, lp(context.dp(48), context.dp(48)))
+                addView(View(context), lp(0, context.dp(1), weight = 1f))
+                addView(wrap, lp(context.dp(48), context.dp(48)))
             }, lp().apply { bottomMargin = context.dp(8) })
             addView(promptRow, lp())
-            addView(answerRow, lp())
             addView(startRow, lp())
         }
         result.visibility = View.GONE
@@ -163,17 +185,20 @@ class SessionScreen(
         if (first || next.running) fetchScreen()
     }
 
-    private fun renderMute() { mute.text = if (actions.muted(item.id)) "Unmute" else "Mute" }
+    private fun renderMute() {
+        val muted = actions.muted(item.id)
+        mute.setImageResource(if (muted) R.drawable.ic_volume_off else R.drawable.ic_volume)
+        mute.contentDescription = if (muted) "Unmute session" else "Mute session"
+        mute.tooltipText = mute.contentDescription
+        context.setIconButtonActive(mute, !muted)
+    }
 
     private fun render() {
         val running = item.running
         val color = Labels.stateColor(item)
         val working = running && item.activity.confirmed && item.activity.state == "working"
         val waiting = running && item.activity.state == "input" && item.activity.confirmed
-        val answerable = waiting && (item.tool == "claude-code" || item.tool == "copilot-cli")
-        // A question or choice list takes typed text; only a permission prompt gets Yes/No.
-        val question = answerable && item.activity.question
-        val yesNo = answerable && !question
+        val question = waiting && item.activity.question
 
         stateText.text = StateClock.headline(item)
         stateText.setTextColor(color)
@@ -183,7 +208,6 @@ class SessionScreen(
         notice.text = when {
             !running -> if (item.lastError.isNotBlank()) "Not running. Last error: ${item.lastError}" else "Not running."
             question -> "Waiting for an answer to a question. Type the reply (the option number for a list) and send it."
-            answerable -> "Waiting for an answer. Yes presses Enter and No presses Esc, only on a permission prompt."
             waiting -> "Waiting for an answer. Answer it on the PC; replies from here are blocked until then."
             working -> "Turn active. Send submits your prompt now."
             item.activity.state == "unknown" -> "State unknown. Only Claude Code and Copilot CLI report it, so replies are blocked."
@@ -197,11 +221,11 @@ class SessionScreen(
             shownPromptHistory = history
             prompt.setAdapter(ArrayAdapter(context, android.R.layout.simple_dropdown_item_1line, history))
         }
+        promptHistoryButton.visibility = if (history.isEmpty() || !running) View.GONE else View.VISIBLE
         send.text = "Send"
         send.alpha = if (running && (!waiting || question || working)) 1f else 0.5f
-        promptsButton.visibility = if (running && !answerable) View.VISIBLE else View.GONE
-        promptRow.visibility = if (running && !yesNo) View.VISIBLE else View.GONE
-        answerRow.visibility = if (yesNo) View.VISIBLE else View.GONE
+        promptsButton.visibility = if (running) View.VISIBLE else View.GONE
+        promptRow.visibility = if (running) View.VISIBLE else View.GONE
         startRow.visibility = if (!running) View.VISIBLE else View.GONE
     }
 
@@ -218,19 +242,26 @@ class SessionScreen(
             if (text == screenView.text.toString()) return@screen
             val pinned = stickToLatest
             val previousY = vertical.scrollY
+            val previousX = horizontal.scrollX
             applyingScreenUpdate = true
             screenView.text = text
             vertical.post {
-                vertical.scrollTo(0, if (pinned) vertical.getChildAt(0).height else previousY)
+                if (pinned) {
+                    horizontal.scrollTo(0, 0)
+                    vertical.scrollTo(0, vertical.getChildAt(0).height)
+                } else {
+                    horizontal.scrollTo(previousX, 0)
+                    vertical.scrollTo(0, previousY)
+                }
                 applyingScreenUpdate = false
             }
         }
     }
 
-    private fun submit(insertOnly: Boolean) {
+    private fun submit() {
         val text = prompt.text.toString().trim()
         if (text.isNotEmpty()) prompt.dismissDropDown()
-        submitText(text, insertOnly, clear = true)
+        submitText(text, insertOnly = false, clear = true)
     }
 
     private fun showPresets() {
@@ -285,9 +316,12 @@ class SessionScreen(
             busy = false
             when (outcome) {
                 is Result.Ok -> {
-                    actions.rememberPrompt(item.id, text)
-                    shownPromptHistory = actions.promptHistory(item.id)
-                    prompt.setAdapter(ArrayAdapter(context, android.R.layout.simple_dropdown_item_1line, shownPromptHistory.orEmpty()))
+                    if (!insertOnly) {
+                        actions.rememberPrompt(item.id, text)
+                        shownPromptHistory = actions.promptHistory(item.id)
+                        prompt.setAdapter(ArrayAdapter(context, android.R.layout.simple_dropdown_item_1line, shownPromptHistory.orEmpty()))
+                        promptHistoryButton.visibility = if (shownPromptHistory.isNullOrEmpty()) View.GONE else View.VISIBLE
+                    }
                     if (clear) prompt.setText("")
                     show(if (insertOnly) "Typed into the session. Press Enter in the session to submit." else "Sent.", Theme.ok)
                     (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(prompt.windowToken, 0)
@@ -303,7 +337,9 @@ class SessionScreen(
         val previousY = vertical.scrollY
         applyingScreenUpdate = true
         wrapEnabled = enabled
-        wrap.text = if (enabled) "Wrap: On" else "Wrap: Off"
+        wrap.contentDescription = if (enabled) "Disable text wrapping" else "Enable text wrapping"
+        wrap.tooltipText = wrap.contentDescription
+        context.setIconButtonActive(wrap, enabled)
         vertical.removeView(horizontal)
         if (enabled) {
             horizontal.removeView(screenView)
@@ -321,9 +357,11 @@ class SessionScreen(
         }
     }
 
-    private fun isAtBottom(): Boolean {
+    private fun isAtBottomLeft(): Boolean {
         val child = vertical.getChildAt(0) ?: return true
-        return child.bottom - (vertical.scrollY + vertical.height) <= context.dp(48)
+        val atBottom = child.bottom - (vertical.scrollY + vertical.height) <= context.dp(4)
+        val atLeft = wrapEnabled || horizontal.scrollX <= context.dp(4)
+        return atBottom && atLeft
     }
 
     private fun startSession(mode: String) {
@@ -334,19 +372,6 @@ class SessionScreen(
             busy = false
             when (outcome) {
                 is Result.Ok -> show("Requested. The session appears as running when it is up.", Theme.ok)
-                is Result.Fail -> show(outcome.message, Theme.failed)
-            }
-        }
-    }
-
-    private fun answer(choice: String) {
-        if (busy) return
-        busy = true
-        show("Sending $choice…", Theme.text6, false)
-        actions.answer(item, choice) { outcome ->
-            busy = false
-            when (outcome) {
-                is Result.Ok -> show("Answered $choice.", Theme.ok)
                 is Result.Fail -> show(outcome.message, Theme.failed)
             }
         }

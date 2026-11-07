@@ -4,11 +4,14 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Platform: Windows 10+](https://img.shields.io/badge/platform-Windows%2010%2B-0078D4)
 
-A Windows desktop manager for persistent AI coding sessions. Each session is a
-PowerShell 7 process hosted through ConPTY, running a terminal-native harness
-such as Claude Code or GitHub Copilot CLI. TauShell keeps ordinary PowerShell
-behavior, never rewrites harness output, and resumes the harness conversation
-when the harness supports it.
+Keep several AI coding agents working side by side, queue their next tasks,
+reuse your best prompts and skills, and check progress from your phone.
+TauShell is a Windows desktop manager for persistent sessions with Claude Code,
+GitHub Copilot CLI, GSD, OpenAI Codex CLI and OpenCode.
+
+Each session runs in ordinary PowerShell 7 through ConPTY. TauShell preserves
+the harness's terminal output and resumes its conversation where supported,
+without replacing your shell or forcing you into one AI provider.
 
 ![TauShell with several sessions, a session-colored tab and top bar, and the Files drawer](docs/screenshots/taushell-main.png)
 
@@ -18,29 +21,65 @@ TauShell -> ConPTY -> PowerShell 7 -> AI harness
 
 ## Features
 
-- **Persistent sessions.** One YAML file per session; resume IDs and restore
-  outcomes are kept apart in a SQLite store. Explicit Start, Restore and Start
-  Fresh, plus Resume All and opt-in auto resume.
-- **Harnesses.** Claude Code, GitHub Copilot CLI, GSD, OpenAI Codex CLI and
-  OpenCode, as declarative YAML manifests. Add your own in
-  `~/.tau_shell/harnesses/`.
-- **Wrong-session safety.** Per-session colors tint the tab, sidebar row,
-  top bar and terminal edge, with text chosen for contrast.
-- **Attention cues.** State indicators, taskbar flash and Windows toast when a
-  session needs an answer or finishes.
-- **Project context.** Top bar with path, git branch, `*` markers for uncommitted
-  or unpushed work, one-click **Sync changes** (stage, commit, pull --rebase,
-  push), model, tokens and cost.
-- **Files drawer.** Browse the project, view text, Markdown and images, insert
-  paths into the prompt.
-- **Toolbar and palette.** Prompt presets, commands, model, compact, interrupt;
-  Ctrl+Shift+P palette, Ctrl+1..9 and Ctrl+Tab for tabs.
-- **Workspaces.** Home can group sessions by project folder (off by default).
-- **Skills.** A bundled library of agent skills from
-  [ai-cookbook](https://github.com/mgerdov-igt/ai-cookbook), loaded into
-  sessions without touching your own skill folders.
+- **Several agents, one workspace.** Run different harnesses side by side,
+  switch between session-colored tabs, group by project, and resume stopped
+  conversations. Resume All and opt-in auto resume bring eligible sessions
+  back; Start fresh begins a new conversation without losing usage history.
+- **Remote access from your Android phone.** Check live session state, read
+  visible terminal text, send prompts, answer supported permission prompts,
+  and receive attention alerts on your local network. Pair by QR code and
+  approve the phone on the PC. The companion is experimental, sideloaded and
+  off by default; it uses authenticated HTTPS with certificate pinning, not a
+  public web dashboard. [Phone setup](android/README.md).
+- **Canned prompts and queued follow-ups.** The session's right-side toolbar
+  puts reusable prompt presets and a per-session prompt queue a click away.
+  Queue typed tasks or presets while an agent works; TauShell sends them one
+  at a time only when a supported harness is confirmed idle, without answering
+  permission prompts or overwriting an unsent draft. Queues stay in memory
+  and are discarded when TauShell closes.
+- **Reusable skills from ai-cookbook.** Start with a bundled
+  [ai-cookbook](https://github.com/mgerdov-igt/ai-cookbook) skill library,
+  fetch newer snapshots, and enable the skills you want from Home. Supported
+  harnesses receive them on launch or resume without overwriting your personal
+  skill folders; availability and live verification vary by adapter.
+- **Token, cost and price tracking.** See session totals beside the current
+  model and monthly totals across harnesses, including deleted sessions.
+  Copilot supplies recorded costs; Claude costs are list-price estimates with
+  refreshable pricing. Unknown prices are marked unpriced rather than treated
+  as free. A Home quota chip also shows Copilot allowance where available.
+- **Simplified tool setup and upgrade assistance.** Home detects executable
+  paths, versions, dependencies and supported capabilities. Install missing
+  harnesses through confirmed winget/npm actions or vendor instructions, and
+  use offered updates for supported tools. Node.js/npm and Git can be installed
+  into TauShell's per-user tools folder without admin rights or registry PATH
+  changes. Nothing installs or upgrades silently.
+- **A practical session toolbar.** Browse project files, preview text,
+  Markdown and images, insert paths into prompts, and revisit past
+  conversations. Harness-aware controls expose slash commands, model
+  selection, compaction, confirmed conversation clearing and interruption.
+  Ctrl+Shift+P opens the command palette; Ctrl+1..9 and Ctrl+Tab switch tabs.
+- **Project context and one-click Git sync.** See the working folder, branch,
+  uncommitted/unpushed markers and last recorded model. **Sync changes**
+  stages and commits pending changes, pulls with rebase, then pushes.
+- **Know which agent needs you.** State indicators, taskbar flash and Windows
+  toasts flag input requests and completed turns. Session colors tint tabs,
+  sidebar rows, the top bar and terminal edge to reduce wrong-session mistakes.
+- **Portable, inspectable and extensible.** No desktop installer: session
+  intent is editable YAML, runtime state is SQLite, and harness definitions
+  are declarative manifests. Add custom manifests in
+  `~/.tau_shell/harnesses/`. Home offers confirmed TauShell updates with
+  rollback to the previous version.
 - **Orderly shutdown.** Closing the app or a running tab asks first, interrupts
   gracefully, then force-stops what remains and reports it.
+
+### Phone companion
+
+<img src="docs/screenshots/taushell-phone.png" width="450" alt="TauShell Phone companion (Android): session tiles with live state such as Thinking, Idle and Stopped">
+
+Enable **Phone** on Home, select the PC's local-network address, and pair the
+Android app. Only pair phones you trust: terminal text may contain sensitive
+provider output. [Build, install and pair](android/README.md);
+[security boundaries](docs/v2/11-security-model.md#phone-server-experimental-off-by-default).
 
 ## Install
 
@@ -75,7 +114,9 @@ gh attestation verify .\TauShell-<version>-windows-x64.zip --repo ma99us/tau-she
    working_dir: C:/Projects/App
    ```
 
-2. Start the session from Home. Right-click its tab to rename or recolor it.
+2. Creating a session in the app starts it immediately. If you added YAML
+   manually, start the session from Home. Right-click its tab to rename or
+   recolor it.
 3. Stop and Restore later to resume the harness conversation where supported.
 
 Schema and options: [YAML schema](docs/v2/18-yaml-schema.md).
@@ -99,27 +140,30 @@ taushell ctl read [--rows N] <session>             # visible terminal text
 
 ## Status
 
-Phase 1 (local Windows desktop) is implemented. Remote access and web
-dashboards are out of scope; a phone server exists as an experimental, off by
-default option.
+**Working desktop prerelease, not a production-stable release.** Core session
+management, the terminal workspace, prompt/skill tools, usage tracking, setup
+assistance and the experimental LAN phone companion are implemented.
+Published builds are currently unsigned prereleases. General internet remote
+access and web dashboards are not implemented.
 
-<img src="docs/screenshots/taushell-phone.png" width="450" alt="TauShell Phone companion (Android): session tiles with live state such as Thinking, Idle and Stopped">
+The following are recorded, version-specific checks, not guarantees for every
+installed version. See the [handoff](docs/v2/21-engineering-handoff.md) for
+the test paths and remaining limits.
 
-The Android companion app (`android/`, sideloaded) lists your sessions with their
-live state and can send prompts, answer permission prompts and show alerts. It is
-experimental; see [android/README.md](android/README.md).
-
-| Harness | Verified |
+| Harness | Recorded verification |
 |---|---|
-| GitHub Copilot CLI | Launch, restore with real turns, usage, skills, attention cues |
-| Claude Code | Launch, graceful exit, trust prompt, resume gate; model-dependent checks blocked on a credential |
-| GSD, OpenCode | Launch, resume ID, graceful stop, restore; replies and usage unproven |
-| OpenAI Codex CLI | Unit-tested only; never run signed in |
+| GitHub Copilot CLI | Launch, usage, skills and attention cues; real-turn restore on 1.0.104 |
+| Claude Code | Version 2.1.316: real-turn restore and recall, activity/input cues, and graceful stop through the session manager and ConPTY; app-window tab/focus checks remain open |
+| GSD | Version 1.18.0 (below the tested manifest range): launch, restore and recall, activity, model and usage; alternate-model reply and reliable native skill loading remain unverified |
+| OpenCode | Version 1.19.5: launch, resume-ID discovery, stop and restore; model replies, usage, cues and interruption remain unverified |
+| OpenAI Codex CLI | Version 0.166.0: live launch, restore and recall, usage, skill, activity and interrupt checks |
 
 Unicode, ANSI, cursor movement, typed input and live resize are verified through
-WebView2, xterm.js and ConPTY on Windows 10. Not yet live-verified: the
-flash/toast alerts, some newer UI behavior, and a live winget install. Open
-items are tracked in the [engineering handoff](docs/v2/21-engineering-handoff.md).
+WebView2, xterm.js and ConPTY on Windows 10. A background attention notification
+was observed; taskbar flash alone and toast click-to-open were not separately
+checked. Some newer UI behavior and a live winget install also remain
+unverified. Open items are tracked in the
+[engineering handoff](docs/v2/21-engineering-handoff.md).
 
 ## Build
 

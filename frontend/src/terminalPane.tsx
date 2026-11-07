@@ -182,9 +182,8 @@ function UsageChips({ usage }: { usage: SessionUsage }) {
   </>;
 }
 
-export function TerminalPane({ session, peers, visible, busy, harness, onSend, onNotice, onInterrupt, onLaunch, onResumeConversation, onError }: {
+export function TerminalPane({ session, visible, busy, harness, onSend, onNotice, onInterrupt, onLaunch, onResumeConversation, onError }: {
   session?: Session;
-  peers?: Session[];
   visible: boolean;
   busy: boolean;
   harness?: { widgets: HarnessWidgets; modelSupported: boolean };
@@ -323,23 +322,25 @@ export function TerminalPane({ session, peers, visible, busy, harness, onSend, o
     const terminal = terminalInstances.get(session.id);
     const fit = fitInstances.get(session.id);
     if (!terminal || !fit) return;
-    requestAnimationFrame(() => {
+    let focusFrame = 0;
+    const fitFrame = requestAnimationFrame(() => {
       try {
         fit.fit();
         if (session.runningHere) void app().ResizeTerminal(session.id, terminal.cols, terminal.rows).catch((err) => { if (!isStoppedSessionError(err)) onError(err); });
       } catch (error) {
         reportFrontendFailure("ui.terminal-layout", error);
       }
+      focusFrame = requestAnimationFrame(() => {
+        if (session.runningHere && !document.querySelector(".modal, [role='dialog']")) terminal.focus();
+      });
     });
-    if (!session.runningHere) return;
-    // Delayed so it wins over a closing dialog or the clicked Start button restoring focus.
-    const timer = window.setTimeout(() => {
-      if (!document.querySelector(".modal, [role='dialog']")) terminal.focus();
-    }, 120);
-    return () => window.clearTimeout(timer);
+    return () => {
+      cancelAnimationFrame(fitFrame);
+      cancelAnimationFrame(focusFrame);
+    };
   }, [visible, session?.id, session?.runningHere]);
   if (!session) return <div className="terminal-missing">Session configuration is unavailable.</div>;
-  return <div className="terminal-view" style={sessionColorStyle(session.color)} data-colored={session.color ? "" : undefined}>
+  return <div className="terminal-view" style={sessionColorStyle(session.color)} data-colored="">
     <div className="terminal-toolbar">
       <span className={`status-dot ${session.runningHere ? "online" : ""}`} />{session.tool}{harness && onSend && <InterruptButton interrupt={onInterrupt} />}
       <Sep /><span className="toolbar-path-group"><span className="toolbar-path">{session.workingDir}</span><button className="text-button icon-button path-reveal" title="Open the project folder in File Explorer" aria-label="Open the project folder in File Explorer" onClick={() => app().RevealProjectRoot(session.id).catch(onError)}><Icon name="reveal" size={14} /></button></span>
@@ -354,7 +355,7 @@ export function TerminalPane({ session, peers, visible, busy, harness, onSend, o
       <div className="side-rail">
         <button className="text-button terminal-action icon-button" aria-pressed={filesOpen} title="Files: browse the project files (read-only)" aria-label="Files: browse the project files (read-only)" onClick={() => setDrawer(filesOpen ? null : "files")}><Icon name="files" /></button>
         <button className="text-button terminal-action icon-button" aria-pressed={drawer === "history"} title="History: past conversations of this session" aria-label="History: past conversations of this session" onClick={() => setDrawer(drawer === "history" ? null : "history")}><Icon name="history" /></button>
-        {harness && onSend && <HarnessToolbar session={session} peers={peers ?? []} widgets={harness.widgets} modelSupported={harness.modelSupported} send={onSend} onError={onError} />}
+        {harness && onSend && <HarnessToolbar session={session} widgets={harness.widgets} modelSupported={harness.modelSupported} send={onSend} onError={onError} />}
       </div>
       {filesOpen && <FileDrawer session={session} onClose={() => setDrawer(null)} onError={onError} onInsert={(path) => { const why = insertAtPrompt(session, /\s/.test(path) ? `"${path}" ` : `${path} `); if (why) onError(new Error(why)); }} />}
       {drawer === "history" && <ConversationsDrawer session={session} busy={busy} onResume={onResumeConversation} onClose={() => setDrawer(null)} onError={onError} />}

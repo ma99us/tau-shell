@@ -144,8 +144,8 @@ export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAl
       </div><UserHarnesses onError={onError} /></div>
       <SkillsPanel skills={skills} unsupportedNote={skills.view?.unsupported} />
       {toolNoticeBanner(tools)}
-      <ControlAudit onError={onError} />
       <PhonePane onError={onError} />
+      <ControlAudit onError={onError} />
       <SecretsPane onError={onError} />
       <div className="home-footer">
         {appUpdate && <button className="link-button home-update" title="View the release and update TauShell" onClick={() => setUpdateOpen(true)}>{appUpdate.tag} available</button>}

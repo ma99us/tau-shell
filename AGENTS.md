@@ -12,12 +12,14 @@ TauShell is a local Windows desktop session manager: a Go host (`cmd/taushell`, 
 ## Scope
 
 - Phase 1 is the current scope. [`docs/v2/`](docs/v2/) is the active documentation; where its roadmap or backlog describes later work, this section wins.
-- Out of scope: remote access, web dashboards, and phone integration beyond the experimental, off-by-default phone server. Local attention alerts (taskbar flash, Windows toast) are in scope.
+- Maturity: working desktop prerelease, not production-stable. Implemented does not mean every provider/version or real-window workflow is verified; retain the limits in the [engineering handoff](docs/v2/21-engineering-handoff.md).
+- In scope: the implemented, experimental LAN phone server and Android companion, off by default, plus local attention alerts. General internet remote access, web dashboards and broader phone integration remain out of scope; promoting an existing feature in the README does not widen scope.
 - Do not treat [`docs/v1/`](docs/v1/) (historical) or [`docs/v3/`](docs/v3/) (future-only planning) as requirements unless the user asks.
 - The CLI keeps `list`, `start`, `restore` and `ctl`. There is no TUI and no TUI fallback.
 - Target Windows 10 and later. Keep TauShell-owned UI text ASCII; never rewrite provider output.
 - Detect WebView2, PowerShell 7, harnesses, versions and declared tool dependencies. Missing host prerequisites use first-run setup; missing harnesses do not block Home. Offer confirmed installs (winget, vendor links as fallback); never install or elevate silently.
 - Use installed tool versions; keep per-adapter tested ranges and capability probes; warn outside them; never silently pin, downgrade or auto-update.
+- Managed Node/npm and PortableGit installs affect only TauShell-launched processes, not registry PATH. Identify sources, confirm installs/upgrades separately, verify downloads, and re-detect the requested version before reporting success.
 - Closing TauShell with running sessions needs confirmation, then graceful interruption, a short wait, then forced termination. Closing a running session's tab needs the same confirmation. A graceful stop does not guarantee resume.
 
 ## Architecture rules
@@ -32,6 +34,10 @@ TauShell is a local Windows desktop session manager: a Go host (`cmd/taushell`, 
 - Keep managed session/resume arguments under adapter control; user harness arguments are discrete argv values, not shell strings. Harness-dependent widgets are capability-gated.
 - Prove terminal encoding and rendering end to end (ConPTY, xterm.js); process-level UTF-8 alone is not proof.
 - Git branch and status data come from the Go host, not from frontend parsing.
+- Prompt queues are per-session and memory-only. Send only on confirmed idle, never into a permission prompt, an unknown state or an unsent draft; do not persist them across conversations or app restarts.
+- Skill imports use TauShell-managed snapshots and adapter-specific injection; preserve personal skill folders and capability gates. Treat downloaded skills as executable agent instructions, not trusted data.
+- Usage totals survive resume, Start fresh and deletion. Distinguish recorded cost, list-price estimates and unpriced usage; never show missing prices as zero cost.
+- Phone requests must retain explicit pairing approval, pinned TLS, authentication, revocation and the live terminal send/answer guards. Never expose the server on all interfaces or log terminal/prompt contents.
 
 ## UI conventions
 
@@ -44,8 +50,11 @@ TauShell is a local Windows desktop session manager: a Go host (`cmd/taushell`, 
 
 - Frontend: `npm ci && npm run build` in `frontend/` (set `$env:npm_config_allow_scripts=''` on `EALLOWSCRIPTS`). Type check: `npx tsc --noEmit`. Unit tests: `npm test`.
 - Go: `go test ./...`, then `go build -tags production -ldflags "-H=windowsgui" -o taushell.exe ./cmd/taushell`. Build the frontend first; the embedded `cmd/taushell/frontend/dist`, `taushell.exe`, ConPTY files and icon resources are gitignored.
-- Stop a running `taushell.exe` by PID before rebuilding.
-- End-to-end smoke test of a built app: `./scripts/smoke-test.ps1 -Exe .\taushell.exe` (or `-Zip`); run it before any release. CI and the release workflow run it automatically. See `docs/v2/17-contributor-guide.md`.
+- Do not stop a user's running app just to validate changes; build a separate executable when practical. If replacing the same executable is necessary, stop it by PID only after respecting running-session confirmation.
+- App versions: `node scripts\app-version.mjs check` checks frontend manifests; `node scripts\app-version.mjs github` compares with published GitHub releases (including prereleases, excluding drafts; requires `gh`). Release builds stamp the requested version before building; dependency/protocol/schema versions are independent.
+- Release/version tests: `node --test scripts\frontend-version.test.mjs scripts\app-version.test.mjs e2e\smoke.test.mjs`. CI checks published metadata before stamping its smoke version. See the [contributor guide](docs/v2/17-contributor-guide.md) for tag releases and default-branch synchronization.
+- End-to-end smoke test of a built app: `.\scripts\smoke-test.ps1 -Exe .\taushell.exe -Version <version>` (or `-Zip`); run it before any release. This verifies Windows resources, host/bridge and visible Home versions, rendering and bridge bindings in an isolated profile. CI and releases run it automatically.
+- Android: from `android/`, run `.\gradlew.bat :app:testDebugUnitTest :app:assembleDebug` with JDK 17 and SDK 36. Default app version comes from the frontend manifest; check APK metadata with `node scripts\app-version.mjs android <version> android\app\build\outputs\apk\debug\output-metadata.json` from the root.
 - Opt-in live harness check: `TAUSHELL_LIVE=gsd|opencode|codex go test ./internal/sessionhost -run TestLiveHarness -v`. The `./internal/sessionhost` suite takes about 2 minutes.
 - Regenerate the harness golden fixture with `$env:UPDATE_GOLDEN=1; go test ./internal/harness/manifest`.
 - Real-harness probes use disposable directories and sessions, never print credentials, and clean up transcripts and temp files.
@@ -55,6 +64,8 @@ TauShell is a local Windows desktop session manager: a Go host (`cmd/taushell`, 
 - Inspect existing code and follow its patterns. Keep changes focused; update directly related docs.
 - Keep documentation claims aligned with tested behavior; say what was not verified.
 - Run the smallest relevant check and report checks that could not run.
+- Preserve dirty-worktree changes. Format only files you touched; never run package-wide formatters as a substitute for checking `gofmt -l`.
+- Run `npm run check:tokens` for UI changes and releases; report failures explicitly rather than bypassing the release gate or repairing unrelated user edits.
 - Do not swallow errors or report success when launch or restore failed.
 - Line endings are LF everywhere; never write CRLF. From PowerShell use `[IO.File]::WriteAllText` with `` `n ``, not `Set-Content`/`Out-File`. `gofmt -l cmd internal` must print nothing (CI enforces it).
 
@@ -75,6 +86,5 @@ Read only what the task needs:
 | Security-sensitive work (files drawer, bridge, phone server) | [`11-security-model`](docs/v2/11-security-model.md) |
 | Phone, API, protocol (only when in scope) | [`06-mobile-ui`](docs/v2/06-mobile-ui.md), [`13-api-specification`](docs/v2/13-api-specification.md), [`14-websocket-protocol`](docs/v2/14-websocket-protocol.md), [`07-notification-engine`](docs/v2/07-notification-engine.md) |
 | Contributing, status, known gaps | [`17-contributor-guide`](docs/v2/17-contributor-guide.md), [`21-engineering-handoff`](docs/v2/21-engineering-handoff.md), [`26-architecture-audit-handoff`](docs/v2/26-architecture-audit-handoff.md) |
-| Local environment | [`LOCAL-ENVIRONMENT.md`](LOCAL-ENVIRONMENT.md) |
 
 Prototypes in the ignored `spikes/` folder are references only; their findings are summarized in `02-conpty-integration` and `12-storage-layout`.

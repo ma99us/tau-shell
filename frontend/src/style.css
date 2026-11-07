@@ -1493,6 +1493,11 @@ h3 {
   font-size: var(--fs-12);
 }
 
+.queue-nonempty,
+.queue-nonempty:hover:not(:disabled) {
+  color: var(--status-warn);
+}
+
 .ui-icon {
   display: block;
   flex: 0 0 auto;
@@ -1610,7 +1615,8 @@ h3 {
   padding: 6px 4px 2px;
 }
 
-.toolbar-popover-form input {
+.toolbar-popover-form input,
+.toolbar-popover-form textarea {
   min-width: 0;
   flex: 1;
   padding: 5px 7px;
@@ -1619,6 +1625,15 @@ h3 {
   background: var(--bg-inset);
   color: var(--text-2);
   font-size: var(--fs-12);
+}
+
+.toolbar-popover-form textarea {
+  resize: vertical;
+  font-family: inherit;
+}
+
+.queue-prompt-form {
+  align-items: flex-end;
 }
 
 .toolbar-popover-form button {
@@ -1689,19 +1704,6 @@ h3 {
   background: var(--bg-control-hover);
   color: var(--text-2);
   font-size: var(--fs-12);
-}
-
-.queue-target {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 9px;
-  color: var(--text-3);
-  font-size: var(--fs-12);
-}
-
-.queue-target.disabled {
-  opacity: 0.55;
 }
 
 .file-drawer {

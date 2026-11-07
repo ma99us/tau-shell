@@ -12,7 +12,8 @@ Remote push (ntfy, Pushover, Web Push) remains out of scope. See also
 ## Behavior
 
 - Triggers (frontend edge detector in `frontend/src/attention.ts`, fed by
-  harness cues when available and generic output timing when no cue exists):
+  harness cues and activity logs when available; output timing is used only
+  for harnesses with neither a cue nor an activity reader):
   1. the harness starts **waiting for an answer** (`input`);
   2. the harness **finishes** (working to not-working, after at least 3 s of
      work, and not into an input prompt).
@@ -32,9 +33,10 @@ Remote push (ntfy, Pushover, Web Push) remains out of scope. See also
 
 ## Decisions (answers to the original open questions)
 
-1. Prefer harness cues (`input` / working-to-idle); when no cue exists, recent
-  output timing is the generic working/quiet fallback for tools without cues only
-  (Claude Code and Copilot CLI never use it). Do not infer input
+1. Prefer a visible input cue, then a fresh harness activity-log signal for
+  working/idle, then a screen cue. Output timing is the generic working/quiet
+  fallback only for tools that declare neither cues nor an activity reader;
+  Claude Code, Copilot CLI, GSD, and Codex do not use it. Do not infer input
   from silence. Require 3 s minimum work for "finished".
 2. Flash **and** toast.
 3. On by default; disable in the settings file.
@@ -43,8 +45,9 @@ Remote push (ntfy, Pushover, Web Push) remains out of scope. See also
 ## Known limits
 
 - Toasts can be suppressed by Focus Assist or per-app Windows settings.
-- Claude Code cues are unverified past the title spinner (provider 401), so
-  its alerts are unverified end to end.
+- Claude Code working and permission/question input cues were recorded on
+  2.1.316 with a working provider through the session manager and ConPTY; its
+  alert delivery has not been verified end to end.
 - No sound, no per-session mute, no tray icon.
 - Needs a live smoke test: background TauShell, let a Copilot session finish,
   confirm the flash and the toast, click the toast, confirm the tab opens.

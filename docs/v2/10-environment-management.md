@@ -18,7 +18,9 @@ Secret values live in Windows Credential Manager (generic credentials named
 `TauShell/secret/<name>`, current user, local machine only). Add, replace and
 delete them under **Secrets** on Home; values are write-only in the UI. At launch
 TauShell reads each referenced secret and places it in the session's process
-environment only (never the command line, YAML, state database, logs or bridge
-payloads). A variable cannot be in both blocks. If a referenced secret is missing
-the launch fails with a message naming the secret and the session state is not
-changed. Duplicating a session copies the secret names, never the values.
+environment (never the command line, YAML, state database, logs or bridge
+responses). Entering a value in the UI sends it to the host in the write-only
+`SetSecret` request. A variable cannot be in both blocks. If a referenced
+secret is missing the launch fails with a message naming the secret and the
+session state is not changed. Duplicating a session copies the secret names,
+never the values.

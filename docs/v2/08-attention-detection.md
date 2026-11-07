@@ -6,10 +6,11 @@ Harness-specific parsing is in `frontend/src/attention.ts`.
 
 ## Signals
 
-- **Claude Code:** terminal-title spinner glyphs indicate working, the idle
-  title glyph indicates idle, and the trust-folder confirmation footer
-  indicates input. The title glyphs and footer were observed on Claude Code
-  2.1.311.
+- **Claude Code:** terminal-title spinner glyphs indicate working and the
+  idle title glyph indicates idle. Recognized trust, permission, question, and
+  plan-approval footers indicate input; the title alone does not. Working and
+  input cues were recorded on Claude Code 2.1.316 through the session manager
+  and ConPTY.
 - **GitHub Copilot CLI:** busy/idle come from the harness's own session log
   (`activity: copilot-events`, `internal/harness/activity.go`): a user message,
   turn start or tool call means working; a turn end with nothing following for
@@ -19,22 +20,24 @@ Harness-specific parsing is in `frontend/src/attention.ts`.
   selection footer still indicates a prompt that needs user input (the log does
   not record it). Cues were observed on Copilot CLI 1.0.103 and autopilot on
   1.0.105. `combineSignal` merges the two.
-- **Other tools or missing cues:** recent terminal output is used as a fallback.
-  Output within 400 ms after a keystroke is treated as echo; output within the
-  last 2.5 seconds indicates working. Without a harness cue, silence is not
-  proof that the harness is waiting for input.
+- **GSD and Codex:** working/idle are read from their own session logs
+  (`gsd-jsonl` and `codex-rollout`), rather than inferred from terminal output.
+- **Tools without a cue or activity reader:** recent terminal output is the
+  fallback. This currently includes OpenCode. Output within 400 ms after a
+  keystroke is treated as echo; output within the last 2.5 seconds indicates
+  working. Silence is not proof that the harness is waiting for input.
 
-The signal reader checks only the harness title or specific status/footer rows,
-not the full terminal buffer. A harness cue takes precedence over output timing,
-with one exception: a working cue with no non-echo output for 15 seconds is
-treated as stale (not working), because a harness that is still working keeps
-redrawing its spinner or timer. The state rule is `nextActivity` in
-`frontend/src/attention.ts`, covered by `frontend/test/attention.test.ts`.
-This keeps provider output untouched and avoids false state changes from
-unrelated screen redraws. Tools with reliable cues (Claude Code, Copilot CLI)
-never use the output-timing fallback: when their cue is missing, the session
-counts as not working, so idle redraws (promos, loading animations) cannot raise
-repeated "done" alerts (`hasCueSignal`, `nextActivity`'s `cueTool` argument).
+The screen reader checks only the harness title or specific status/footer rows,
+not the full terminal buffer. A visible input cue wins over a fresh log signal;
+otherwise a fresh log working/idle signal wins over the screen cue. Output
+timing is used only when the harness declares neither screen cues nor an
+activity reader. If either is declared but supplies no signal, the session
+counts as not working rather than inferring work from redraws. For a harness
+without an activity reader, a screen working cue with no non-echo output for
+15 seconds is treated as stale. These rules are in `combineSignal` and
+`nextActivity` in `frontend/src/attention.ts`, with focused tests in
+`frontend/test/attention.test.ts`. Output-timing state is heuristic and is not
+treated as a confirmed harness cue for automation.
 
 ## User attention
 

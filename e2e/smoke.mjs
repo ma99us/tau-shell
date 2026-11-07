@@ -53,6 +53,11 @@ async function run({ exe, logPath, expectedVersion, timeoutMs = 120000 }) {
       if (report.banner) fail(`error banner is showing: ${report.banner}`);
       if (report.missing.length > 0) fail(`bridge methods missing from the host: ${report.missing.join(", ")}`);
       else console.log(`ok: ${methods.length} bridge methods are bound`);
+      if (expectedVersion) {
+        const mismatches = versionFailures(report, expectedVersion);
+        for (const message of mismatches) fail(message);
+        if (mismatches.length === 0) console.log(`ok: bridge and Home display version ${expectedVersion}`);
+      }
     }
   } finally {
     if (exited === null) child.kill();
@@ -72,6 +77,14 @@ async function run({ exe, logPath, expectedVersion, timeoutMs = 120000 }) {
   } else {
     fail(`diagnostics log not found at ${logPath}`);
   }
+  return failures;
+}
+
+export function versionFailures(report, expectedVersion) {
+  const failures = [];
+  if (report.version !== expectedVersion) failures.push(`bridge version is ${report.version}, expected ${expectedVersion}`);
+  const displayed = expectedVersion === "dev" ? "dev build" : `v${expectedVersion}`;
+  if (report.displayedVersion !== displayed) failures.push(`Home version is '${report.displayedVersion}', expected '${displayed}'`);
   return failures;
 }
 

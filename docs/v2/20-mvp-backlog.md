@@ -2,8 +2,8 @@
 
 ## Phase 1: local Windows desktop GUI (TUI removed)
 
-- Completed migration: the Bubble Tea TUI and its TUI-only dependencies were removed. `list`, `start <session-id>`, and explicit `restore <session-id>` remain available as CLI operations; no TUI fallback is planned.
-- Implemented: a Go/Wails WebView2 host, bundled React/xterm.js launcher, local tabs, session creation, tool inventory, session lifecycle bridge, and shutdown confirmation. A user-authorized, live-credential walkthrough exercised both supported harnesses (Claude Code, GitHub Copilot CLI) through the real hosted terminal on this Windows 10 machine; a clean-environment test without WebView2 will not be performed (user decision); the missing-runtime prompt is accepted as working. See [`docs/v1/08-UI-Design.md`](../v1/08-UI-Design.md) and [`docs/v1/09-UI-Implementation-Plan.md`](../v1/09-UI-Implementation-Plan.md).
+- Completed migration: the Bubble Tea TUI and its TUI-only dependencies were removed. `list`, `start <session-id>`, explicit `restore <session-id>`, and `ctl` remain available as CLI operations; no TUI fallback is planned.
+- Implemented: a Go/Wails WebView2 host, bundled React/xterm.js launcher, local tabs, session creation, tool inventory, session lifecycle bridge, and shutdown confirmation. A user-authorized walkthrough exercised the Claude Code and GitHub Copilot CLI interfaces through the real hosted terminal on this Windows 10 machine; later real-turn checks used the manager/ConPTY path. GSD, OpenCode, and Codex also have recorded live manager/ConPTY checks with the limits below. A clean-environment test without WebView2 will not be performed (user decision); the missing-runtime prompt is accepted as working. The older [`docs/v1/08-UI-Design.md`](../v1/08-UI-Design.md) and [`docs/v1/09-UI-Implementation-Plan.md`](../v1/09-UI-Implementation-Plan.md) are historical.
 - Security hardening: the Windows host now cancels top-level WebView2 navigations outside the bundled `http://wails.localhost` origin before they load. Wails' bound-method origin validation remains a separate defense.
 - Session-manager lifecycle coverage is implemented for concurrent independent fake sessions, input/output/resize, process exit, failed restore preserving the resume ID, graceful and forced stop, and cleanup. This does not cover a real hosted xterm or harness.
 - Implemented executable detection, resolved version parsing, minimum/tested-version classification, and per-adapter capability probes (via `--help` option matching) for PowerShell 7 and supported harnesses; Home shows each tool's resolved executable path, version, support classification, and any unmet capability. Optional Node.js/npm and Git for Windows are also detected in the Tools panel; their absence never gates Home. Node reports npm as a required companion. A first-run Setup screen still gates only on missing/unusable PowerShell 7, with a "continue without" escape hatch. Do not silently pin or downgrade.
@@ -13,10 +13,10 @@
 - Implemented per-run JSON diagnostics at `%TEMP%\TauShell\taushell.log`; startup truncates the file and the UI exposes its location. Host/lifecycle, Wails, frontend runtime, React render, and operation failures are logged with sensitive payload boundaries. Prompt/terminal contents, credentials, and environment values are intentionally excluded.
 - Session registry and human-edited, per-session YAML definitions; keep mutable runtime state separate.
 - Start, interact with, stop, and explicitly restore TauShell-launched sessions.
-- Harness-specific launch/resume command construction for Claude Code and GitHub Copilot CLI uses explicit session IDs. A disposable Copilot CLI 1.0.100-1 provider-backed test confirmed conversation recovery via TauShell `restore`. A later live hosted-terminal walkthrough (real, user-authorized credentials) restoring a session that had zero real conversation turns found Copilot CLI rejects `--resume=<uuid>` (`Error: No session, task, or name matched`), and TauShell correctly reports this as a failed restore rather than a false success; most likely because Copilot CLI never registers a turn-less session as resumable. Restore is now disabled for Copilot sessions without `events.jsonl` in Copilot's session store (fails open if the store is absent); Start fresh remains available. Claude Code's restore re-renders its first-run wizard when the original session never completed login, which is expected; a real completed-login Claude Code restore remains unverified.
+- Harness-specific launch/resume command construction for Claude Code and GitHub Copilot CLI uses explicit session IDs. Copilot CLI 1.0.104 and Claude Code 2.1.316 have recorded real-turn restore/recall checks through the session manager and ConPTY; these do not prove every app-window interaction. An earlier hosted-terminal walkthrough found Copilot rejects a zero-turn session (`Error: No session, task, or name matched`), and TauShell reported the failed restore rather than claiming success. Restore is now hidden for Copilot sessions without `events.jsonl` in Copilot's session store (the check fails open if the store is absent); Start fresh remains available. Claude Code's restore re-renders its first-run wizard when the original session never completed login, as expected. See [`24-claude-code-verification-plan.md`](24-claude-code-verification-plan.md) for the later Claude results and remaining app-window checks.
 - Confirm before application shutdown when sessions are running; keep the Wails close callback nonblocking while confirmation and stopping run asynchronously. Attempt graceful interruption, then force-terminate any remaining processes in TauShell's job after a brief wait. A production-window smoke with an inert fixture verified that No leaves the app and session running and Yes closes the app after the fixture process exits; the fixture's PowerShell process exited with code 1; graceful-stop success and forced-termination reporting are now covered by real-ConPTY manager tests rather than that fixture.
 - Automated session-manager tests cover concurrent session I/O/resize, process exit, failed restore, graceful/forced stop, and inherited child cleanup. Real-ConPTY manager tests (`manager_conpty_windows_test.go`) additionally confirm that a harness exiting on its graceful-exit input is reported as a clean stop, and that a process ignoring the interrupt is force-terminated with the visible "force-terminated" notice persisted in runtime state. Runtime recovery also treats a recorded PID whose process was created after the runtime row was marked running as a reused PID and fails the stale session (`session.RuntimeProcessAlive`). Shutdown tests also cover supervisor completion, idempotent close, rejecting starts after shutdown, retry after stop timeout or database-close failure, and keeping the window open when session checks or forced-stop reporting fail. Detached shell/broker launches such as PowerShell `Start-Process` can escape the ConPTY job; by design, those processes are unmanaged and are not subject to ancestry-based termination.
-- Windows 10 terminal compatibility: CLI and hosted sessions temporarily use UTF-8 console code pages and restore prior settings; session hosting also enables/restores virtual-terminal output mode. ConPTY tests cover supplementary-plane emoji input, Unicode/emoji output bytes, ANSI output, resizing, and process cleanup. The desktop embedded-terminal path needs separate end-to-end verification; TauShell must not rewrite arbitrary harness output.
+- Windows 10 terminal compatibility: CLI and hosted sessions temporarily use UTF-8 console code pages and restore prior settings; session hosting also enables/restores virtual-terminal output mode. ConPTY tests cover supplementary-plane emoji input, Unicode/emoji output bytes, ANSI output, resizing, and process cleanup. A separate production-window fixture verified the desktop rendering and transport cases listed below; it does not prove all real-harness behavior. TauShell must not rewrite arbitrary harness output.
 
 ### Open Phase 1 backlog
 
@@ -30,13 +30,15 @@
   spike passed: `Microsoft.Windows.Console.ConPTY` forwards all of these, and
   a production smoke delivered real WebView clicks and the device-status reply
   to the fixture. TauShell now prefers the bundled ConPTY
-  (`scripts/fetch-conpty.ps1`) and falls back to inbox. Done: user-authorized
+  (`scripts/fetch-conpty.ps1`) and falls back to inbox. User-authorized
   non-destructive Claude Code and Copilot CLI hosted-terminal walkthroughs
-  (Claude restore after a completed login remains open; see
-  [`24-claude-code-verification-plan.md`](./24-claude-code-verification-plan.md)).
-- **Host prerequisite:** registry-detection unit tests cover Phase 1; the
-  missing-WebView2 native prompt and official download handoff are deferred to
-  a manual Windows Sandbox/VM check (the current machine has WebView2).
+  are recorded. Later real-turn restore checks ran through the manager and
+  ConPTY; the remaining Claude app-window checks are in
+  [`24-claude-code-verification-plan.md`](./24-claude-code-verification-plan.md).
+- **Host prerequisite:** registry-detection unit tests cover detection. The
+  missing-WebView2 native prompt and official download handoff exist; a clean
+  Windows Sandbox/VM check will not be performed by user decision, and the
+  path is accepted as working.
 - Decision retained: tool discovery/setup and session authoring proceeded in
   parallel with the feasibility gate; neither depended on terminal-path
   validation.
@@ -60,13 +62,15 @@
   below 22 is below minimum; newer Node/Git versions remain untested until
   tested ranges are established. Missing Node for npm harness installation
   prompts separately for Node and then the harness.
-- **Session authoring:** harness-specific editable YAML defaults, launch
-  preview, and effective-argument validation are implemented in New Session.
-  An explicit offer to start immediately after creation remains open.
-- **Workspace UX:** verify recent folder suggestions and keyboard-only tab
-  navigation/overflow controls in the desktop host, persisted-tab restoration
-  across app restarts, and background terminal behavior through the actual
-  Wails/ConPTY path. A mocked-browser smoke verified Home/End selection,
+- **Session authoring: implemented.** New Session provides harness-specific
+  defaults, an editable full-YAML preview, launch preview, and
+  effective-argument validation. Saving a new session selects and starts it
+  immediately; it does not present a separate start offer.
+- **Workspace UX:** project-derived grouping and eligible group Resume/Stop
+  are implemented; an isolated-profile window check exercised both controls.
+  Recent folder suggestions and open-tab/selection persistence use WebView
+  storage; a production-window fixture check verified tabs across a restart.
+  A mocked-browser smoke verified Home/End selection,
   arrow-key wraparound, focus movement, and synchronized selected-tab state;
   a production-host smoke found and fixed the missing tab-strip flex layout,
   then verified Home/Right focus and selection switching between Home and one
@@ -76,10 +80,10 @@
   tab-strip focus, `Tab`/`Enter`/typed text can create a session end to end,
   and multi-tab switching between Home and a running session tab works via
   the left-sidebar list entries, verified with the harmless `terminal-fixture`
-  binary standing in for a real harness. Basic accessible tab
-  navigation and horizontal overflow controls are implemented in the frontend.
-  The session form suggests up to five recently used folders, persisted in
-  WebView local storage.
+  binary standing in for a real harness. Basic accessible tab navigation and
+  horizontal overflow controls are implemented in the frontend. The session
+  form suggests up to five recently used folders. These checks do not prove
+  every grouping, drag, or real-harness workflow.
 - **UI polish (implemented):** Refresh button on Home; New Session dialog with
   side-by-side harness toggle buttons (official Simple Icons marks, Copilot
   first and default); session tiles use project-initial icons tinted with the
@@ -88,29 +92,33 @@
 - **Harness widgets (implemented):** terminal toolbar (Prompts, Commands,
   Model, Compact, Interrupt), command palette (Ctrl+Shift+P), tab shortcuts
   (Ctrl+1..9, Ctrl+Tab), prompts in `~/.tau_shell/prompts.yaml`. Delivery
-  rules and verification limits: [`08-UI-Design.md`](../v1/08-UI-Design.md#10-harness-widgets)
-  and the handoff. Claude Code slash commands, `/model` and Esc interrupt are
-  unverified (provider 401). No model field in the New Session dialog.
-- **UI improvements (implemented, not live-driven):**
+  rules and verification limits: the historical
+  [`08-UI-Design.md`](../v1/08-UI-Design.md#10-harness-widgets) and the
+  handoff. Claude Code slash commands, `/model` and Esc interrupt remain
+  unverified; an earlier attempt encountered provider 401, while later
+  separate checks used a working login. No model field in New Session.
+- **UI improvements (implemented; verification varies):**
   - Drag-and-drop reordering from the left menu (expanded and collapsed), the
     tab strip and Home tiles. One order is stored in `state.db`
     (`session_order`) and shared by all three; it is not derived from file
     names. No keyboard reorder yet (accessibility gap). Drag was verified by a
-    Go test of the order store/manager and a type-checked build; the packaged
-    window could not be driven.
+    Go test of the order store/manager and a type-checked build; the drag
+    paths themselves were not driven in the packaged window.
   - The session top bar shows the harness's current model right of the git
-    branch. It is read-only, from the harness's own log (Claude Code
-    `projects/*/<id>.jsonl`, Copilot CLI `session-state/<id>/events.jsonl`),
-    polled every 5 s; empty when unknown. Copilot verified against a real log,
-    Claude against a prior transcript; not yet seen live in the window.
+    branch. It is read-only, polled every 5 s from the harness's own session
+    records (logs for Claude Code, Copilot CLI, GSD, and Codex; the local
+    OpenCode database), and empty when unknown. The recorded live and
+    transcript checks have different limits; see the handoff.
   - Home tile buttons are green and ordered Start fresh / Open (or Start),
     Resume, Clone, pinned to the tile bottom. "Open terminal" is now "Open".
     A gear button in the sidebar footer opens `config.yaml`; the collapse
     toggle sits at the right of the footer.
   - Clone from the right-click menu (sidebar row or tab) and a Home tile
-    button: the copy reuses all definition fields, gets a unique "Name (n)"
-    and id, sits right after the source, and starts immediately. Runtime
-    state is never copied. YAML comments are not preserved in the copy.
+    button: the copy initially inherits the definition, including the working
+    folder; the clone dialog permits harness and launch-argument overrides.
+    It gets a unique "Name (n)" and id, sits right after the source, and
+    starts immediately. Runtime state is never copied. YAML comments are not
+    preserved in the copy.
   - Local attention alerts: see
     [`22-local-attention-notifications.md`](./22-local-attention-notifications.md).
   - Token and cost usage: per-session never-reset totals and monthly totals
@@ -124,9 +132,10 @@
     without `totalNanoAiu` are unpriced rather than estimated.
 - **Shutdown/recovery:** a repeated native test verifies process, job, and
   input/output pipe handles are invalidated after ConPTY close; the opaque
-  pseudoconsole is checked through successful close and cleared state. Wails-
-  host close integration tests remain open. The per-cycle handle to the
-  exited console host is inbox-ConPTY behavior; the bundled ConPTY showed no
+  pseudoconsole is checked through successful close and cleared state. The
+  Wails close callback has unit coverage and a manual production-window smoke;
+  automated real-window close coverage is an accepted limitation. The per-cycle
+  handle to the exited console host is inbox-ConPTY behavior; bundled ConPTY showed no
   handle growth over 10 cycles. Stale-runtime reconciliation now covers the
   abandoned-starting, recent-starting, missing/exited-PID, reused-PID, and
   live-other-window cases.
@@ -136,24 +145,26 @@
   argument; `harness.PowerShellInvocation` no longer takes the environment.
   Tests (`TestSessionEnvironmentReachesChildButNotItsCommandLine`,
   `TestManagerPassesSessionEnvironmentOutsideTheCommandLine`) show a real child
-  receives the value and its command line lacks it. Values remain plaintext in
-  YAML; the V3 secret vault
-  ([`docs/v3/features/08-secret-vault.md`](../v3/features/08-secret-vault.md))
-  can now build on this.
-- **Harness compatibility:** provider-backed Claude Code and Copilot CLI
-  hosted-terminal walkthroughs are done (both render correctly end to end,
-  user-authorized, live credentials); hosted-terminal restore for a session
-  with at least one real conversation turn (as opposed to zero-turn sessions)
-  remains unverified for both harnesses.
-  Update: Copilot CLI 1.0.104 restore with real turns is verified through the
-  session manager on both inbox and bundled ConPTY (the model recalled a word
-  given before Stop; stop 1.4-2.2 s, not forced). Repeated runs
-  (`-count=3`) of the conpty, sessionhost and cmd/taushell tests pass. The
-  packaged window itself could not be scripted: WebView2 ignores the
-  `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` env var and an HKCU policy here (Wails passes explicit
-  browser arguments), so a DevTools port is unavailable without an app change.
+  receives the value and its command line lacks it. Values under `environment:`
+  remain plaintext in YAML; named `secrets:` references use the implemented
+  Windows Credential Manager vault described in the
+  [security model](11-security-model.md#secret-vault). The V3
+  [vault proposal](../v3/features/08-secret-vault.md) is future-only context,
+  not the authority for current behavior.
+- **Harness compatibility:** user-authorized Claude Code and Copilot CLI
+  hosted-terminal walkthroughs are recorded. Copilot CLI 1.0.104 restore with
+  real turns is verified through the session manager on both inbox and bundled
+  ConPTY (the model recalled a word given before Stop; stop 1.4-2.2 s, not
+  forced). Claude Code 2.1.316 also passed a real-turn manager/ConPTY
+  restore-and-recall check with a working login. Real-turn Copilot restore in
+  the app window and Claude app-window tab/focus checks remain open. Repeated
+  runs (`-count=3`) of the conpty, sessionhost and cmd/taushell tests passed.
+  The unmodified packaged window could not be driven over DevTools using the
+  usual environment variable or HKCU policy because Wails passes explicit
+  browser arguments. Separate window checks used Windows UI Automation or a
+  temporary, reverted Wails loader patch.
 
-The detailed step dependencies and acceptance criteria remain in
+The historical step dependencies and acceptance criteria are in
 [`docs/v1/09-UI-Implementation-Plan.md`](../v1/09-UI-Implementation-Plan.md).
 
 ### Copilot quota chip (done)
@@ -238,6 +249,7 @@ interface.
   current architecture and record blockers. Detailed constraints are in
   [`02-conpty-integration.md`](02-conpty-integration.md#deferred-alternative-launch-the-harness-directly).
 
-- Workspaces and group restore.
+- Workspace features beyond the implemented project-derived groups and their
+  eligible group Resume/Stop controls.
 - Remote/mobile access, web dashboards, and remote push notifications. Local attention alerts (taskbar flash and Windows toast) are in Phase 1: [`22-local-attention-notifications.md`](./22-local-attention-notifications.md).
 - General plugin SDK, rich attention detection, multi-agent orchestration, distributed execution, and cloud sync.

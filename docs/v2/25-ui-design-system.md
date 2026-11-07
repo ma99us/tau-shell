@@ -22,7 +22,8 @@ Rules for changes:
 - Per-session colors are the one runtime theme input. A session tag sets
   `--session-color` inline (`sessionColorStyle`), and the CSS mixes it with
   `color-mix()` against `--bg-panel` using the shares published as
-  `--session-tint-*`. Text on a tinted surface is chosen per state by contrast
+  `--session-tint-*`. An untagged session uses `--accent` the same way, so
+  every session gets the same highlight. Text on a tinted surface is chosen per state by contrast
   (`sessionColor.ts`, WCAG 4.5:1 with a pure black/white fallback); the project
   icon text uses the same rule.
 - TauShell-owned UI text is ASCII (`~$`, `k`, `M`, `x`, `|`). Provider output
@@ -117,11 +118,11 @@ never for body text or inside buttons.
 - **Sidebar:** brand row, a Home nav row, then workspace groups of session rows
   for sessions that have an open tab. Each session row
   has a state icon, the name and a small second line. Rows can be reordered by
-  drag; the blue drop line shows the target. Active rows use the green ramp
-  (a tagged session shows an outline in its readable text color instead).
+  drag; the blue drop line shows the target. The active Home row uses the green
+  ramp; an active session row shows an outline in its readable text color.
 - **Tabs:** persistent session tabs next to a fixed Home tab; the strip
   scrolls with hidden scrollbars and arrow buttons. Active tab uses the green
-  ramp. A tagged session colors its tab, sidebar row, top bar (tint plus a 3px
+  ramp. Every session (untagged ones in the accent green) colors its tab, sidebar row, top bar (tint plus a 3px
   bottom border) and the terminal's left edge so a prompt is not typed into the
   wrong session; the active tab/row gets an outline and a bold label. A running
   session's tab closes only after a confirmation that interrupts it.

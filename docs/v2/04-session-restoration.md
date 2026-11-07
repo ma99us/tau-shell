@@ -5,22 +5,54 @@ TauShell stores editable session configuration separately from changing runtime 
 ## Phase 1 flow
 
 1. Load one session definition from its YAML file.
-2. Load its persisted harness session UUID from runtime state.
+2. Load its persisted harness conversation ID from runtime state, when one is available.
 3. Start a new PowerShell 7 ConPTY in the configured working directory and apply the session environment/bootstrap.
-4. Invoke that harness adapter's explicit resume command for the persisted UUID.
+4. Invoke that harness adapter's explicit resume command for the persisted ID.
 5. Report launch and resume outcomes separately. Unsupported or failed resume must not be represented as a successful conversation restore.
 
-Restoration is explicit by default; opt-in per-session `auto_resume` and global `auto_resume_all` settings restore eligible sessions on startup. The CLI exposes `taushell start <session-id>` and `taushell restore <session-id>`. The current interactive Bubble Tea TUI is a disposable prototype scheduled for removal; the primary and sole interactive UI is a Windows desktop GUI with Home/setup and embedded terminal tabs. The desktop opens Home by default and resumes only stopped sessions with a saved harness ID and no resume warning when auto-resume is enabled. Otherwise the user explicitly chooses Start or Restore; when a saved harness ID exists, Start fresh is also offered and requires confirmation before replacing that ID. Live sessions continue running when their tab is not selected, and closing a live tab warns that the session will be interrupted and stops it only after confirmation; a running session always has a tab and sidebar item. Only TauShell-launched sessions are managed. Concurrent starts of the same session are rejected using a SQLite write transaction; active state is checked against the recorded PowerShell process. When a restore finds that the harness has no recorded conversation for the saved ID, the session still starts, as a new conversation (the old ID is replaced), and the desktop shows "Could not resume: ... Started a new conversation instead."; the CLI prints the same warning to stderr.
+Restoration is explicit by default; opt-in per-session `auto_resume` and
+global `auto_resume_all` settings restore eligible sessions on startup. The
+CLI exposes `taushell start <session-id>` and `taushell restore <session-id>`.
+The Bubble Tea TUI was removed; the local desktop GUI has Home/setup and
+embedded terminal tabs. It opens Home by default and auto-resumes only stopped
+sessions with a saved harness ID and no resume warning. Otherwise the user
+chooses Start or Restore; Start fresh requires confirmation before replacing a
+saved ID. Live sessions continue running when their tab is not selected, and
+closing a live tab stops it only after confirmation. A running session always
+has a tab and sidebar item.
+
+Only TauShell-launched sessions are managed. Concurrent starts of the same
+session are rejected using a SQLite write transaction; active state is checked
+against the recorded PowerShell process. The UI hides Restore when an adapter
+already reports the saved conversation unavailable. If a restore is invoked
+and its resume check rejects the ID, the session instead starts a new
+conversation and the desktop shows "Could not resume: ... Started a new
+conversation instead."; the CLI prints a corresponding warning to stderr.
 
 The managed PowerShell process exits when its harness command exits. Restoration recreates the configured working directory and environment; it does not preserve arbitrary shell variables, functions, or the original PowerShell process.
 
 ## Harness resume IDs
 
-Generate a UUID for each managed harness conversation and persist it in runtime state before the first harness launch. Pass it to the harness on initial launch so it can later be resumed by that exact ID. Do not use a harness's “continue most recent” behavior for automated restore because it can select a different conversation.
+Claude Code and Copilot CLI use a TauShell-generated UUID, persisted before
+launch; their current manifests pass `--session-id <id>` on start and
+`--resume <id>` on restore. GSD uses a TauShell-named session file. Codex and
+OpenCode choose their own IDs, which TauShell discovers after launch and claims
+only when the match is unambiguous. Do not use a harness's "continue most
+recent" behavior for automated restore because it can select a different
+conversation.
 
-The locally installed Claude Code 2.1.263 and GitHub Copilot CLI 1.0.96-2 help output documents explicit session creation/resume options. This confirms the CLI-level capability, not that a remote-backed conversation was successfully resumed. End-to-end behavior still needs a deliberate integration test that does not silently send prompts or modify user work.
-
-The initial implementation passes `--session-id <uuid>` on start and `--resume <uuid>` on restore for Claude Code, and `--session-id <uuid>` for both new and resumed Copilot CLI sessions. An interactive smoke test with a fake executable verified that start and restore use the same persisted UUID and that session environment values reach the child process. A separate disposable provider-backed test with Copilot CLI 1.0.100-1 confirmed that TauShell's `restore` command reopened the exact session: after a no-tools prompt returned `TAUSHELL_RESTORE_SMOKE_OK`, the resumed conversation returned the same token when asked about its prior response. The test used a temporary working directory and made no file changes. Claude Code provider-backed restoration remains unverified.
+Earlier help probes on Claude Code 2.1.263 and Copilot CLI 1.0.96-2 established
+CLI-level options, not provider-backed restore. The earlier Copilot
+implementation used `--session-id` for both start and resume; the current
+manifest uses `--resume`. A fake-executable smoke verified persisted-ID reuse
+and child environment delivery. A disposable provider-backed Copilot CLI
+1.0.100-1 test restored the exact session and recalled a prior response; it
+used a temporary working directory and made no file changes. A later
+manager/ConPTY run also verified Copilot 1.0.104 recall. Claude Code 2.1.316
+restored and recalled a real conversation through the session manager and
+ConPTY on 2026-11-02; this was not a full hosted-xterm restore test. See the
+[Claude verification results](24-claude-code-verification-plan.md#5b-re-run-with-a-working-login-2026-11-02-claude-code-21316-windows-11)
+and [handoff](21-engineering-handoff.md#recommended-next-actions).
 
 ## Choosing an earlier conversation
 

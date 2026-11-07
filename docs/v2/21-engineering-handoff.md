@@ -1,11 +1,11 @@
 # Engineering Handoff
 
-**Updated:** 2026-11-05
+**Updated:** 2026-11-07
 **Project state:** Phase 1 desktop migration in progress; not release-ready.
 
 This is the implementation handoff for the next engineering session. The
-active product and engineering requirements are in `docs/v2/`; the desktop
-interaction decisions and feasibility gate are in
+active product and engineering requirements are in `docs/v2/`; earlier desktop
+interaction decisions and the original feasibility gate are recorded historically in
 `docs/v1/08-UI-Design.md` and `docs/v1/09-UI-Implementation-Plan.md`.
 
 For the open architecture-cleanup findings, priorities, safeguards, and
@@ -91,10 +91,10 @@ regression-test plans, see the
   confirmation warning): `DeleteSession` removes the YAML and the runtime row,
   refuses running/starting sessions, and never touches the harness's own data
   or the working directory.
-  Sidebar rows and tabs show a state icon (`StateIcon` in `sessionVisuals.tsx`): spinner
-  = output in the last 2.5 s ("working"), solid green = output stopped
-  ("quiet"), grey = not running, red = failed. A quiet session that was not
-  selected+focused glows amber ("unseen") until selected or typed in. Signals
+  Sidebar rows and tabs show a state icon (`StateIcon` in `sessionVisuals.tsx`):
+  spinner = working, solid green = quiet, grey = not running, red = failed. A
+  quiet session that was not selected+focused glows amber ("unseen") until
+  selected or typed in. Signals
   are harness-specific (`frontend/src/attention.ts`), never whole-screen
   comparison: Copilot CLI = its "Working ... esc" status row / "? help" footer
   (last two rows only; verified live) and, for "waiting for your answer", the
@@ -110,8 +110,11 @@ regression-test plans, see the
     non-empty rows: "Enter to confirm ... Esc to cancel" (trust-folder),
     "Esc to cancel · Tab to amend" (shell and file-edit permissions),
     "Enter to select ... Esc to cancel" (questions) and "/plan to preview"
-    (plan approval); all captured live. With no cue, tools without cues (GSD, OpenCode, Codex) fall back to output timing; Claude Code and Copilot CLI count as not working instead, so idle redraws cannot repeat "done" alerts
-  (output within 400 ms of a keystroke is ignored as echo). "Quiet" is not
+    (plan approval); all captured live. Visible input cues take precedence,
+  followed by fresh activity-reader working/idle signals and then screen cues.
+  GSD and Codex have activity readers. Output timing is used only when a
+  harness declares neither cues nor an activity reader, currently OpenCode;
+  output within 400 ms of a keystroke is ignored as echo. "Quiet" is not
   proof the harness awaits input. OpenCode observations (2026-11-03, raw
   output only, not enough for cues): idle title `OpenCode`; the title becomes
   `OC | <topic>` after the first prompt and stays, so it cannot signal state;
@@ -129,8 +132,9 @@ regression-test plans, see the
   a queue paused by a draft in the prompt (typing into xterm could not be
   automated). Copilot
   sends only topic titles, no BEL/OSC 9/777/133.
-  Eight frontend unit tests cover pure attention helpers; React component and
-  widget lifecycle behavior does not yet have direct component tests.
+  Frontend unit tests cover attention helpers and shared send planning; React
+  component and packaged-widget lifecycle behavior does not yet have direct
+  component tests.
   The session name is optional: when blank, `CreateSession` uses the project
   name from `package.json`, `go.mod`, `Cargo.toml`, or `pyproject.toml` in the
   folder, else the folder name, adding suffixes such as (2) and (3) on
@@ -245,9 +249,9 @@ ConPTY/PowerShell data path.
 
 The same browser-only smoke exercised split UTF-8/emoji chunks, ANSI color,
 alternate-screen switching, device-status query replies, mouse-tracking input
-encoding, and fit-driven resize forwarding. These checks are not a substitute
-for a repeatable full-screen fixture through the production WebView2/ConPTY
-path.
+encoding, and fit-driven resize forwarding. These browser-only checks do not
+prove the production path; the later production-window fixture is recorded
+below.
 
 The frontend browser preview was also exercised with 20 seeded persisted tabs:
 ArrowLeft moved selection to the preceding tab, horizontal overflow controls
@@ -280,8 +284,9 @@ PowerShell 7.6.7, GitHub Copilot CLI 1.0.99-2, and WebView2 Runtime
 155.0.4283.60. Claude Code 2.1.302 was installed after the user confirmed the
 verified `Anthropic.ClaudeCode` winget package. An existing npm-installed
 Claude Code 2.1.133 is earlier on PATH, so `claude` currently resolves to that
-version while the winget executable is at its package path. Neither CLI has
-passed provider-backed hosted-terminal testing. TauShell follows the first
+version while the winget executable is at its package path. At the time of this
+environment snapshot, neither CLI had passed provider-backed testing; later
+walkthroughs and live manager/ConPTY checks are recorded below. TauShell follows the first
 executable resolved from `PATH`; Home now displays that exact path beside the
 detected version, making the selected installation visible without changing
 precedence. The Go toolchain used for
@@ -301,7 +306,8 @@ the preserved primary-screen marker. Repeated hosted clicks produced no
 captured mouse report. A later post-start device-status reply was accepted and
 written by the Go bridge but did not reach any fixture input chunk. A repeated
 cursor-position query produced a fixture-visible seven-byte input chunk
-without a matching bridge marker. These remain unexplained.
+without a matching bridge marker. These earlier inbox-ConPTY observations
+were explained by the later bundled-ConPTY comparison below.
 The shutdown prompt exposed a native Wails Yes/No return-value mismatch; the
 host now treats `Yes` as confirmation and defaults/cancels to `No`. Unit tests
 check the native choice values and safe default. A production Wails smoke with
@@ -310,35 +316,37 @@ No left TauShell and the fixture running, while Yes stopped the fixture
 process and closed TauShell. The fixture's PowerShell process exited with code
 1 during interruption, so this does not prove graceful-stop success or cover
 the forced-termination notice. The native close flow runs outside Wails'
-synchronous `OnBeforeClose` callback; automated Wails-host integration
-coverage remains open.
+synchronous `OnBeforeClose` callback. Automated real-window close coverage is
+an accepted limitation; callback unit tests and manual production-window
+smoke cover the available paths.
 
 ## Do not overstate current readiness
 
-The Step 1 WebView2/xterm.js feasibility gate is substantially closed: both
-supported harnesses have now been exercised end-to-end inside the hosted
-terminal with real, signed-in credentials on this Windows 10 machine (see
-below). A clean-environment test without WebView2 will not be performed (user
-decision; the existing prompt is accepted as working). Also open: completing an actual OAuth login flow for Claude Code (deliberately not
-attempted, to avoid live browser-based authentication during automated
-testing). The visible window alone is still not evidence that terminal
+The Step 1 WebView2/xterm.js feasibility gate is substantially closed: Claude
+Code and Copilot CLI were exercised inside the hosted terminal, and later
+signed-in manager/ConPTY checks are recorded below. A clean-environment test
+without WebView2 will not be performed (user decision; the existing prompt is
+accepted as working). Also open: completing an actual OAuth login flow for
+Claude Code (deliberately not attempted, to avoid live browser-based
+authentication during automated testing). The visible window alone is still not evidence that terminal
 behavior, harness restore, or application security has passed in general —
 rely on the specific verified findings below, not on the window simply
 rendering.
 
 Known gaps and risks:
 
-- **Feasibility blocker:** test xterm input/output, split UTF-8 sequences, ANSI,
-  terminal queries, alternate screen, cursor movement, resize, mouse modes,
-  and Unicode/emoji against a controllable full-screen fixture, then perform
-  non-destructive Claude Code and Copilot CLI walkthroughs on Windows 10.
+- **Terminal feasibility:** the original gate called for xterm input/output,
+  split UTF-8 sequences, ANSI, terminal queries, alternate screen, cursor
+  movement, resize, mouse modes, and Unicode/emoji against a controllable
+  full-screen fixture, followed by non-destructive Claude Code and Copilot CLI
+  walkthroughs on Windows 10. Recorded results and their limits follow.
   The checked-in fixture has verified Unicode/emoji, split UTF-8 output, ANSI,
   cursor movement, cursor-position query replies, typed input, explicit exit,
   primary-screen restoration, and live resize through the production
   WebView2/ConPTY path.
   - **Resolved: real harness walkthroughs, user-authorized.** With explicit
-    user authorization, real signed-in Claude Code and GitHub Copilot CLI
-    processes were launched through the production app in the real (non-test)
+    user authorization, real Claude Code and GitHub Copilot CLI processes
+    were launched through the production app in the real (non-test)
     user profile. Claude Code rendered its genuine first-run wizard (ASCII-art
     banner, theme-selection menu, syntax-highlighted diff preview) correctly;
     one menu step was confirmed via Enter to reach "Select login method",
@@ -386,8 +394,9 @@ Known gaps and risks:
     input-pipe, and output-pipe handles are valid before `Close` and invalid
     afterward. It passed 10 consecutive runs. The opaque pseudoconsole handle
     is not compatible with `GetHandleInformation`; its successful close and
-    cleared field are still covered by the existing cleanup test. Wails-host
-    close integration tests remain open.
+    cleared field are still covered by the existing cleanup test. Callback
+    unit tests and a manual production-window smoke cover the Wails close flow;
+    automated real-window coverage is an accepted limitation.
   Close-flow unit tests now cover cancellation, successful stop and
   verification, forced-stop reporting, stop failure, and keeping the window
   open when a managed session remains running after `StopAll` or the shutdown
@@ -442,9 +451,10 @@ Known gaps and risks:
   `Adapter.DefaultLaunchArgs()` and the new `GetSessionTemplate`/
   `PreviewSessionLaunch` bound methods, verified with new Go unit tests and an
   isolated-profile UI smoke test for both harnesses.
-  Editable full-YAML preview remains
-  incomplete. The session form now suggests up to five recently created
-  session folders, persisted in WebView local storage.
+  The full-YAML preview is editable, follows the form until hand-edited, and
+  is validated before saving. Creation selects and starts the new session.
+  The form suggests up to five recently created session folders, persisted in
+  WebView local storage.
 - Tabs and selected tab persist in WebView local storage. They do not
   auto-launch sessions. In-process background tabs retain their xterm buffer.
   The tab strip now has tab semantics, arrow/Home/End keyboard selection,
@@ -474,11 +484,12 @@ Known gaps and risks:
   Protocol; the probe build appended `--remote-debugging-port` through a
   temporary, reverted patch to the vendored Wails loader, so no debug hook
   ships):
-  - Background terminal path: closing a running session's tab and choosing
-    "Keep running" keeps the session running with its xterm instance;
-    `WriteTerminal` input sent while hidden reaches the fixture; reopening the
-    session from the sidebar shows the output received while hidden, and later
-    input still routes to it.
+  - Historical background terminal path: at the time, closing a running
+    session's tab and choosing "Keep running" kept it running with its xterm
+    instance; `WriteTerminal` input sent while hidden reached the fixture,
+    and reopening the session showed the output and still routed input. That
+    option has since been removed: closing a running tab now requires
+    confirmation and stops the session.
   - Persisted presentation state: tabs survive a restart (WebView local
     storage). The WebView profile lives in
     `%APPDATA%\<exe name>\EBWebView`, so renaming the executable starts with
@@ -491,8 +502,8 @@ Known gaps and risks:
   - The fixture now answers `--help` and reports version 1.0.103 so the
     capability probe accepts it as a Copilot stand-in.
 - Start Fresh is explicitly confirmed in the UI and rotates the persisted
-  harness ID. A real, user-authorized provider-backed restore walkthrough was
-  performed for both harnesses:
+  harness ID. An earlier user-authorized hosted-terminal walkthrough checked
+  restore before either session had a real conversation turn:
   - **Claude Code:** restoring a session that had never progressed past its
     first-run onboarding (no completed login) re-launched the wizard from the
     same theme-selection step, which is the harness's own expected behavior
@@ -507,13 +518,14 @@ Known gaps and risks:
     the documented "do not claim restored unless harness confirms" principle.
     This is most likely because a session with zero real turns was never
     registered as resumable by Copilot CLI's own internal session tracking.
-    Decision (user): Restore is now disabled for such sessions. The Copilot
+    Decision (user): Restore is not offered for such sessions. The Copilot
     adapter's `CheckResume` requires
     `~\.copilot\session-state\<id>\events.jsonl` (present for sessions with
     turns, absent for zero-turn ones; undocumented Copilot internals, so it
     fails open if the session-state folder is missing). Home and the toolbar
     hide Restore entirely (the reason is the Start fresh tooltip) and keep
-    Start fresh; the backend also refuses a restore with the same message.
+    Start fresh. If a restore is invoked despite that state, the backend
+    starts a new conversation and explicitly warns that resume was unavailable.
     Covered by unit tests. The earlier smoke showed Restore disabled; the
     UI was later changed to hide it, and that change is build-verified only.
 - The WebView bridge currently receives terminal chunks as base64 events.
@@ -594,8 +606,11 @@ Running sessions have a **Model** menu in the terminal toolbar (and in the
 command palette). It is shown only for harnesses that declare widgets and whose
 `--model` capability probe succeeded. It types `/model <id>` into the harness,
 or `/model` alone to open the harness's own picker, using the
-[widget delivery policy](../v1/08-UI-Design.md#10-harness-widgets). TauShell
-does not read the live model back, so the UI says "sent", never "applied". The
+[historical widget delivery policy](../v1/08-UI-Design.md#10-harness-widgets).
+The command reports that it was sent, not that it was applied. Separately,
+TauShell polls the harness's own session records for the last recorded model
+and shows it read-only in the top bar when available; this is not a general
+confirmation that a particular command succeeded. The
 suggested IDs live in `internal/tools/tools.go` (`Widgets.Models`) and are only
 suggestions: a custom ID can be entered, and availability depends on the
 account.
@@ -603,7 +618,8 @@ account.
 Verified on Copilot CLI 1.0.104 through the real session manager and ConPTY
 (rendered with pyte): `/model auto` and `/model claude-haiku-5.5` both changed
 the model and the footer, and bare `/model` opened the picker. Claude Code's
-`/model` was not exercised because its provider returns 401 on this PC.
+`/model` was not exercised; an earlier attempt encountered provider 401, and
+the later working-login checks did not verify this command.
 Codex 0.166.0's live test opened the picker and changed from the current model
 to another model present in its signed-in catalog; the next assistant turn's
 rollout confirmed the selected model.
@@ -644,10 +660,12 @@ not interrupt a working Copilot, two Escs 250 ms apart did** ("Operation
 cancelled by user"), so Copilot's `InterruptKeys` are two Esc presses; `/compact`
 sent while working is queued by the harness, which is why delivery is
 insert-only unless the harness is idle. Not verified live: Claude Code's slash
-commands, `/model`, and Esc interrupt (provider 401); its command list comes
-from Claude Code's documented built-ins. The idle/input detection reuses the
-attention cues, which are heuristic: when no cue is available the text is only
-inserted. For toolbar and palette commands, a nonempty composer draft receives
+commands, `/model`, and Esc interrupt (an earlier attempt encountered provider
+401; later separate checks used a working login); its command list comes
+from Claude Code's documented built-ins. The idle/input decision reuses
+attention detection from visible cues and activity readers; when idle cannot
+be established, the text is only inserted. For toolbar and palette commands,
+a nonempty composer draft receives
 the action appended but is not submitted; with an empty composer, TauShell
 submits it. The shared send-planning behavior has focused frontend tests.
 
@@ -687,7 +705,8 @@ palette, and shortcuts have not been driven end to end.
    the terminal path.
    A clean-Windows-10/missing-WebView2 test will not be performed (user
    decision); registry-detection unit tests are the coverage.
-4. Done: keyboard-only workflow and Wails-host close integration coverage.
+4. Done: the recorded keyboard-only workflow, close-callback unit coverage,
+   and manual Wails-host close smoke.
    A mocked-browser smoke verified frontend Home/End and arrow-key tab
    selection, and a production-host smoke verified Home/Right switching after
    fixing tab-strip layout; native left/right overflow controls also scrolled
@@ -749,32 +768,31 @@ to include the custom app icon.
   input (Copilot CLI: Ctrl+C, `/exit`, Enter) and waits up to 8 s for the
   harness and `pwsh` to quit. If that is absent, fails, or times out, it falls
   back to a single Ctrl+C (3 s) and then force-termination, which is shown as
-  "Graceful interrupt failed or timed out". Claude Code still uses the
-  Ctrl+C-only path in the adapter. A real probe showed Ctrl+C, `/exit`, Enter
-  exits Claude in about 0.4 s, but whether a later Restore resumes the
-  conversation is unverified (login-gated; see
-  [`24-claude-code-verification-plan.md`](24-claude-code-verification-plan.md) T6),
-  so the adapter change is deferred.
+  "Graceful interrupt failed or timed out". Claude Code's manifest also sends
+  Ctrl+C, `/exit`, Enter. Claude Code 2.1.316 later passed busy graceful stop
+  and real-turn restore/recall through the session manager and ConPTY; see
+  [`24-claude-code-verification-plan.md`](24-claude-code-verification-plan.md)
+  for the recorded limits.
   Unit tests
   use fake processes; the real Copilot `/exit` path was smoke-tested in the
   production window (clean exit in about 1.5 s, exit code 0, not forced). That
   a later Restore resumes the conversation is now verified: a real `Manager`
   run on Copilot CLI 1.0.104 (stop 2.2 s, not forced) restored the session,
   replayed the prior turn, and the model recalled a word given before the
-  stop. Claude's model-dependent checks stay blocked: this PC's provider
-  returns 401 on every request.
+  stop. An earlier Claude provider 401 blocked model-dependent checks at the
+  time; the later 2.1.316 run used a working login.
   Stop/shutdown
   timeouts were raised to 25 s to fit the longer sequence.
 
 1. Read "Product boundaries", "Do not overstate current readiness", and
    "Known gaps" here, then [`22-local-attention-notifications.md`](22-local-attention-notifications.md)
-   for the implemented (not live-verified) flash/toast alerts, shared session
-   order (`session_order` in `state.db`), clone session, and
+   for implemented flash/toast alerts and their remaining live-verification
+   limits, shared session order (`session_order` in `state.db`), clone session, and
    `~/.tau_shell/config.yaml`.
 2. Build and verify with the commands in the contributor guide. Check
    `git status` for the current workspace state; commit only when the owner
    asks.
-3. Latest change: Copilot Restore gating (`Adapter.CheckResume`,
-   `Snapshot.ResumeNote`; Restore disabled with Start fresh when Copilot has no
+3. Copilot Restore gating (`Adapter.CheckResume`,
+   `Snapshot.ResumeNote`; Restore hidden with Start fresh when Copilot has no
    `events.jsonl` for the session). It relies on Copilot's undocumented
    session-store layout and fails open if the store is missing.

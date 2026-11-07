@@ -40,6 +40,19 @@ $env:APPDATA = Join-Path $work 'appdata'
 New-Item -ItemType Directory -Force $env:APPDATA | Out-Null
 
 try {
+    if ($Version) {
+        $info = (Get-Item -LiteralPath $Exe).VersionInfo
+        if ($info.ProductVersion -ne $Version) {
+            throw "Windows ProductVersion '$($info.ProductVersion)' != '$Version'"
+        }
+        $parts = ($Version -split '[-+]', 2)[0].Split('.')
+        $expectedFileVersion = if ($Version -eq 'dev') { '0.0.0.0' } else { "$($parts[0]).$($parts[1]).$($parts[2]).0" }
+        if ($info.FileVersion -ne $expectedFileVersion) {
+            throw "Windows FileVersion '$($info.FileVersion)' != '$expectedFileVersion'"
+        }
+        Write-Host "ok: Windows version resources match $Version"
+    }
+
     $nodeArgs = @("$root\e2e\smoke.mjs", '--exe', $Exe, '--log', (Join-Path $tempDir 'TauShell\taushell.log'))
     if ($Version) { $nodeArgs += @('--version', $Version) }
     & node @nodeArgs

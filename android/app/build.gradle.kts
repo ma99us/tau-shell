@@ -1,4 +1,5 @@
 import java.util.Properties
+import groovy.json.JsonSlurper
 
 plugins {
     id("com.android.application")
@@ -12,6 +13,22 @@ val keystoreProps = Properties().apply {
     if (keystoreFile.exists()) keystoreFile.inputStream().use { load(it) }
 }
 
+val packageInfo = JsonSlurper().parse(rootProject.file("../frontend/package.json")) as Map<*, *>
+val appVersion = (findProperty("appVersion") as String?) ?: packageInfo["version"] as String
+require(appVersion.matches(Regex("""(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)([-+][0-9A-Za-z.-]+)?"""))) {
+    "Invalid app version: $appVersion"
+}
+val versionParts = appVersion.substringBefore('-').substringBefore('+').split('.').map { it.toLong() }
+require(versionParts[0] <= 210000 && versionParts[1] <= 99 && versionParts[2] <= 99) {
+    "App version cannot be represented by the Android versionCode scheme: $appVersion"
+}
+val derivedVersionCode = versionParts[0] * 10000 + versionParts[1] * 100 + versionParts[2]
+require(derivedVersionCode in 1..2100000000L) {
+    "App version cannot be represented by the Android versionCode scheme: $appVersion"
+}
+val appVersionCode = (findProperty("appVersionCode") as String?)?.toLong() ?: derivedVersionCode
+require(appVersionCode == derivedVersionCode) { "appVersionCode must match appVersion ($derivedVersionCode)" }
+
 android {
     namespace = "com.taushell.phone"
     compileSdk = 36
@@ -21,8 +38,8 @@ android {
         // TLS 1.3 is only available from Android 10.
         minSdk = 29
         targetSdk = 35
-        versionCode = (findProperty("appVersionCode") as String?)?.toInt() ?: 1
-        versionName = (findProperty("appVersion") as String?) ?: "0.1.0"
+        versionCode = appVersionCode.toInt()
+        versionName = appVersion
     }
 
     signingConfigs {

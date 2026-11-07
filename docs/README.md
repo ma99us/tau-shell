@@ -3,16 +3,16 @@
 ## Current requirements
 
 - **Version mapping:** V2 is authoritative for current product and engineering
-  requirements. V1 is historical except for the active Phase 1 UI documents
-  linked below; V3 is future planning only.
+  requirements, subject to the Phase 1 boundaries in [AGENTS.md](../AGENTS.md).
+  V1 is historical; V3 is future planning only.
 - [V2 product and engineering docs](v2/): authoritative for current scope and
   design. Phase 1 boundaries are summarized in the [product vision](v2/00-product-vision.md)
   and [engineering handoff](v2/21-engineering-handoff.md).
 - [MVP backlog](v2/20-mvp-backlog.md) and [roadmap](v2/16-roadmap.md): implementation
   status and remaining Phase 1 work.
-- [UI design](v1/08-UI-Design.md) and [UI implementation plan](v1/09-UI-Implementation-Plan.md):
-  active Phase 1 UI specifications, despite their location in the historical
-  V1 folder.
+- [UI design system](v2/25-ui-design-system.md) and
+  [terminal rendering](v2/15-terminal-rendering.md): current desktop UI and
+  terminal guidance.
 
 ## Recipes and verification
 
@@ -32,6 +32,9 @@
 
 - [V3](v3/README.md): future planning only; not current requirements.
 - [V1](v1/README.md): historical product and implementation documents.
+- [V1 UI design](v1/08-UI-Design.md) and
+  [UI implementation plan](v1/09-UI-Implementation-Plan.md): historical
+  decisions and migration context, not current requirements.
 - [Root README](../README.md): user-facing setup, behavior, download, and build instructions.
 
 ## Documentation workflow

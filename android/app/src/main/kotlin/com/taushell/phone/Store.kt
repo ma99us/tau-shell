@@ -10,6 +10,9 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
+internal fun isSessionMuted(globalAlertsEnabled: Boolean, sessionExplicitlyMuted: Boolean): Boolean =
+    !globalAlertsEnabled || sessionExplicitlyMuted
+
 /** The bearer token never touches disk unencrypted: AES-GCM with a key that cannot leave the Android Keystore. */
 private object SecretBox {
     private const val ALIAS = "taushell-token"
@@ -79,7 +82,7 @@ class Store(context: Context) {
     }
 
     fun forget() {
-        prefs.edit().remove("host").remove("port").remove("deviceId").remove("fingerprint").remove("token").remove("expires").apply()
+        prefs.edit().remove("host").remove("port").remove("deviceId").remove("fingerprint").remove("token").remove("expires").remove("promptHistory").apply()
     }
 
     var muted: Set<String>
@@ -93,6 +96,23 @@ class Store(context: Context) {
     var presets: List<String>
         get() = prefs.getString("presets", null)?.split("\n")?.filter { it.isNotBlank() } ?: DEFAULT_PRESETS
         set(value) = prefs.edit().putString("presets", value.filter { it.isNotBlank() }.joinToString("\n")).apply()
+
+    /** Sent prompts per session id; kept in app-private storage only. */
+    var promptHistory: Map<String, List<String>>
+        get() = try {
+            val json = org.json.JSONObject(prefs.getString("promptHistory", null) ?: "{}")
+            json.keys().asSequence().associateWith { id ->
+                val items = json.getJSONArray(id)
+                List(items.length()) { items.getString(it) }
+            }
+        } catch (_: org.json.JSONException) {
+            emptyMap()
+        }
+        set(value) {
+            val json = org.json.JSONObject()
+            value.forEach { (id, items) -> json.put(id, org.json.JSONArray(items)) }
+            prefs.edit().putString("promptHistory", json.toString()).apply()
+        }
 
     companion object {
         val DEFAULT_PRESETS = listOf("Continue", "Go ahead", "Summarize what you did", "Run the tests")

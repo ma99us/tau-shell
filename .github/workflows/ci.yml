@@ -35,6 +35,19 @@ jobs:
 
       - run: python -m pip install pillow
 
+      - name: Test release version synchronization
+        run: node --test scripts\frontend-version.test.mjs scripts\app-version.test.mjs
+
+      - name: Check app manifests against published GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts\app-version.mjs github
+
+      - name: Set frontend version for the release smoke test
+        shell: pwsh
+        run: node scripts\frontend-version.mjs set 0.0.0-ci
+
       - name: Frontend build, token check and tests
         working-directory: frontend
         run: |

@@ -12,13 +12,12 @@ interface SessionActions {
     fun send(item: SessionItem, text: String, insertOnly: Boolean, done: (Result<Unit>) -> Unit)
     fun start(item: SessionItem, mode: String, done: (Result<Unit>) -> Unit)
     fun screen(item: SessionItem, done: (Result<List<String>>) -> Unit)
-    fun answer(item: SessionItem, answer: String, done: (Result<Unit>) -> Unit)
     fun quickReplies(): List<String>
     fun sessionPresets(item: SessionItem, done: (Result<List<PromptPreset>>) -> Unit)
     fun promptHistory(id: String): List<String>
     fun rememberPrompt(id: String, text: String)
     fun muted(id: String): Boolean
-    fun setMuted(id: String, value: Boolean)
+    fun setMuted(id: String, value: Boolean, done: (Result<Unit>) -> Unit)
 }
 
 /** Colors and initials for a session icon, shared by the tile and the session header. */

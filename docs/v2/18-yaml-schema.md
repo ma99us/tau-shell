@@ -26,7 +26,7 @@ launch_args:
   - sonnet
 ```
 
-`id` is TauShell's stable session identifier. The desktop app names new sessions after the project (manifest name, otherwise folder name) and renames or recolors them from the session context menu; those edits rewrite only `name` and `color` in place, preserving other keys and comments, and never change `id` or the file name. TauShell serializes config writers per path and checks that the file has not changed before replacement; an observed external edit returns a conflict to reload and retry. Non-cooperating external editors cannot be locked out, and a change after the recheck can still race. Supported tool values: claude-code, copilot-cli, gsd, codex, opencode. Default launch arguments: Claude --dangerously-skip-permissions, Copilot --yolo, Codex --dangerously-bypass-approvals-and-sandbox, OpenCode --auto, GSD none. The harness session UUID is generated and persisted separately before first launch so TauShell can resume the intended conversation by ID (GSD: a TauShell-named session file; Codex and OpenCode: the ID the harness chooses, discovered after launch). Do not add a `--continue`/“most recent” restore command to YAML.
+`id` is TauShell's stable session identifier. The desktop app names new sessions after the project (manifest name, otherwise folder name) and renames or recolors them from the session context menu; those edits rewrite only `name` and `color` in place, preserving other keys and comments, and never change `id` or the file name. TauShell serializes config writers per path and checks that the file has not changed before replacement; an observed external edit returns a conflict to reload and retry. Non-cooperating external editors cannot be locked out, and a change after the recheck can still race. Supported tool values: claude-code, copilot-cli, gsd, codex, opencode. Default launch arguments: Claude --dangerously-skip-permissions, Copilot --yolo, Codex --dangerously-bypass-approvals-and-sandbox, OpenCode --auto, GSD none. Harness conversation IDs are stored separately from YAML: TauShell chooses the Claude and Copilot IDs and names GSD's session file; Codex and OpenCode choose IDs that TauShell discovers after launch. Do not add a `--continue`/“most recent” restore command to YAML.
 
 The current implementation rejects unknown fields and validates the required
 values, supported tool identifiers, working-directory existence, environment
@@ -35,14 +35,20 @@ variable names, UTF-8 setting, and filename/ID match before launch.
 not a shell command string. The list applies to both start and restore;
 harness adapters supply the mode-specific managed session flags. TauShell
 rejects arguments that would override its managed session/resume identity.
-The desktop form accepts additional arguments one per line, but does not yet
-show a complete editable YAML preview or generate harness-specific argument
-defaults. TauShell treats saved YAML as the user's explicit configuration and
-does not add a separate launch confirmation for configured arguments.
+The desktop form supplies editable harness-specific defaults and accepts
+additional arguments one per line. Its full YAML preview follows the form until
+hand-edited, and the edited definition is validated before saving. A newly
+created session is selected and started immediately. TauShell treats saved
+YAML as the user's explicit configuration and does not add a separate launch
+confirmation for configured arguments.
 
-Do not store secret values in YAML; secret-reference support requires a
-separately designed secret provider and is outside the current Phase 1 scope.
-This schema may evolve with explicit compatibility handling.
+Do not store secret values in YAML. The `secrets:` mapping contains names of
+values stored through Home > Secrets in the current user's Windows Credential
+Manager; TauShell resolves them into the child environment at launch and
+reports a missing value as an error. See the
+[security model](11-security-model.md#secret-vault) for the same-user and
+process-environment limitations. This schema may evolve with explicit
+compatibility handling.
 
 ## Prompt presets
 
@@ -71,8 +77,10 @@ same name. Variables: `{project}` (working-directory name), `{dir}`,
 `{session}` (session name), `{branch}` (current git branch, empty outside a
 repository), `{date}` (YYYY-MM-DD). Unknown `{name}` tokens are left as written.
 Do not put secrets in presets. `submit: true` presses Enter only when the
-harness is idle; see
-[`08-UI-Design.md`](../v1/08-UI-Design.md#10-harness-widgets).
+harness is idle; see the current
+[widget delivery notes](21-engineering-handoff.md#harness-widgets-implemented).
+The [V1 UI design](../v1/08-UI-Design.md#10-harness-widgets) is historical
+context.
 
 Skill library presets (from `tau-shell.yaml`) accept an extra `skill: <name>`
 field and appear only while that skill is available and enabled. Layering is

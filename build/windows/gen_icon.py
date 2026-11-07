@@ -45,7 +45,8 @@ def _block(key, value=b"", children=b"", text=False, value_len=None):
 
 def build_version_info(version):
     """RT_VERSION payload. version is "x.y.z" (or "dev" -> 0.0.0.0)."""
-    nums = [int(p) for p in version.split("-")[0].split(".") if p.isdigit()][:4]
+    core = version.split("-")[0].split("+")[0]
+    nums = [int(p) for p in core.split(".") if p.isdigit()][:4]
     nums += [0] * (4 - len(nums))
     ms, ls = (nums[0] << 16) | nums[1], (nums[2] << 16) | nums[3]
     fixed = struct.pack("<13I", 0xFEEF04BD, 0x00010000, ms, ls, ms, ls, 0x3F, 0, 0x40004, 1, 0, 0, 0)

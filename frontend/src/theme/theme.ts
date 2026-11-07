@@ -28,6 +28,7 @@ export const theme = {
     gsd: "var(--brand-gsd)",
   } as const,
   fallbackSessionColor: () => token("tag-fallback"),
+  untaggedSessionColor: () => token("accent"),
   panelBackground: () => token("bg-panel"),
   warningColor: () => token("status-warn"),
   sessionTextOn: (light: boolean) => token(light ? "tag-text-on-light" : "tag-text-on-dark"),

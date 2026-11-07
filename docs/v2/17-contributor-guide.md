@@ -73,6 +73,24 @@ Go extension (Delve) is required.
   `SHA256SUMS.txt`, attests build provenance and publishes a GitHub
   **pre-release**. Running the workflow manually with a version builds a
   **draft** instead (dry run; delete the draft afterwards).
+- Before building, release and CI workflows set both frontend package manifests
+  to the build version. After a successful tag release, the release workflow
+  checks out the latest default branch separately and pushes a version-only
+  commit for `frontend/package.json` and `frontend/package-lock.json`; rerunning
+  an older tag cannot downgrade a newer version. A manual draft does not push a
+  version commit. The workflow token must be allowed to push to the default
+  branch; branch protection or permission failures make the workflow fail
+  explicitly after publication. Commits pushed with `GITHUB_TOKEN` do not start
+  another push-triggered CI run. Prerelease or build suffixes remain in the
+  app and package versions; Windows fixed-version numbers and Android
+  `versionCode` use the numeric release core.
+- A local `scripts\build-release.ps1 -Version <version>` also updates those
+  tracked frontend manifests before building. With `-SkipFrontend`, set the
+  manifests using `node scripts\frontend-version.mjs set <version>` **before**
+  building the frontend; the release script checks that they match, but cannot
+  prove when prebuilt frontend assets were built. `-PackageOnly` packages the
+  existing stage without changing manifests. The version helper's isolated
+  tests run with `node --test scripts\frontend-version.test.mjs`.
 - An explicitly authorized update of an existing release tag rebuilds that
   version and overwrites its ZIP and checksum assets. The release page and
   notes are preserved and the release remains a prerelease. Do not move an
@@ -85,6 +103,22 @@ Go extension (Delve) is required.
   unsigned and the README documents the SmartScreen steps.
 - The app version comes from `-X main.version`; local builds report `dev` and
   skip the update check.
+- Check the three frontend manifest fields locally with
+  `node scripts\app-version.mjs check`; compare them with the highest published
+  GitHub release with `node scripts\app-version.mjs github` (requires `gh`;
+  includes prereleases, excludes drafts, and paginates). CI runs the GitHub
+  check before stamping `0.0.0-ci`, so a mismatch cannot be hidden by the smoke
+  build. Tag/draft builds check their explicitly requested version instead,
+  since it may not be published yet. Dependency, schema, protocol, fixture,
+  and historical example versions are independent of the app release.
+- Local Android builds derive `versionName` and `versionCode` from
+  `frontend/package.json`; an explicit `-PappVersion` overrides the name,
+  with a matching numeric code required if supplied. The code scheme is
+  `major*10000 + minor*100 + patch` (minor and patch at most 99).
+  Release CI verifies the generated APK metadata with
+  `node scripts\app-version.mjs android <version> <output-metadata.json>`.
+  Versioned E2E smoke tests also check Windows ProductVersion/FileVersion,
+  the running bridge version, and the visible Home version.
 - In-app update contract: each release must keep the assets`TauShell-<version>-windows-x64.zip` (flat, `taushell.exe` at the root) and `SHA256SUMS.txt`.
   Re-releasing the same tag is not offered as an update (strict version compare).
 

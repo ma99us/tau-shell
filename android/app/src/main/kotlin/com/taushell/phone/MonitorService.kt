@@ -23,7 +23,6 @@ class MonitorService : Service() {
     private val ui = Handler(Looper.getMainLooper())
     private var lastState = HashMap<String, String>()
     private var running = false
-    private var failing = false
 
     private val tick = object : Runnable {
         override fun run() {
@@ -41,7 +40,8 @@ class MonitorService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         channels()
-        val foreground = notification("Watching your sessions", "Checking every few seconds", ongoing = true, channel = WATCH)
+        getSystemService(NotificationManager::class.java).cancel(2)
+        val foreground = foregroundNotification()
         startForeground(1, foreground, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         if (!running) {
             running = true
@@ -58,20 +58,11 @@ class MonitorService : Service() {
     }
 
     private fun handle(outcome: Result<List<SessionItem>>?) {
-        val manager = getSystemService(NotificationManager::class.java)
         when (outcome) {
             null -> stopSelf()
-            is Result.Fail -> {
-                if (!failing) {
-                    failing = true
-                    manager.notify(2, notification("Cannot reach your PC", outcome.message, ongoing = false, channel = WATCH))
-                }
-            }
+            is Result.Fail -> Unit
             is Result.Ok -> {
-                if (failing) {
-                    failing = false
-                    manager.cancel(2)
-                }
+                val manager = getSystemService(NotificationManager::class.java)
                 val first = lastState.isEmpty()
                 val muted = Store(this).muted
                 val next = HashMap<String, String>()
@@ -96,9 +87,19 @@ class MonitorService : Service() {
 
     private fun channels() {
         val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(NotificationChannel(WATCH, "Watching", NotificationManager.IMPORTANCE_MIN))
+        // Channel importance cannot be changed after creation, so use a new silent channel for the FGS.
+        manager.createNotificationChannel(NotificationChannel(WATCH, "Background monitoring", NotificationManager.IMPORTANCE_MIN))
         manager.createNotificationChannel(NotificationChannel(ALERT, "Session alerts", NotificationManager.IMPORTANCE_HIGH))
     }
+
+    private fun foregroundNotification(): Notification = Notification.Builder(this, WATCH)
+        .setSmallIcon(R.drawable.ic_stat)
+        .setContentTitle("")
+        .setContentText("")
+        .setOngoing(true)
+        .setOnlyAlertOnce(true)
+        .setShowWhen(false)
+        .build()
 
     private fun appIcon(): android.graphics.Bitmap {
         val size = (64 * resources.displayMetrics.density).toInt()
@@ -128,7 +129,7 @@ class MonitorService : Service() {
     }
 
     companion object {
-        private const val WATCH = "watch"
+        private const val WATCH = "watch_silent"
         private const val ALERT = "alert"
         const val EXTRA_SESSION = "session"
 

@@ -3,7 +3,8 @@
 ## Principles
 
 - Least privilege and local-first operation.
-- Do not store secret values in session YAML or expose them to the UI renderer.
+- Do not store secret values in session YAML or return stored values to the UI
+  renderer.
 - Keep session environments and managed process trees isolated.
 - Validate every desktop UI bridge request; expose only the operations the
   trusted local UI needs.
@@ -26,12 +27,13 @@ put real secrets in the vault instead.
 `secrets:` entries map an environment variable to a vault secret name
 (`docs/v2/10-environment-management.md`). Values are stored as generic
 credentials in the current user's Windows Credential Manager
-(`internal/vault`), so Windows protects them with the user's login. They are
-read only at launch, by `Config.LaunchEnvironment`, and go only into the child
-environment block; they are not in YAML, `state.db`, diagnostics (only the
-secret *name* is logged on failure), toasts, the command line or any bridge
-payload: `ListSecrets` returns names and the sessions using them, and
-`SetSecret` is write-only. A missing secret stops the launch and names the
+(`internal/vault`), so Windows protects them with the user's login. When the
+user enters a value, the renderer holds it for the write-only `SetSecret`
+bridge request; `ListSecrets` returns names and the sessions using them, and
+the bridge does not return stored values. At launch `Config.LaunchEnvironment`
+reads the value into the child environment block; it is not placed in YAML,
+`state.db`, diagnostics (only the secret *name* is logged on failure), toasts,
+or the command line. A missing secret stops the launch and names the
 secret. Honest limit: any process running as the same user can read the
 credential store and the injected child environment, and the harness's own
 child processes inherit the variable; the vault removes plaintext from YAML,

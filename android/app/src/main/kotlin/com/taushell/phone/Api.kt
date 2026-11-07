@@ -11,6 +11,8 @@ data class Activity(
     val hasDraft: Boolean,
     /** A waiting harness shows a question or choice list, not a permission prompt. */
     val question: Boolean = false,
+    /** Elapsed time since the desktop observed this state, in milliseconds. */
+    val sinceMs: Long? = null,
 )
 
 data class SessionItem(
@@ -64,6 +66,11 @@ object Parse {
                     confirmed = activity?.optBoolean("confirmed") ?: false,
                     hasDraft = activity?.optBoolean("hasDraft") ?: false,
                     question = activity?.optBoolean("question") ?: false,
+                    sinceMs = if (activity?.has("sinceMs") == true) {
+                        activity.optLong("sinceMs").takeIf { it >= 0 }
+                    } else {
+                        null
+                    },
                 ),
                 lastError = item.optString("lastError"),
                 totalUsd = if (item.has("totalUsd") && !item.isNull("totalUsd")) {
@@ -197,12 +204,6 @@ class PcClient(
 
     fun sessionPresets(session: String): Result<List<PromptPreset>> =
         parsed(call("GET", "/v1/sessions/${enc(session)}/presets", null, 15_000), Parse::sessionPresets)
-
-    /** Answers a permission prompt with a fixed yes or no; the PC re-checks the prompt. */
-    fun answer(session: String, answer: String): Result<Unit> {
-        val body = JSONObject().put("answer", answer).toString()
-        return parsed(call("POST", "/v1/sessions/${enc(session)}/answer", body, 15_000), Parse::ack)
-    }
 
     fun start(session: String, mode: String): Result<Unit> {
         val body = JSONObject().put("mode", mode).toString()

@@ -1,21 +1,21 @@
 # Claude Code Verification Plan
 
-Status: **mostly run. Re-run 2026-11-02 with a working login (Claude Code 2.1.316, Foundry key); see section 5b. Open: tab-switch and focus checks in the app window. OAuth login is accepted as untested.**
-Earlier partial run (2026-10-27, Claude Code 2.1.311 on the dev PC):
-Everything that does not need a model reply was run headlessly through the real
-session manager; see the results table in section 5. The login on this PC is a
-Foundry key whose provider rejected every request ("User ... has been
-deactivated"), so tests that need real model turns (recall after restore,
-permission prompts, busy-state exit, spinner during a normal turn) are still
-open. Earlier status: deferred by the owner (2026-10-24) until a PC with a
-completed Claude Code login is available. Same areas are verified for GitHub Copilot CLI (see
-[`21-engineering-handoff.md`](21-engineering-handoff.md)). Do not claim Claude
-Code support beyond what this plan's results show. Record outcomes in the
-results table at the end and in the handoff, stating plainly what failed.
+Status: **mostly run.** The 2026-11-02 re-run used Claude Code 2.1.316 with a
+working Foundry key through the session manager and ConPTY; see section 5b.
+Tab-switch and focus checks in the app window remain open. OAuth login is
+accepted as untested.
 
-## 1. What is and is not known today
+The earlier partial run on 2026-10-27 used Claude Code 2.1.311. At that time
+the provider rejected requests, so model-dependent tests remained open; the
+later results supersede that blocker for the checks they actually cover. The
+owner had deferred the run on 2026-10-24 until a usable login was available.
+See also [`21-engineering-handoff.md`](21-engineering-handoff.md). Do not claim
+support beyond the recorded results; report later outcomes and failures
+explicitly.
 
-Verified (any Claude Code version, no login):
+## 1. Initial baseline before the recorded runs
+
+Initial observations without a completed login:
 
 - `claude --help` lists `--session-id`, `--resume` and `--model`, so the tool
   spec's capability probes pass (`internal/tools/tools.go`).
@@ -28,9 +28,10 @@ Verified (any Claude Code version, no login):
   wizard. That is the harness's own behavior, not a TauShell defect.
 - Create dialog preview shows `--model sonnet` when `--model sonnet` is typed into the launch arguments.
 
-Never verified (the gaps this plan closes):
+The following were the original gaps and code assumptions, not current
+status. The results in sections 5 and 5b supersede them where stated.
 
-| ID | Gap | Current code assumption |
+| ID | Original gap | Original code assumption |
 |---|---|---|
 | G1 | A completed OAuth/API login inside the hosted terminal was never done. | Login works through the browser handoff and persists. |
 | G2 | Restore of a real conversation (at least one model turn) has never been run. `--resume <id>` is assumed to reopen the conversation started with `--session-id <id>`. | Adapter `ResumeArgs`. |
@@ -76,7 +77,7 @@ Titles then appear in the diagnostics log shown on Home (`taushell.log`).
 Remove the probe before committing. For prompt text, rely on screenshots of
 the window; do not paste prompt contents that include private data into docs.
 
-## 4. Test plan
+## 4. Original test plan
 
 Run in this order; each step lists the gap it closes, the exact actions, and
 the pass criteria. Mark any deviation as a finding, not a pass.
@@ -116,12 +117,11 @@ conversation is not resumed) and a second Restore after a clean exit.
    empty new conversation. Capture the exit code and message.
 3. Repeat after sending one prompt, and compare.
 
-Outcome decides the fix: if Claude errors or loses state, add a Claude
-`resumeCheck` (the Copilot one, `checkCopilotResume`, is the pattern) that
-detects "no recorded conversation" and hides Restore in favor of Start fresh.
-Inspect where Claude stores conversations (expected under
-`%USERPROFILE%\.claude\projects\...`, **layout unverified**) before writing
-the check, and make it fail open if the layout is not recognized.
+The original trigger was to add a resume check if Claude errored or lost
+state. That check is now implemented: it looks for the transcript under
+`projects/*/<id>.jsonl`, honors `CLAUDE_CONFIG_DIR`, and fails open if the
+store is absent. See the T3 result below and `internal/harness/resume_test.go`
+before changing it.
 
 ### T4: State icons and titles (G3)
 
@@ -218,7 +218,7 @@ In one conversation, check and screenshot:
 Findings feed `docs/v2/15-terminal-rendering.md`; fix only clear TauShell
 defects and report harness-side quirks as such.
 
-## 5. Evidence and results
+## 5. Initial evidence and results (2026-10-27)
 
 For each test record: date, TauShell commit, Claude Code version and install
 path, Windows version, pass/fail, and the exact observed text for anything
@@ -236,10 +236,11 @@ unexpected. Copy this table into the handoff when complete:
 | T8 Versions | G9 | **Partial.** Only one install now (npm 2.1.311, inside the tested range); capability probes and tool tests pass. No older or newer build tested. | 2.1.311 | |
 | T9 Terminal behavior | G10 | **Partial, headless.** Through the real session manager and ConPTY (inbox backend), rendered with a VT emulator (pyte, not xterm.js): bracketed multi-line paste, Unicode/CJK/emoji/combining marks, and resize (80x24, 140x40, 100x30) reflowed cleanly; Esc and Ctrl+C at the prompt cleared input without exiting. Shift+Enter via CSI-u (`ESC[13;2u`) did not insert a newline. Not covered: the xterm.js window itself, mouse, scrollback, tab switching mid-stream, focus. | 2.1.311 | Needs a manual pass in the app window. |
 
-## 6. Code changes this plan may trigger
+## 6. Original follow-up triggers
 
-Keep each small and tested; do not add them speculatively before the evidence
-exists.
+These are the original triggers, not a list of changes still required. T3-T6
+already led to implementation changes; check the current code and later
+results before acting. Keep any further change small and tested.
 
 | Trigger | Change |
 |---|---|
