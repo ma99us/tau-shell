@@ -91,7 +91,7 @@ export function FileDrawer({ session, onClose, onError, onInsert }: { session: S
       <div className={`file-row ${!entry.dir && file?.path === entry.path ? "selected" : ""}`} style={{ paddingLeft: 8 + depth * 14 }}
         onContextMenu={(event) => { event.preventDefault(); setMenu({ x: Math.min(event.clientX, window.innerWidth - 210), y: Math.min(event.clientY, window.innerHeight - 120), entry }); }}>
         <button className="file-name" title={`${entry.path} (right-click for more)`} onClick={() => entry.dir ? toggle(entry) : void view(entry)}>
-          <span className="file-ico" style={{ color: entry.dir ? "#d6a85c" : kind.color }}><Icon name={entry.dir ? (expanded ? "folderOpen" : "folder") : kind.icon} size={15} /></span><span className="file-label">{entry.name}</span>
+          <span className="file-ico" style={{ color: entry.dir ? "var(--file-folder)" : kind.color }}><Icon name={entry.dir ? (expanded ? "folderOpen" : "folder") : kind.icon} size={15} /></span><span className="file-label">{entry.name}</span>
         </button>
       </div>
       {entry.dir && expanded && rows(entry.path, depth + 1)}

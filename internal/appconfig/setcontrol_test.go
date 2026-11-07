@@ -49,11 +49,11 @@ func TestSetControlEnabledEditsInPlace(t *testing.T) {
 func TestSetMobileInterfaceEditsInPlace(t *testing.T) {
 	dir := t.TempDir()
 	cases := map[string]string{
-		"missing":   "",
-		"example":   exampleFile,
-		"no block":  "# mine\nversion: 1\nusage:\n  month_start_day: 3\n",
-		"existing":  "version: 1\nmobile:\n  enabled: true # keep\n  interface: 10.0.0.9\n  port: 5000\n",
-		"no iface":  "version: 1\nmobile:\n  enabled: true\n",
+		"missing":  "",
+		"example":  exampleFile,
+		"no block": "# mine\nversion: 1\nusage:\n  month_start_day: 3\n",
+		"existing": "version: 1\nmobile:\n  enabled: true # keep\n  interface: 10.0.0.9\n  port: 5000\n",
+		"no iface": "version: 1\nmobile:\n  enabled: true\n",
 	}
 	for name, content := range cases {
 		path := filepath.Join(dir, name+".yaml")

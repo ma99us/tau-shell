@@ -35,7 +35,8 @@ export function inkOn(background: Rgb, light: string, dark: string): string {
   if (!lightRgb || !darkRgb) return light;
   const [best, bestRgb] = contrast(background, lightRgb) >= contrast(background, darkRgb) ? [light, lightRgb] : [dark, darkRgb];
   if (contrast(background, bestRgb) >= 4.5) return best;
-  return contrast(background, [255, 255, 255]) >= contrast(background, [0, 0, 0]) ? "#ffffff" : "#000000";
+  const fallback: Rgb = contrast(background, [255, 255, 255]) >= contrast(background, [0, 0, 0]) ? [255, 255, 255] : [0, 0, 0];
+  return toHex(fallback);
 }
 
 // The tint shares are published to CSS as --session-tint-* so the tab/row

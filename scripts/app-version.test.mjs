@@ -41,3 +41,17 @@ test("CI checks published metadata before replacing it with the smoke version", 
   assert.match(gradle, /frontend\/package\.json/);
   assert.doesNotMatch(gradle, /versionName = .*"0\.1\.0"/);
 });
+
+test("every release publishes both Windows and Android with checksums and provenance", () => {
+  const release = readFileSync(new URL("../.github/workflows/release.yml", import.meta.url), "utf8");
+  const publish = release.slice(release.indexOf("      - name: Publish GitHub release"));
+  for (const command of ["gh release upload", "gh release create"]) {
+    const line = publish.split("\n").find((line) => line.trim().startsWith(command));
+    assert.ok(line, `Missing ${command}`);
+    assert.match(line, /TauShell-\$bare-windows-x64\.zip/);
+    assert.match(line, /TauShell-Phone-\$bare\.apk/);
+    assert.match(line, /dist\/SHA256SUMS\.txt/);
+  }
+  assert.ok(release.indexOf("Build the Android APK") < release.indexOf("Publish GitHub release"));
+  assert.match(release, /subject-path: \|\s+dist\/\*\.zip\s+dist\/\*\.apk/);
+});

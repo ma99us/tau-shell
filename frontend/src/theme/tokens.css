@@ -151,4 +151,18 @@
   --syntax-attr: #ffcb6b;
   --syntax-add: #7bd88f;
   --syntax-del: #ff8080;
+
+  /* Project file icons */
+  --file-blue: #7aa2f7;
+  --file-cyan: #4aa3df;
+  --file-yellow: #e5c07b;
+  --file-teal: #56b6c2;
+  --file-sky: #61afef;
+  --file-orange: #d19a66;
+  --file-red: #e06c75;
+  --file-purple: #c678dd;
+  --file-green: #98c379;
+  --file-muted: #7f848e;
+  --file-default: #9aa0a6;
+  --file-folder: #d6a85c;
 }

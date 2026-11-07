@@ -69,6 +69,10 @@ Status colors, always paired with a shape or label, never color alone:
 
 Danger (delete, errors, failed notices) has its own text, background, border
 and solid ramps (`--danger-*`).
+Project file icons use the `--file-*` palette; folder and conversation-history
+warnings retain their existing amber through `--file-folder`. Mathematical
+black/white contrast fallbacks are computed in `sessionColor.ts`, not theme
+styling literals.
 
 ### Type
 

@@ -347,6 +347,7 @@ func syncSummary(branch string, committed bool, pulled, pushed int, ctx context.
 	}
 	return fmt.Sprintf("%s: %s. %s", branch, result, state)
 }
+
 // ParseGitStatus reads `git status --porcelain=v2 --branch` output.
 func ParseGitStatus(output string) RepoStatus {
 	status := RepoStatus{Ahead: -1, Behind: -1}

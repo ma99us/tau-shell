@@ -11,11 +11,11 @@ import (
 
 // Pairing failures. Each is visible to the user on the PC.
 var (
-	ErrNoWindow  = errors.New("no pairing window is open")
-	ErrBadCode   = errors.New("wrong pairing code")
-	ErrExpired   = errors.New("the pairing window expired")
-	ErrDenied    = errors.New("pairing was denied on the PC")
-	ErrBusy      = errors.New("a pairing request is already waiting for approval")
+	ErrNoWindow     = errors.New("no pairing window is open")
+	ErrBadCode      = errors.New("wrong pairing code")
+	ErrExpired      = errors.New("the pairing window expired")
+	ErrDenied       = errors.New("pairing was denied on the PC")
+	ErrBusy         = errors.New("a pairing request is already waiting for approval")
 	ErrTooManyTries = errors.New("too many wrong codes; the pairing window is closed")
 )
 
