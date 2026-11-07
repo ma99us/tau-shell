@@ -4,9 +4,9 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Platform: Windows 10+](https://img.shields.io/badge/platform-Windows%2010%2B-0078D4)
 
-Keep several AI coding agents working side by side, queue their next tasks,
-reuse your best prompts and skills, and check progress from your phone.
-TauShell is a Windows desktop manager for persistent sessions with Claude Code,
+Install and update AI coding tools. Manage persistent sessions. Control them
+from your Android phone on your local network.
+TauShell is a Windows desktop app for Claude Code,
 GitHub Copilot CLI, GSD, OpenAI Codex CLI and OpenCode.
 
 Each session runs in ordinary PowerShell 7 through ConPTY. TauShell preserves
@@ -21,22 +21,27 @@ TauShell -> ConPTY -> PowerShell 7 -> AI harness
 
 ## Features
 
-- **Several agents, one workspace.** Run different harnesses side by side,
-  switch between session-colored tabs, group by project, and resume stopped
-  conversations. Resume All and opt-in auto resume bring eligible sessions
-  back; Start fresh begins a new conversation without losing usage history.
-- **Remote access from your Android phone.** Check live session state, read
-  visible terminal text, send prompts, answer supported permission prompts,
-  and receive attention alerts on your local network. Pair by QR code and
-  approve the phone on the PC. The companion is experimental, sideloaded and
-  off by default; it uses authenticated HTTPS with certificate pinning, not a
-  public web dashboard. [Phone setup](android/README.md).
+- **Tool installation and update assistance.** Detect installed tools,
+  versions and missing dependencies. Install supported harnesses with
+  confirmed winget/npm actions, or open vendor instructions. Use offered
+  updates for supported tools. Install Node.js/npm and Git into TauShell's
+  per-user folder without admin rights or registry PATH changes. No tool
+  installs or updates without your approval.
+- **Persistent sessions, restore and management.** Run different harnesses
+  side by side. Switch between colored tabs and group sessions by project.
+  Stop and resume conversations where supported. Use Resume All or opt-in
+  auto resume for eligible sessions. Start fresh keeps your usage history.
+- **Phone control.** Check session state, read visible terminal text, send
+  prompts and receive alerts on your Android phone. Answer supported
+  permission prompts. Connect on your local network, scan a QR code and
+  approve the phone on the PC. The companion is experimental and off by
+  default. It uses authenticated HTTPS with certificate pinning.
+  [Phone setup](android/README.md).
 - **Canned prompts and queued follow-ups.** The session's right-side toolbar
-  puts reusable prompt presets and a per-session prompt queue a click away.
-  Queue typed tasks or presets while an agent works; TauShell sends them one
-  at a time only when a supported harness is confirmed idle, without answering
-  permission prompts or overwriting an unsent draft. Queues stay in memory
-  and are discarded when TauShell closes.
+  has saved prompts and a prompt queue. Add tasks while an agent works.
+  TauShell sends one prompt at a time when a supported harness is confirmed
+  idle. It does not answer permission prompts or replace unsent text.
+  Closing TauShell discards queued prompts.
 - **Reusable skills from ai-cookbook.** Start with a bundled
   [ai-cookbook](https://github.com/mgerdov-igt/ai-cookbook) skill library,
   fetch newer snapshots, and enable the skills you want from Home. Supported
@@ -47,12 +52,6 @@ TauShell -> ConPTY -> PowerShell 7 -> AI harness
   Copilot supplies recorded costs; Claude costs are list-price estimates with
   refreshable pricing. Unknown prices are marked unpriced rather than treated
   as free. A Home quota chip also shows Copilot allowance where available.
-- **Simplified tool setup and upgrade assistance.** Home detects executable
-  paths, versions, dependencies and supported capabilities. Install missing
-  harnesses through confirmed winget/npm actions or vendor instructions, and
-  use offered updates for supported tools. Node.js/npm and Git can be installed
-  into TauShell's per-user tools folder without admin rights or registry PATH
-  changes. Nothing installs or upgrades silently.
 - **A practical session toolbar.** Browse project files, preview text,
   Markdown and images, insert paths into prompts, and revisit past
   conversations. Harness-aware controls expose slash commands, model
