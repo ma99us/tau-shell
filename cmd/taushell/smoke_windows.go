@@ -89,6 +89,8 @@ func smokeLifecycleScript(methods []string, phase string) string {
 	await sleep(3000);
 	result.home = Boolean(document.querySelector('.home'));
 	result.banner = document.querySelector('.error-banner')?.textContent || '';
+	result.version = app && typeof app.GetAppVersion === 'function' ? await app.GetAppVersion() : '';
+	result.displayedVersion = document.querySelector('.home-version')?.textContent || '';
 	const handledDialogs = new WeakSet();
 	const answerShutdownPrompt = () => {
 		for (const dialog of document.querySelectorAll('[role="alertdialog"]')) {

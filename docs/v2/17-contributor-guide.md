@@ -72,12 +72,24 @@ Go extension (Delve) is required.
   uses no AI provider or real user profile. CI and release smoke runs enable
   this lifecycle mode. Unit tests for the script: `node --test e2e/smoke.test.mjs`.
   Requires Node 22+.
+- Lifecycle smoke gotchas: the fixture requires `TAUSHELL_FIXTURE_LOG` in its
+  session environment; set it explicitly in the isolated session YAML rather
+  than relying on a developer's inherited environment. The Home version is
+  fetched asynchronously, so sample the visible version after Home renders.
+  Also clear `TAUSHELL_LIVE` before `go test ./...` unless you intend to run
+  the real, model-using harness probe.
 - Releases: push a SemVer tag (`git tag v1.0.0 && git push origin v1.0.0`).
   `.github/workflows/release.yml` tests, builds
   `TauShell-<version>-windows-x64.zip` with `scripts/build-release.ps1`, writes
   `SHA256SUMS.txt`, attests build provenance and publishes a GitHub
   **pre-release**. Running the workflow manually with a version builds a
   **draft** instead (dry run; delete the draft afterwards).
+- Version bump timing: keep the default branch manifests at the last published
+  app version. CI checks them before stamping its temporary `0.0.0-ci` smoke
+  version. A tag release stamps the requested tag version before building and
+  synchronizes the version-only manifest commit to the default branch only
+  after publishing succeeds. A manual draft does not synchronize that commit;
+  don’t commit CI smoke versions or pre-bump manifests by hand.
 - After a tag release is published and CI succeeds, update the maintainer's
   local installation under `C:\Tools\TauShell\*` to that exact release. Download
   the published ZIP and `SHA256SUMS.txt`, verify the ZIP digest before staging

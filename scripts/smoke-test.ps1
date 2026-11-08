@@ -95,6 +95,8 @@ if ($Lifecycle) {
         'name: TauShell E2E Fixture',
         'tool: e2e-fixture',
         "working_dir: '$workingDir'",
+        'environment:',
+        "  TAUSHELL_FIXTURE_LOG: '$workingDir\fixture-events.log'",
         'auto_resume: true'
     ) -join "`n"
     [IO.File]::WriteAllText((Join-Path $sessionsDir 'e2e-fixture.yaml'), $session + "`n", [Text.UTF8Encoding]::new($false))
