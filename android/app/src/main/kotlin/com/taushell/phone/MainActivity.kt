@@ -438,8 +438,16 @@ class MainActivity : Activity(), SessionActions {
         }
         content.addView(forget, lp().apply { topMargin = dp(8) })
         content.addView(text("Also revoke this phone in TauShell on the PC (Home > Phone).", 12f, Theme.text10), lp().apply { topMargin = dp(6) })
-        swap(scroll(content), Screen.SETTINGS)
+        val version = text("v${installedVersionName()}", 11f, Theme.text10).apply { gravity = Gravity.END }
+        val settings = linear(this).apply {
+            addView(scroll(content), lp(height = 0, weight = 1f))
+            addView(version, lp().apply { leftMargin = dp(18); rightMargin = dp(18); topMargin = dp(4); bottomMargin = dp(10) })
+        }
+        swap(settings, Screen.SETTINGS)
     }
+
+    @Suppress("DEPRECATION")
+    private fun installedVersionName(): String = packageManager.getPackageInfo(packageName, 0).versionName ?: "unknown"
 
     private fun setAlerts(on: Boolean, toggle: Switch) {
         if (!on) {
