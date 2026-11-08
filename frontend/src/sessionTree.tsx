@@ -29,7 +29,7 @@ export function SessionTree({ workspaces, openIds, selected, collapsed, activity
     return <div className="workspace-group" key={workspace.group.key}>
       {!collapsed && <GroupHeader workspace={workspace} controls={groupControls} variant="tree" />}
       {open && <div className={collapsed ? "" : "group-children"}>{workspace.sessions.map((session) => (
-        <div className={`session-item ${selected === session.id ? "active" : ""} ${dragId === session.id ? "dragging" : ""} ${dropClass(session.id)}`} key={session.id} {...dragProps(session.id)} style={sessionColorStyle(session.color)} data-colored="" onContextMenu={(event) => onMenu(event, session)}>
+        <div className={`session-item ${selected === session.id ? "active" : ""} ${dragId === session.id ? "dragging" : ""} ${dropClass(session.id)}`} key={session.id} {...dragProps(session.id)} style={sessionColorStyle(session.color)} data-colored={session.color ? "" : undefined} onContextMenu={(event) => onMenu(event, session)}>
           <button className={`session-row ${selected === session.id ? "active" : ""}`} title={session.name} onClick={() => onOpen(session)}>
             <StateIcon session={session} activity={activity[session.id]} />
             <span className="collapsed-only"><ProjectIcon session={session} /></span>

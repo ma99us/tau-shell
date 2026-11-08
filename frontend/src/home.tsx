@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { app, AppUpdate, CopilotQuota, InstallResult, Session, SkillsView, SystemStatus, ToolStatus } from "./bridge";
+import { app, AppUpdate, CodexQuota, CopilotQuota, InstallResult, Session, SkillsView, SystemStatus, ToolStatus } from "./bridge";
 import { UsageSummary, hasUsage, monthTooltip, usageText } from "./usage";
 import { GearIcon } from "./harnessIcons";
 import { getHarnesses, harnessIds, harnessShort, isHarness } from "./harnesses";
@@ -13,8 +13,8 @@ import { Workspace, ungrouped } from "./workspaces";
 import { groupedKey, readGrouped, writeStored } from "./storage";
 import { UpdateDialog } from "./updateDialog";
 import { GroupControls, GroupHeader } from "./workspaceView";
-
-export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAll, onAutoResumeAll, onAutoResume, status, busy, tools, skills, onNew, onRefresh, onHome, onLaunch, onDelete, onDuplicate, onError, dragProps, dropClass, dragId }: {
+import { HomePanel, HomePanelId, PanelFeedback, PanelFeedbackState } from "./homePanel";
+export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAll, onAutoResumeAll, onAutoResume, status, busy, tools, skills, onNew, onRefresh, onHome, onLaunch, onDelete, onDuplicate, onError, panelFeedback = {}, onDismissPanelFeedback, onPanelFeedback, dragProps, dropClass, dragId }: {
   workspaces: Workspace[];
   groupControls: GroupControls;
   skills: SkillsActions;
@@ -23,6 +23,9 @@ export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAl
   onAutoResume: (session: Session, enabled: boolean) => void;
   onDuplicate: (session: Session) => void;
   onError: (source: string, error: unknown) => void;
+  panelFeedback?: Partial<Record<HomePanelId, PanelFeedbackState>>;
+  onDismissPanelFeedback?: (panel: HomePanelId) => void;
+  onPanelFeedback?: (panel: HomePanelId, feedback?: PanelFeedbackState) => void;
   dragProps: (id: string) => object;
   dropClass: (id: string) => string;
   dragId: string;
@@ -82,6 +85,25 @@ export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAl
     const timer = window.setInterval(load, 300000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, []);
+  const [codexQuota, setCodexQuota] = useState<CodexQuota | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    let loading = false;
+    const load = () => {
+      if (loading) return;
+      loading = true;
+      void app().GetCodexQuota(false).then((value) => {
+        if (cancelled) return;
+        clearPollFailure(pollFailures.current, "codex-quota");
+        setCodexQuota(value ?? null);
+      }).catch((error) => {
+        if (!cancelled && shouldReportPollFailure(pollFailures.current, "codex-quota")) onError("ui.poll-codex-quota", error);
+      }).finally(() => { loading = false; });
+    };
+    load();
+    const timer = window.setInterval(load, 300000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, []);
   const [resumeProgress, setResumeProgress] = useState("");
   const [appVersion, setAppVersion] = useState("");
   const [appUpdate, setAppUpdate] = useState<AppUpdate | null>(null);
@@ -117,6 +139,7 @@ export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAl
       </div>
       <div className="section-title"><div><h2>Your sessions</h2></div>{!loaded && <span className="spinner" role="status" aria-label="Loading sessions" />}<label className="check-option" title="Group sessions by workspace, or list them all in one row of cards"><input type="checkbox" role="switch" checked={grouped} onChange={(event) => changeGrouped(event.target.checked)} />Group by workspace</label></div>
       {quota && !quota.unlimited && <p className={`home-usage home-quota${quota.canProject && quota.projected > quota.entitlement ? " warn" : ""}`} title={`${quota.account ? `Copilot account: ${quota.account}. ` : ""}Plan: ${quota.plan}. Read through your GitHub CLI sign-in. ${quota.daysLeft} days left in the cycle.`}>Copilot{quota.account ? ` (${quota.account})` : ""}: <b className="kv">{Math.round(quota.used)} / {Math.round(quota.entitlement)} credits ({Math.round(quota.percentUsed)}%)</b>, resets {quota.resetDate}{quota.canProject ? <>, on pace for <b className="kv">~{Math.round(quota.projected)}</b></> : ""}</p>}
+      {codexQuota && <p className="home-usage home-quota" title="Codex plan windows reported by the local Codex app-server. Separate from TauShell token and cost estimates.">Codex{codexQuota.plan ? ` (${codexQuota.plan})` : ""}: <b className="kv">{codexQuota.windows.map((window) => `${window.label}: ${Math.round(100 - window.usedPercent)}% remaining${window.resetAt ? `, resets ${new Date(window.resetAt).toLocaleString()}` : ""}`).join(" | ")}</b></p>}
       {summary && hasUsage(summary.month) && <p className="home-usage" title={monthTooltip(summary)}>This month: <b className="kv">{usageText(summary.month)}</b>{harnessIds().map((tool) => hasUsage(summary.monthByTool?.[tool]) ? <span key={tool}> | {harnessShort(tool)} <b className="kv">{usageText(summary.monthByTool![tool])}</b></span> : null)}</p>}
       {sessions.length === 0 ? (!loaded ? <div className="loading-card" role="status"><span className="spinner" aria-hidden="true" /><span className="muted">Loading sessions...</span></div> : <div className="empty-card"><div className="empty-icon">+</div><h3>No sessions yet</h3><p>Create a session to connect a project folder to an AI harness such as Claude Code or GitHub Copilot CLI.</p>      <button className="primary-button" onClick={onNew}>New session</button></div>) :
         <>{(grouped ? workspaces : [{ group: ungrouped, sessions }]).map((workspace) => <div className="home-group" key={workspace.group.key}>
@@ -134,19 +157,26 @@ export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAl
             <label className="check-option" title={autoResumeAll ? "All sessions auto-resume (global setting is on)" : "Resume this session when TauShell starts"}><input type="checkbox" checked={session.autoResume || autoResumeAll} disabled={autoResumeAll} onChange={(event) => onAutoResume(session, event.target.checked)} />Auto resume</label>
           </div>
         </article>)}</div>}</div>)}</>}
-      <div className="tools-panel"><div className="tools-header"><h2>Tools</h2><div className="refresh-group">{tools.refreshing && <span className="spinner" role="status" aria-label="Refreshing" />}<button className="secondary-button" disabled={tools.refreshing} title="Reload sessions, re-detect tools and check for tool updates" onClick={onRefresh}>Refresh</button></div></div><div className="tool-list">
+      <PanelFeedback feedback={panelFeedback.sessions} onDismiss={() => onDismissPanelFeedback?.("sessions")} />
+      <HomePanel title="Tools" actions={<div className="refresh-group">{tools.refreshing && <span className="spinner" role="status" aria-label="Refreshing" />}<button className="secondary-button" disabled={tools.refreshing} title="Reload sessions, re-detect tools and check for tool updates" onClick={onRefresh}>Refresh</button></div>}
+        feedback={toolNoticeFeedback(tools, "tools", panelFeedback.tools)} onDismissFeedback={() => dismissToolFeedback(tools, "tools", onDismissPanelFeedback)}
+        onFeedbackAction={() => openToolNoticeAction(tools, "tools")}>
+        <div className="tool-list">
         {status?.tools.filter((tool) => !isHarness(tool.id)).map((tool) => <ToolRow key={tool.id} tool={tool} actions={tools} />) ?? <div className="loading-card" role="status"><span className="spinner" aria-hidden="true" /><span className="muted">Detecting tools...</span></div>}
-      </div></div>
-      <div className="tools-panel"><div className="tools-header"><h2>AI Harnesses</h2></div><div className="tool-list">
+        </div>
+      </HomePanel>
+      <HomePanel title="AI Harnesses" feedback={toolNoticeFeedback(tools, "harnesses", panelFeedback.harnesses)} onDismissFeedback={() => dismissToolFeedback(tools, "harnesses", onDismissPanelFeedback)}
+        onFeedbackAction={() => openToolNoticeAction(tools, "harnesses")}>
+        <div className="tool-list">
         {status?.tools.filter((tool) => isHarness(tool.id))
           .sort((left, right) => getHarnesses().findIndex(({ id }) => id === left.id) - getHarnesses().findIndex(({ id }) => id === right.id))
           .map((tool) => <ToolRow key={tool.id} tool={tool} actions={tools} />) ?? <div className="loading-card" role="status"><span className="spinner" aria-hidden="true" /><span className="muted">Detecting harnesses...</span></div>}
-      </div><UserHarnesses onError={onError} /></div>
-      <SkillsPanel skills={skills} unsupportedNote={skills.view?.unsupported} />
-      {toolNoticeBanner(tools)}
-      <PhonePane onError={onError} />
-      <ControlAudit onError={onError} />
-      <SecretsPane onError={onError} />
+        </div><UserHarnesses onError={onError} onFeedback={(feedback) => onPanelFeedback?.("harnesses", feedback)} />
+      </HomePanel>
+      <SkillsPanel skills={skills} unsupportedNote={skills.view?.unsupported} feedback={panelFeedback.skills} onDismissFeedback={() => onDismissPanelFeedback?.("skills")} />
+      <PhonePane onError={onError} feedback={panelFeedback.phone} onFeedback={(feedback) => onPanelFeedback?.("phone", feedback)} onDismissFeedback={() => onDismissPanelFeedback?.("phone")} />
+      <ControlAudit onError={onError} feedback={panelFeedback.control} onFeedback={(feedback) => onPanelFeedback?.("control", feedback)} onDismissFeedback={() => onDismissPanelFeedback?.("control")} />
+      <SecretsPane onError={onError} feedback={panelFeedback.secrets} onFeedback={(feedback) => onPanelFeedback?.("secrets", feedback)} onDismissFeedback={() => onDismissPanelFeedback?.("secrets")} />
       <div className="home-footer">
         {appUpdate && <button className="link-button home-update" title="View the release and update TauShell" onClick={() => setUpdateOpen(true)}>{appUpdate.tag} available</button>}
         {rollbackVersion && <button className="link-button home-update" title="Restore the previous TauShell version and restart" onClick={() => void app().RollbackAppUpdate().catch((error) => onError("ui.rollback-update", error))}>Roll back to v{rollbackVersion}</button>}
@@ -174,19 +204,26 @@ export type SkillsActions = {
 
 const toolLabel = harnessShort;
 
-function SkillsPanel({ skills, unsupportedNote }: { skills: SkillsActions; unsupportedNote?: string[] }) {
+function SkillsPanel({ skills, unsupportedNote, feedback, onDismissFeedback }: {
+  skills: SkillsActions;
+  unsupportedNote?: string[];
+  feedback?: PanelFeedbackState;
+  onDismissFeedback?: () => void;
+}) {
   const view = skills.view;
   if (view && !view.status.enabled && !view.status.message) return null;
   const status = view?.status;
   const origin = status?.enabled ? (status.source === "cookbook" ? `ai-cookbook @${status.applied}` : `bundled @${status.applied || "snapshot"}`) : "";
-  return <div className="tools-panel skills-panel">
-    <div className="tools-header">
-      <div><h2>Skills</h2><p className="muted">{!view ? "Loading skills..." : status?.enabled ? `${origin}. Applies to new or resumed sessions.` : "Skills are unavailable."}</p></div>
-      <div className="refresh-group">
+  const warnings = [...(status?.warnings ?? []), ...(unsupportedNote?.length ? [`Skills are not supported by the installed ${unsupportedNote.map(toolLabel).join(", ")} version.`] : [])];
+  const localFeedback = skills.updating || skills.saving || !view
+    ? { tone: "progress" as const, message: skills.saving ? "Saving skill preferences..." : "Updating skills..." }
+    : warnings.length ? { tone: "warning" as const, message: warnings.join(" ") }
+      : status?.message ? { tone: status.enabled ? "success" as const : "warning" as const, message: status.message } : undefined;
+  return <HomePanel className="skills-panel" title="Skills" description={!view ? "Loading skills..." : status?.enabled ? `${origin}. Applies to new or resumed sessions.` : "Skills are unavailable."}
+    actions={<div className="refresh-group">
         {(skills.updating || skills.saving || !view) && <span className="spinner" role="status" aria-label={skills.saving ? "Saving skill preferences" : "Updating skills"} />}
         {status?.updateAvailable && <button className="secondary-button" disabled={skills.updating || skills.refreshing || skills.saving} title={`Download and use ai-cookbook commit ${status.latest}`} onClick={skills.onUpdate}>Update skills ({status.latest})</button>}
-      </div>
-    </div>
+      </div>} feedback={feedback ?? localFeedback} onDismissFeedback={feedback ? onDismissFeedback : undefined}>
     <div className="skill-list">
       {view?.skills.map((skill) => <label className="skill-row" key={skill.name} title={skill.description}>
         <input type="checkbox" checked={skill.enabled} disabled={skills.saving} onChange={(event) => skills.onToggle(skill.name, event.target.checked)} />
@@ -194,23 +231,21 @@ function SkillsPanel({ skills, unsupportedNote }: { skills: SkillsActions; unsup
         <span className="skill-source">{skill.personal?.length ? `${skill.personal.map(toolLabel).join(", ")}: your copy is used` : skill.source}</span>
       </label>)}
     </div>
-    {status?.message && <p className={status.enabled ? "muted skill-note" : "skill-note skill-warn"}>{status.message}</p>}
-    {unsupportedNote?.length ? <p className="skill-note skill-warn">Skills are not supported by the installed {unsupportedNote.map(toolLabel).join(", ")} version.</p> : null}
-    {status?.warnings?.map((warning) => <p className="skill-note skill-warn" key={warning}>{warning}</p>)}
-  </div>;
+  </HomePanel>;
 }
 
 type ToolActions = {
   status: SystemStatus | null;
   installing: string;
   notice: InstallResult | null;
+  noticeToolId?: string;
   updates: Record<string, string>;
   refreshing: boolean;
   onUpdate: (tool: ToolStatus) => void;
   onInstall: (tool: ToolStatus) => void;
   onOpenSetup: (tool: ToolStatus) => void;
   onDismissNotice: () => void;
-  onError: (error: unknown) => void;
+  onError: (tool: ToolStatus, error: unknown) => void;
 };
 
 export function toolUsable(tool: ToolStatus): boolean {
@@ -218,29 +253,50 @@ export function toolUsable(tool: ToolStatus): boolean {
     (tool.capabilities ?? []).every((capability) => capability.available || capability.optional);
 }
 
-function toolNoticeBanner(tools: ToolActions) {
-  if (!tools.notice) return null;
-  const tone = tools.notice.outcome === "installed" ? "notice-success" : tools.notice.outcome === "failed" ? "notice-error" : "notice-info";
-  // Open through the Go binding; a target=_blank link would spawn an unguarded WebView2 popup.
+function toolNoticeFeedback(tools: ToolActions, panel: "tools" | "harnesses", fallback?: PanelFeedbackState): PanelFeedbackState | undefined {
+  const activeTool = tools.status?.tools.find((tool) => tool.id === tools.installing);
+  if (activeTool && (isHarness(activeTool.id) ? "harnesses" : "tools") === panel) {
+    return { tone: "progress", message: `Installing or updating ${activeTool.name}...` };
+  }
+  if (!tools.notice) return fallback;
+  const target = tools.noticeToolId && isHarness(tools.noticeToolId) ? "harnesses" : "tools";
+  if (target !== panel) return fallback;
+  const tone = tools.notice.outcome === "installed" ? "success" : tools.notice.outcome === "failed" ? "error" : "warning";
   const vendorTool = tools.notice.vendorUrl ? tools.status?.tools.find((tool) => tool.install.vendorUrl === tools.notice?.vendorUrl) : undefined;
-  return <div className={`tool-notice ${tone}`}>
-    <span>{tools.notice.message}</span>
-    {vendorTool && <button className="link-button" onClick={() => tools.onOpenSetup(vendorTool)}>Open vendor setup page</button>}
-    <button className="icon-button" onClick={tools.onDismissNotice}>x</button>
-  </div>;
+  return {
+    tone,
+    message: tools.notice.message,
+    ...(vendorTool ? { actionLabel: "Open vendor setup page", actionToolId: vendorTool.id } : {}),
+  };
 }
 
-export function Setup({ powershell, actions, onRecheck, onContinue }: {
+function dismissToolFeedback(tools: ToolActions, panel: "tools" | "harnesses", dismiss?: (panel: HomePanelId) => void) {
+  const target = tools.noticeToolId && isHarness(tools.noticeToolId) ? "harnesses" : "tools";
+  if (tools.notice && target === panel) tools.onDismissNotice();
+  else dismiss?.(panel);
+}
+
+function openToolNoticeAction(tools: ToolActions, panel: "tools" | "harnesses") {
+  const feedback = toolNoticeFeedback(tools, panel);
+  const tool = feedback?.actionToolId ? tools.status?.tools.find((item) => item.id === feedback.actionToolId) : undefined;
+  if (tool) tools.onOpenSetup(tool);
+}
+
+export function Setup({ powershell, actions, onRecheck, onContinue, feedback, onDismissFeedback }: {
   powershell: ToolStatus;
   actions: ToolActions;
   onRecheck: () => void;
   onContinue: () => void;
+  feedback?: PanelFeedbackState;
+  onDismissFeedback?: () => void;
 }) {
   return <div className="home setup-screen">
     <div className="hero"><div><p className="eyebrow">FIRST-RUN SETUP</p><h1>PowerShell 7 is required.</h1>
       <p className="muted">TauShell hosts every session through PowerShell 7. Install it, then re-check to continue.</p></div></div>
-    <div className="tools-panel"><div className="tool-list"><ToolRow tool={powershell} actions={actions} /></div></div>
-    {toolNoticeBanner(actions)}
+    <HomePanel feedback={toolNoticeFeedback(actions, "tools", feedback)} onDismissFeedback={() => dismissToolFeedback(actions, "tools", onDismissFeedback ? () => onDismissFeedback() : undefined)}
+      onFeedbackAction={() => openToolNoticeAction(actions, "tools")}>
+      <div className="tool-list"><ToolRow tool={powershell} actions={actions} /></div>
+    </HomePanel>
     <div className="modal-actions"><button className="secondary-button" onClick={onRecheck}>Re-check</button>
       <button className="text-button" onClick={onContinue}>Continue without PowerShell 7</button></div>
   </div>;
@@ -302,6 +358,6 @@ function ToolRow({ tool, actions }: { tool: ToolStatus; actions: ToolActions }) 
     {needsInstall && <button className="text-button" onClick={() => actions.onOpenSetup(tool)}>Vendor page</button>}
       </div>}
     </div>
-    {isHarness(tool.id) && <button className="sidebar-toggle tool-gear" aria-label={`Open ${tool.name} config file`} title={`Open ${tool.name} config file in your default editor`} onClick={() => void app().OpenToolConfig(tool.id).catch((err) => actions.onError(err))}><GearIcon /></button>}
+    {isHarness(tool.id) && <button className="sidebar-toggle tool-gear" aria-label={`Open ${tool.name} config file`} title={`Open ${tool.name} config file in your default editor`} onClick={() => void app().OpenToolConfig(tool.id).catch((err) => actions.onError(tool, err))}><GearIcon /></button>}
   </div>;
 }

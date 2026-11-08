@@ -22,6 +22,10 @@ Harness-specific parsing is in `frontend/src/attention.ts`.
   1.0.105. `combineSignal` merges the two.
 - **GSD and Codex:** working/idle are read from their own session logs
   (`gsd-jsonl` and `codex-rollout`), rather than inferred from terminal output.
+  Codex recognizes both legacy `task_started`/`task_complete` and newer
+  `turn_started`/`turn_complete` rollout events. Reasoning deltas and active
+  tool/command items also keep the session marked working when lifecycle
+  events are delayed.
 - **Tools without a cue or activity reader:** recent terminal output is the
   fallback. This currently includes OpenCode. Output within 400 ms after a
   keystroke is treated as echo; output within the last 2.5 seconds indicates

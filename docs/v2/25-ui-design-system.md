@@ -22,8 +22,8 @@ Rules for changes:
 - Per-session colors are the one runtime theme input. A session tag sets
   `--session-color` inline (`sessionColorStyle`), and the CSS mixes it with
   `color-mix()` against `--bg-panel` using the shares published as
-  `--session-tint-*`. An untagged session uses `--accent` the same way, so
-  every session gets the same highlight. Text on a tinted surface is chosen per state by contrast
+  `--session-tint-*`. Untagged sessions retain the neutral session surface;
+  their active tab and sidebar row use the high-contrast accent outline. Text on a tinted surface is chosen per state by contrast
   (`sessionColor.ts`, WCAG 4.5:1 with a pure black/white fallback); the project
   icon text uses the same rule.
 - TauShell-owned UI text is ASCII (`~$`, `k`, `M`, `x`, `|`). Provider output
@@ -126,7 +126,7 @@ never for body text or inside buttons.
   ramp; an active session row shows an outline in its readable text color.
 - **Tabs:** persistent session tabs next to a fixed Home tab; the strip
   scrolls with hidden scrollbars and arrow buttons. Active tab uses the green
-  ramp. Every session (untagged ones in the accent green) colors its tab, sidebar row, top bar (tint plus a 3px
+  ramp. A tagged session colors its tab, sidebar row, top bar (tint plus a 3px
   bottom border) and the terminal's left edge so a prompt is not typed into the
   wrong session; the active tab/row gets an outline and a bold label. A running
   session's tab closes only after a confirmation that interrupts it.
@@ -158,8 +158,13 @@ never for body text or inside buttons.
   warning hue is adjusted per color (`warnOn`) to keep 4.5:1 on the tinted bar.
   Status text and the harness widgets (Commands,
   Prompts, Model, Resume) sit on the right.
-- **Notices:** the pending-command banner belongs to its session panel and is
-  not shown on other tabs.
+- **Home panel feedback:** Home panels share `HomePanel` and `PanelFeedback`.
+  Progress, success, warning, and error messages render in the footer of the
+  panel that owns the action. Tool install/update results route to Tools or AI
+  Harnesses; refresh, skills, phone, control-channel, secrets, and session
+  feedback stay with their own panels. Do not add a floating Home result banner.
+- **Session notices:** pending-command and other terminal notices remain scoped
+  to their session panel and are not shown on other tabs.
 - **Modals and palette:** centered over `--scrim`; eyebrow, then `h2`;
   actions right-aligned; Escape closes. The command palette (`Ctrl+K`) is a
   grouped, keyboard-navigable list.

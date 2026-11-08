@@ -65,14 +65,31 @@ Go extension (Delve) is required.
   frontend failure or panic, and the version matches. It would have caught the
   release whose `GetRollbackVersion` bridge method was missing. WebView2 remote
   debugging (CDP) was tried first but does not open a port under Wails. Releases
-  run the same test on the packaged ZIP before publishing. Unit tests for the
-  script: `node --test e2e/smoke.test.mjs`. Requires Node 22+.
+  run the same test on the packaged ZIP before publishing. Add `-Lifecycle` to
+  build a trusted disposable terminal fixture and exercise two launches: the
+  first starts/stops a resumable session, then the second verifies auto-restore,
+  one close confirmation, completed shutdown, and process exit. The fixture
+  uses no AI provider or real user profile. CI and release smoke runs enable
+  this lifecycle mode. Unit tests for the script: `node --test e2e/smoke.test.mjs`.
+  Requires Node 22+.
 - Releases: push a SemVer tag (`git tag v1.0.0 && git push origin v1.0.0`).
   `.github/workflows/release.yml` tests, builds
   `TauShell-<version>-windows-x64.zip` with `scripts/build-release.ps1`, writes
   `SHA256SUMS.txt`, attests build provenance and publishes a GitHub
   **pre-release**. Running the workflow manually with a version builds a
   **draft** instead (dry run; delete the draft afterwards).
+- After a tag release is published and CI succeeds, update the maintainer's
+  local installation under `C:\Tools\TauShell\*` to that exact release. Download
+  the published ZIP and `SHA256SUMS.txt`, verify the ZIP digest before staging
+  it, and verify the installed app version afterward. Do not overwrite or stop
+  TauShell while it has running sessions; wait for a confirmed shutdown first.
+  The release also publishes `TauShell-Phone-<version>.apk`. If `adb devices`
+  reports a connected device in `device` state, try `adb install -r` with that
+  APK and verify the installed version. If the device is absent or Android
+  rejects an in-place update (for example, due to a signing mismatch), leave
+  the existing app and its data untouched and report the update as pending.
+  These are post-publication deployment steps for the release task; GitHub's
+  hosted workflow does not update a developer's local PC or connected phone.
 - Before building, release and CI workflows set both frontend package manifests
   to the build version. After a successful tag release, the release workflow
   checks out the latest default branch separately and pushes a version-only

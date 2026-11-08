@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
 import { app } from "./bridge";
 import { setHarnesses, type HarnessInfo, type HarnessLoadError } from "./harnesses";
+import type { PanelFeedbackState } from "./homePanel";
 
 // Lists harnesses defined in ~/.tau_shell/harnesses and manifests that failed
 // to load. A user manifest cannot launch until the user confirms its exact
 // content here; editing the file asks again.
-export function UserHarnesses({ onError }: { onError: (source: string, error: unknown) => void }) {
+export function UserHarnesses({ onError, onFeedback }: {
+  onError: (source: string, error: unknown) => void;
+  onFeedback?: (feedback?: PanelFeedbackState) => void;
+}) {
   const [users, setUsers] = useState<HarnessInfo[]>([]);
   const [errors, setErrors] = useState<HarnessLoadError[]>([]);
   const load = () => app().GetHarnesses().then((catalog) => {
@@ -13,6 +17,16 @@ export function UserHarnesses({ onError }: { onError: (source: string, error: un
     setUsers((catalog.harnesses ?? []).filter((item) => !item.builtin));
     setErrors(catalog.errors ?? []);
   }).catch((error) => onError("ui.get-harnesses", error));
+  const confirm = async (item: HarnessInfo) => {
+    onFeedback?.({ tone: "progress", message: `Confirming ${item.name}...` });
+    try {
+      await app().ConfirmHarness(item.id);
+      await load();
+      onFeedback?.({ tone: "success", message: `${item.name} confirmed.` });
+    } catch (error) {
+      onError("ui.confirm-harness", error);
+    }
+  };
   useEffect(() => { void load(); }, []);
   if (users.length === 0 && errors.length === 0) return null;
   return <div className="tool-list user-harnesses">
@@ -25,7 +39,7 @@ export function UserHarnesses({ onError }: { onError: (source: string, error: un
         {!item.resumeVerified && <span className="tool-warning tool-support-note">resume cannot be verified for this harness</span>}
         {!item.trusted && <div className="tool-actions">
           <span className="tool-warning tool-support-note">Not confirmed: it cannot start sessions until you confirm it.</span>
-          <button className="secondary-button tool-action" title={`Allow TauShell to launch ${item.executable} using this manifest`} onClick={() => void app().ConfirmHarness(item.id).then(load).catch((error) => onError("ui.confirm-harness", error))}>Confirm</button>
+          <button className="secondary-button tool-action" title={`Allow TauShell to launch ${item.executable} using this manifest`} onClick={() => void confirm(item)}>Confirm</button>
         </div>}
       </div>
     </div>)}

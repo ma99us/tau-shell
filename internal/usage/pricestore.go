@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// PriceRefreshInterval is how often prices are re-read from the web.
+// PriceRefreshInterval is how often model prices are re-read from the web.
 const PriceRefreshInterval = 24 * time.Hour
 
 // PriceInfo says where the prices in use came from.
@@ -18,8 +18,8 @@ type PriceInfo struct {
 	Overrides bool   `json:"overrides"`
 }
 
-// PriceStore resolves the effective Claude price table: config overrides win,
-// then the fetched cache, then the built-in defaults.
+// PriceStore resolves the effective price table: config overrides win, then
+// fetched prices, then the built-in defaults.
 type PriceStore struct {
 	path    string
 	fetcher Fetcher

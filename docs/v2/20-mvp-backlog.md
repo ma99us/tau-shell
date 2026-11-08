@@ -20,6 +20,15 @@
 
 ### Open Phase 1 backlog
 
+- **Codex quota widget (implemented, live verification pending):** reads supplied
+  windows through the local app-server's read-only `account/rateLimits/read`
+  method. OpenAI's organization usage/cost API is not used. Verify auth and
+  returned windows against a supported installation before claiming compatibility.
+- **Codex toolbar follow-up (partial):** the native `/model` picker, custom model
+  IDs, curated suggestions, `/status`, and `/compact` are available. Verify model
+  suggestions and investigate an account-aware catalog; add commands only after
+  their effects are confirmed. `/new` remains hidden until a distinct conversation
+  is proven. See the [Codex usage and toolbar handoff](27-codex-quota-handoff.md).
 - **Feasibility gate:** a checked-in deterministic fixture has verified
   Unicode/emoji, ANSI colors, cursor movement/erase, cursor-position query
   replies, split UTF-8 output, typed input, explicit exit, and live resize
@@ -177,6 +186,8 @@ stored. It is hidden silently when `gh` is missing, signed out, or the plan has 
 quota. Opt out with `quota: { copilot: false }` in `~/.tau_shell/config.yaml`.
 Risks: the endpoint is undocumented and may change, and usage-based billing may
 replace quotas. Verified in the real window with live numbers.
+Codex plan quota and toolbar improvements are separate planned items; see the
+[Codex usage and toolbar handoff](27-codex-quota-handoff.md).
 
 ## Later phases
 

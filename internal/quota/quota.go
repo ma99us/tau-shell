@@ -1,6 +1,5 @@
-// Package quota reads the signed-in user's Copilot premium-request quota
-// through the GitHub CLI. The endpoint (/copilot_internal/user) is undocumented
-// and may change, so every failure is reported as "unavailable" rather than
+// Package quota reads locally available harness quota snapshots. Every source
+// is optional: unavailable or malformed responses are hidden rather than
 // guessed at.
 package quota
 
@@ -19,6 +18,10 @@ type Runner func(ctx context.Context) ([]byte, error)
 // ErrUnavailable means the quota could not be read (no gh, not signed in,
 // no Copilot plan, or an unexpected response).
 var ErrUnavailable = errors.New("copilot quota unavailable")
+
+// ErrCodexUnavailable means Codex did not expose a usable read-only rate-limit
+// snapshot through its local app-server protocol.
+var ErrCodexUnavailable = errors.New("codex quota unavailable")
 
 type Snapshot struct {
 	Account     string  `json:"account"`

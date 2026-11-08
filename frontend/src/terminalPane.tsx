@@ -340,7 +340,7 @@ export function TerminalPane({ session, visible, busy, harness, onSend, onNotice
     };
   }, [visible, session?.id, session?.runningHere]);
   if (!session) return <div className="terminal-missing">Session configuration is unavailable.</div>;
-  return <div className="terminal-view" style={sessionColorStyle(session.color)} data-colored="">
+  return <div className="terminal-view" style={sessionColorStyle(session.color)} data-colored={session.color ? "" : undefined}>
     <div className="terminal-toolbar">
       <span className={`status-dot ${session.runningHere ? "online" : ""}`} />{session.tool}{harness && onSend && <InterruptButton interrupt={onInterrupt} />}
       <Sep /><span className="toolbar-path-group"><span className="toolbar-path">{session.workingDir}</span><button className="text-button icon-button path-reveal" title="Open the project folder in File Explorer" aria-label="Open the project folder in File Explorer" onClick={() => app().RevealProjectRoot(session.id).catch(onError)}><Icon name="reveal" size={14} /></button></span>

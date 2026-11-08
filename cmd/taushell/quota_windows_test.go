@@ -38,3 +38,31 @@ func TestGetCopilotQuotaCachesAndHonorsOptOut(t *testing.T) {
 		t.Fatalf("disabled quota = %+v, calls = %d", got, calls)
 	}
 }
+
+func TestGetCodexQuotaCachesAndHonorsOptOut(t *testing.T) {
+	configDir := filepath.Join(t.TempDir(), "sessions")
+	calls := 0
+	application := &App{configDirectory: configDir, codexQuotaRunner: func(context.Context) ([]byte, error) {
+		calls++
+		return []byte(`{"rateLimitsByLimitId":{"codex":{"primary":{"usedPercent":25,"windowDurationMins":300}}}}`), nil
+	}}
+
+	if got := application.GetCodexQuota(false); got == nil || len(got.Windows) != 1 || got.Windows[0].UsedPercent != 25 {
+		t.Fatalf("quota = %+v", got)
+	}
+	application.GetCodexQuota(false)
+	if calls != 1 {
+		t.Fatalf("calls = %d, want cached single call", calls)
+	}
+	application.GetCodexQuota(true)
+	if calls != 2 {
+		t.Fatalf("calls = %d, want refresh to refetch", calls)
+	}
+
+	if err := os.WriteFile(application.settingsPath(), []byte("version: 1\nquota:\n  codex: false\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := application.GetCodexQuota(true); got != nil || calls != 2 {
+		t.Fatalf("disabled quota = %+v, calls = %d", got, calls)
+	}
+}

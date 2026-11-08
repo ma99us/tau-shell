@@ -190,12 +190,18 @@ textarea:focus-visible,
   background: var(--bg-hover);
 }
 
-.nav-row.active,
-.session-row.active {
+.nav-row.active {
   border-color: var(--accent-border-1);
   background: var(--accent-bg-2);
   color: var(--accent-text-1);
   box-shadow: inset 0 0 0 1px var(--accent-border-1);
+}
+
+.session-row.active {
+  border-color: var(--accent-text-1);
+  background: var(--accent-bg-2);
+  color: var(--accent-text-1);
+  box-shadow: inset 0 0 0 1px var(--accent-text-1), 0 0 0 1px var(--accent-text-1);
 }
 
 .session-row-text {
@@ -462,11 +468,17 @@ textarea:focus-visible,
   color: var(--text-2);
 }
 
-.tab.active,
-.tab-item.active {
+.tab.active {
   border-color: var(--accent-border-1);
   background: var(--accent-bg-2);
   color: var(--accent-text-1);
+}
+
+.tab-item.active {
+  border-color: var(--accent-text-1);
+  background: var(--accent-bg-2);
+  color: var(--accent-text-1);
+  box-shadow: inset 0 0 0 1px var(--accent-text-1), inset 0 -3px 0 var(--accent-text-1);
 }
 
 .tab-item {
@@ -1142,22 +1154,24 @@ h3 {
   font-size: var(--fs-11);
 }
 
-.tool-notice {
+.panel-feedback {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  align-items: flex-start;
+  gap: 9px;
   margin-top: 12px;
-  padding: 9px 12px;
+  padding: 9px 10px;
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-7);
   font-size: var(--fs-11);
 }
 
-.tool-notice span {
+.panel-feedback-message {
   flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
-.tool-notice a,
-.tool-notice .link-button {
+.panel-feedback .link-button {
   color: inherit;
   text-decoration: underline;
   white-space: nowrap;
@@ -1168,20 +1182,25 @@ h3 {
   cursor: pointer;
 }
 
-.tool-notice.notice-success {
+.panel-feedback.success {
   border: 1px solid var(--accent-border-3);
   background: var(--accent-bg-4);
   color: var(--accent-text-4);
 }
 
-.tool-notice.notice-error {
+.panel-feedback.error {
   border: 1px solid var(--danger-border-1);
   background: var(--danger-bg-2);
   color: var(--danger-text-4);
 }
 
-.tool-notice.notice-info {
-  border: 1px solid var(--border-strong);
+.panel-feedback.warning {
+  border-color: color-mix(in srgb, var(--status-warn) 45%, var(--border));
+  background: color-mix(in srgb, var(--status-warn) 10%, var(--bg-panel));
+  color: var(--status-warn);
+}
+
+.panel-feedback.progress {
   background: var(--bg-panel);
   color: var(--text-5);
 }

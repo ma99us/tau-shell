@@ -132,7 +132,7 @@ jobs:
         shell: pwsh
         run: |
           $bare = $env:VERSION.TrimStart('v')
-          ./scripts/smoke-test.ps1 -Zip "dist/TauShell-$bare-windows-x64.zip" -Version $bare
+          ./scripts/smoke-test.ps1 -Zip "dist/TauShell-$bare-windows-x64.zip" -Version $bare -Lifecycle
           if ($LASTEXITCODE -ne 0) { throw 'smoke test failed' }
 
       - name: Build the Android APK

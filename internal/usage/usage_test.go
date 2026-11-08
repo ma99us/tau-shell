@@ -76,7 +76,9 @@ func TestParseLiteLLMPrices(t *testing.T) {
 		"claude-sonnet-5": {"litellm_provider":"anthropic","input_cost_per_token":2e-6,"output_cost_per_token":1e-5},
 		"claude-haiku-4-5": {"litellm_provider":"anthropic","input_cost_per_token":1e-6,"output_cost_per_token":5e-6},
 		"bedrock/claude-opus-4": {"litellm_provider":"bedrock","input_cost_per_token":9e-6,"output_cost_per_token":9e-5},
-		"gpt-5": {"litellm_provider":"openai","input_cost_per_token":1e-6,"output_cost_per_token":8e-6}
+		"gpt-5": {"litellm_provider":"openai","input_cost_per_token":1e-6,"output_cost_per_token":8e-6},
+		"gpt-5-2025-08-07": {"litellm_provider":"openai","input_cost_per_token":2e-6,"output_cost_per_token":9e-6,"cache_read_input_token_cost":2e-7},
+		"o3-mini": {"litellm_provider":"openai","input_cost_per_token":1.1e-6,"output_cost_per_token":4.4e-6}
 	}`
 	table, err := ParseLiteLLMPrices(strings.NewReader(data))
 	if err != nil {
@@ -88,15 +90,25 @@ func TestParseLiteLLMPrices(t *testing.T) {
 	if got := table["sonnet-5"]; got.CacheWrite5m != 2.5 || got.CacheWrite1h != 4 {
 		t.Errorf("derived sonnet-5 cache prices = %+v", got)
 	}
+	if got := table["gpt-5"].Input; got != 1 {
+		t.Errorf("OpenAI input price = %v, want $1/MTok", got)
+	}
+	if got := table["o3-mini"].Output; got != 4.4 {
+		t.Errorf("OpenAI output price = %v, want $4.4/MTok", got)
+	}
+	if got, ok := (PriceTable{"gpt-5": table["gpt-5"]}).Lookup("gpt-5-2025-08-07"); !ok || got != table["gpt-5"] {
+		t.Errorf("dated OpenAI model lookup = %+v, %v", got, ok)
+	}
 	if _, ok := table["opus-4"]; ok {
-		t.Error("non-Anthropic entry was accepted")
+		t.Error("unsupported provider entry was accepted")
 	}
 }
 
 func TestFetchFallsBackToLiteLLMAndKeepsCache(t *testing.T) {
 	litellm := `{"claude-opus-5-5":{"litellm_provider":"anthropic","input_cost_per_token":4e-6,"output_cost_per_token":2e-5},
 		"claude-sonnet-5":{"litellm_provider":"anthropic","input_cost_per_token":2e-6,"output_cost_per_token":1e-5},
-		"claude-haiku-4-5":{"litellm_provider":"anthropic","input_cost_per_token":1e-6,"output_cost_per_token":5e-6}}`
+		"claude-haiku-4-5":{"litellm_provider":"anthropic","input_cost_per_token":1e-6,"output_cost_per_token":5e-6},
+		"gpt-5.5-2026-04-23":{"litellm_provider":"openai","input_cost_per_token":5e-6,"output_cost_per_token":3e-5,"cache_read_input_token_cost":5e-7}}`
 	broken := true
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -126,6 +138,10 @@ func TestFetchFallsBackToLiteLLMAndKeepsCache(t *testing.T) {
 	if _, info := store.Table(nil, time.Now()); info.Source != SourceLiteLLM {
 		t.Fatalf("source = %q, want litellm fallback", info.Source)
 	}
+	fetchedTable, _ := store.Table(nil, time.Now())
+	if got, ok := fetchedTable.Lookup("gpt-5.5-2026-04-23"); !ok || got.Input != 5 || got.Output != 30 || got.CacheRead != 0.5 {
+		t.Fatalf("fetched OpenAI snapshot price = %+v, %v", got, ok)
+	}
 	if store.NeedsRefresh(time.Now()) {
 		t.Error("fresh cache should not need a refresh")
 	}
@@ -138,7 +154,7 @@ func TestFetchFallsBackToLiteLLMAndKeepsCache(t *testing.T) {
 		t.Fatal(err)
 	}
 	table, info := store.Table(PriceTable{"opus-5.5": {Input: 1, CacheWrite5m: 1, CacheWrite1h: 1, CacheRead: 1, Output: 1}}, time.Now())
-	if info.Source != SourceAnthropic || !info.Overrides {
+	if info.Source != SourceCombined || !info.Overrides {
 		t.Errorf("info = %+v", info)
 	}
 	if table["opus-5.5"].Input != 1 {
@@ -152,7 +168,7 @@ func TestFetchFallsBackToLiteLLMAndKeepsCache(t *testing.T) {
 	if err := store.Refresh(context.Background()); err == nil {
 		t.Error("refresh against a dead server should fail")
 	}
-	if _, info := store.Table(nil, time.Now()); info.Source != SourceAnthropic {
+	if _, info := store.Table(nil, time.Now()); info.Source != SourceCombined {
 		t.Error("a failed refresh must keep the last good cache")
 	}
 	if reopened := NewPriceStore(cachePath, fetcher); reopened.NeedsRefresh(time.Now()) {

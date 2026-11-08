@@ -433,6 +433,39 @@ func TestManagerStopAllCanRetryAfterContextTimeout(t *testing.T) {
 	}
 }
 
+func TestStopAllReturnsWhenSessionStopLockIsHeldPastDeadline(t *testing.T) {
+	manager, factory, _ := newLifecycleTestManager(t, "locked-stop")
+	if _, err := manager.Start(context.Background(), "locked-stop", false, 80, 24); err != nil {
+		t.Fatal(err)
+	}
+	process := factory.process("locked-stop")
+	process.setIgnoreInterrupt(true)
+	current := manager.sessions["locked-stop"]
+	current.stopMu.Lock()
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(current.stopMu.Unlock) }
+	t.Cleanup(release)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	result := make(chan error, 1)
+	go func() { result <- manager.StopAll(ctx) }()
+	select {
+	case err := <-result:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			release()
+			t.Fatalf("StopAll error = %v, want context deadline exceeded", err)
+		}
+	case <-time.After(time.Second):
+		release()
+		err := <-result
+		process.setIgnoreInterrupt(false)
+		t.Fatalf("StopAll did not honor its context while waiting for a session stop lock: %v", err)
+	}
+	release()
+	process.exit(0)
+}
+
 func TestManagerRecordsHarnessProcessExit(t *testing.T) {
 	manager, factory, _ := newLifecycleTestManager(t, "exited")
 	if _, err := manager.Start(context.Background(), "exited", false, 80, 24); err != nil {

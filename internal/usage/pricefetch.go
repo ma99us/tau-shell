@@ -25,6 +25,7 @@ const (
 
 	SourceAnthropic = "anthropic"
 	SourceLiteLLM   = "litellm"
+	SourceCombined  = "anthropic+litellm"
 
 	anthropicMaxBytes = 2 << 20
 	litellmMaxBytes   = 8 << 20
@@ -50,7 +51,7 @@ var (
 	pricedCell    = regexp.MustCompile(`\$\s*([0-9][0-9,]*(?:\.[0-9]+)?)`)
 	tableModel    = regexp.MustCompile(`^Claude\s+(Opus|Sonnet|Haiku|Fable|Mythos)\s+(\d+(?:\.\d+)?)`)
 	superscript   = regexp.MustCompile(`(?i)<sup>.*?</sup>`)
-	errNoPricing  = errors.New("no usable Claude prices found")
+	errNoPricing  = errors.New("no usable model prices found")
 	requiredTiers = []string{"opus", "sonnet"}
 )
 
@@ -104,8 +105,9 @@ func ParseAnthropicPricing(markdown string) (PriceTable, error) {
 	return validatePrices(table)
 }
 
-// ParseLiteLLMPrices reads Anthropic models from LiteLLM's community price
-// list. LiteLLM prices are per token; this converts them to USD per MTok.
+// ParseLiteLLMPrices reads Anthropic and OpenAI models from LiteLLM's
+// community price list. LiteLLM prices are per token; this converts them to
+// USD per MTok.
 func ParseLiteLLMPrices(source io.Reader) (PriceTable, error) {
 	var entries map[string]struct {
 		Provider  string  `json:"litellm_provider"`
@@ -126,47 +128,73 @@ func ParseLiteLLMPrices(source io.Reader) (PriceTable, error) {
 	table := PriceTable{}
 	for _, name := range keys {
 		entry := entries[name]
-		if entry.Provider != "anthropic" || !strings.HasPrefix(name, "claude-") || strings.Contains(name, "/") {
+		if strings.Contains(name, "/") {
 			continue
 		}
-		key, ok := NormalizeModel(name)
-		if !ok || entry.Input <= 0 || entry.Output <= 0 {
+		var key string
+		switch entry.Provider {
+		case "anthropic":
+			if !strings.HasPrefix(name, "claude-") {
+				continue
+			}
+			var ok bool
+			key, ok = NormalizeModel(name)
+			if !ok {
+				continue
+			}
+		case "openai":
+			key = openAISnapshotSuffix.ReplaceAllString(strings.ToLower(name), "")
+		default:
 			continue
 		}
-		if _, exists := table[key]; exists {
+		if key == "" || entry.Input <= 0 || entry.Output <= 0 {
+			continue
+		}
+		if _, exists := table[key]; exists && openAISnapshotSuffix.MatchString(name) {
+			// Prefer the unversioned alias over its dated snapshots.
 			continue
 		}
 		perMTok := func(perToken float64) float64 { return math.Round(perToken*1e12) / 1e6 }
 		price := Price{Input: perMTok(entry.Input), Output: perMTok(entry.Output), CacheWrite5m: perMTok(entry.Write5m), CacheWrite1h: perMTok(entry.Write1h), CacheRead: perMTok(entry.CacheRead)}
-		if price.CacheWrite5m == 0 {
+		if entry.Provider == "anthropic" && price.CacheWrite5m == 0 {
 			price.CacheWrite5m = price.Input * 1.25
 		}
-		if price.CacheWrite1h == 0 {
+		if entry.Provider == "anthropic" && price.CacheWrite1h == 0 {
 			price.CacheWrite1h = price.Input * 2
 		}
-		if price.CacheRead == 0 {
+		if entry.Provider == "anthropic" && price.CacheRead == 0 {
 			price.CacheRead = price.Input * 0.1
 		}
 		table[key] = price
 	}
-	return validatePrices(table)
+	return validateModelPrices(table)
 }
 
-// validatePrices drops implausible entries so a mis-parse can never replace
-// good prices, and fails when too little survives.
-func validatePrices(table PriceTable) (PriceTable, error) {
+// validateModelPrices drops implausible entries so a mis-parse can never
+// replace good prices.
+func validateModelPrices(table PriceTable) (PriceTable, error) {
 	valid := PriceTable{}
 	for key, price := range table {
 		values := []float64{price.Input, price.CacheWrite5m, price.CacheWrite1h, price.CacheRead, price.Output}
-		ok := price.Output >= price.Input*0.5
-		for _, value := range values {
-			if value <= 0 || value >= maxPricePerMTok {
+		ok := price.Input > 0 && price.Output > 0
+		for index, value := range values {
+			if ((index == 0 || index == len(values)-1) && value <= 0) || value < 0 || value >= maxPricePerMTok {
 				ok = false
 			}
 		}
 		if ok {
 			valid[key] = price
 		}
+	}
+	return valid, nil
+}
+
+// validatePrices is used for the cache and Anthropic fallback; retain a
+// minimum catalog size and require its two core Claude model families.
+func validatePrices(table PriceTable) (PriceTable, error) {
+	valid, err := validateModelPrices(table)
+	if err != nil {
+		return nil, err
 	}
 	if len(valid) < 3 {
 		return nil, errNoPricing
@@ -185,8 +213,8 @@ func validatePrices(table PriceTable) (PriceTable, error) {
 	return valid, nil
 }
 
-// Fetcher downloads Claude prices: Anthropic's official page first, then
-// LiteLLM's list when the official page cannot be read or parsed.
+// Fetcher downloads Claude prices from Anthropic and supplements them with
+// OpenAI prices from LiteLLM. LiteLLM is the Claude fallback.
 type Fetcher struct {
 	Client       *http.Client
 	AnthropicURL string
@@ -251,23 +279,44 @@ func (fetcher Fetcher) Fetch(ctx context.Context) (FetchedPrices, error) {
 		litellmURL = LiteLLMPricesURL
 	}
 
-	body, err := fetcher.get(ctx, anthropicURL, anthropicMaxBytes)
-	if err == nil {
-		var table PriceTable
-		if table, err = ParseAnthropicPricing(string(body)); err == nil {
-			return FetchedPrices{FetchedAt: now().UTC(), Source: SourceAnthropic, SourceURL: anthropicURL, Models: table}, nil
+	body, anthropicErr := fetcher.get(ctx, anthropicURL, anthropicMaxBytes)
+	var official PriceTable
+	if anthropicErr == nil {
+		if official, anthropicErr = ParseAnthropicPricing(string(body)); anthropicErr != nil {
+			anthropicErr = fmt.Errorf("parse response: %w", anthropicErr)
 		}
 	}
-	primaryErr := fmt.Errorf("anthropic pricing page: %w", err)
+	if anthropicErr != nil {
+		anthropicErr = fmt.Errorf("anthropic pricing page: %w", anthropicErr)
+	}
 
-	body, err = fetcher.get(ctx, litellmURL, litellmMaxBytes)
+	body, err := fetcher.get(ctx, litellmURL, litellmMaxBytes)
 	if err == nil {
-		var table PriceTable
-		if table, err = ParseLiteLLMPrices(strings.NewReader(string(body))); err == nil {
-			return FetchedPrices{FetchedAt: now().UTC(), Source: SourceLiteLLM, SourceURL: litellmURL, Models: table}, nil
+		var community PriceTable
+		if community, err = ParseLiteLLMPrices(strings.NewReader(string(body))); err == nil {
+			if len(official) > 0 {
+				openAI := PriceTable{}
+				for model, price := range community {
+					if !strings.HasPrefix(model, "opus-") && !strings.HasPrefix(model, "sonnet-") &&
+						!strings.HasPrefix(model, "haiku-") && !strings.HasPrefix(model, "fable-") && !strings.HasPrefix(model, "mythos-") {
+						openAI[model] = price
+					}
+				}
+				if len(openAI) == 0 {
+					return FetchedPrices{FetchedAt: now().UTC(), Source: SourceAnthropic, SourceURL: anthropicURL, Models: official}, nil
+				}
+				return FetchedPrices{FetchedAt: now().UTC(), Source: SourceCombined, SourceURL: litellmURL, Models: Merged(official, openAI)}, nil
+			}
+			var table PriceTable
+			if table, err = validatePrices(community); err == nil {
+				return FetchedPrices{FetchedAt: now().UTC(), Source: SourceLiteLLM, SourceURL: litellmURL, Models: table}, nil
+			}
 		}
 	}
-	return FetchedPrices{}, errors.Join(primaryErr, fmt.Errorf("litellm prices: %w", err))
+	if len(official) > 0 {
+		return FetchedPrices{FetchedAt: now().UTC(), Source: SourceAnthropic, SourceURL: anthropicURL, Models: official}, nil
+	}
+	return FetchedPrices{}, errors.Join(anthropicErr, fmt.Errorf("litellm prices: %w", err))
 }
 
 // LoadPriceCache reads the cache file. A missing or corrupt file yields an

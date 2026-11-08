@@ -16,6 +16,11 @@ export type CopilotQuota = {
   overagesPermitted: boolean;
   canProject: boolean;
 };
+
+export type CodexQuota = {
+  plan: string;
+  windows: { limitId: string; label: string; usedPercent: number; windowMinutes: number; resetAt?: string }[];
+};
 import type { HarnessId, HarnessInfo, HarnessLoadError } from "./harnesses.ts";
 import type { WorkspaceGroup } from "./workspaces";
 
@@ -262,6 +267,7 @@ type WailsApp = {
   GetSessionUsage(sessionId: string): Promise<SessionUsage>;
   GetUsageSummary(): Promise<UsageSummary>;
   GetCopilotQuota(refresh: boolean): Promise<CopilotQuota | null>;
+  GetCodexQuota(refresh: boolean): Promise<CodexQuota | null>;
   GetAppVersion(): Promise<string>;
   CheckAppUpdate(): Promise<AppUpdate | null>;
   GetUpdateResult(): Promise<UpdateResult | null>;

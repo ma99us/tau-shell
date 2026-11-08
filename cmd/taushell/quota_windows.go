@@ -44,3 +44,35 @@ func (application *App) GetCopilotQuota(refresh bool) *quota.Snapshot {
 	application.quotaValue = &snapshot
 	return application.quotaValue
 }
+
+// GetCodexQuota returns locally reported Codex rate-limit windows, or nil when
+// disabled or unavailable. The cached snapshot avoids starting app-server
+// processes for every Home poll.
+func (application *App) GetCodexQuota(refresh bool) *quota.CodexSnapshot {
+	settings, err := appconfig.Load(application.settingsPath())
+	if err != nil || !settings.Quota.CodexEnabled() {
+		return nil
+	}
+	application.quotaMu.Lock()
+	defer application.quotaMu.Unlock()
+	if !refresh && !application.codexQuotaAt.IsZero() && time.Since(application.codexQuotaAt) < quotaCacheTTL {
+		return application.codexQuotaValue
+	}
+	run := application.codexQuotaRunner
+	if run == nil {
+		run = quota.CodexAppServerRunner
+	}
+	snapshot, err := quota.FetchCodex(context.Background(), run, time.Now())
+	application.codexQuotaAt = time.Now()
+	if err != nil {
+		if !application.codexQuotaLogged {
+			diagnostics.Warn("Codex quota unavailable", err)
+			application.codexQuotaLogged = true
+		}
+		application.codexQuotaValue = nil
+		return nil
+	}
+	application.codexQuotaLogged = false
+	application.codexQuotaValue = &snapshot
+	return application.codexQuotaValue
+}

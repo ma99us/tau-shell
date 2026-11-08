@@ -19,6 +19,11 @@
 - Implemented: capability-gated harness widgets, reusable prompt presets and
   command actions. Availability and verification vary by harness; see the
   [MVP backlog](20-mvp-backlog.md).
+- Codex has a local rate-limit reader and curated model suggestions alongside
+  its native picker and custom model IDs. Live quota/auth compatibility and
+  suggested model availability remain unverified; account-aware catalog and
+  additional verified commands remain planned. See the
+  [Codex usage and toolbar handoff](27-codex-quota-handoff.md).
 
 See the current [UI design system](25-ui-design-system.md). The earlier
 [V1 UI design](../v1/08-UI-Design.md) and

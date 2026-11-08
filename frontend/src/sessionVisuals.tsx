@@ -36,9 +36,10 @@ export function ProjectIcon({ session }: { session: Session }) {
   return <span className="project-icon-wrap">{icon}<span className="clone-tag" aria-hidden="true">{clone}</span></span>;
 }
 
-// Untagged sessions use the accent so every session gets the same tab/row/terminal highlight.
-export function sessionColorStyle(tag?: string): CSSProperties {
-  const color = tag || theme.untaggedSessionColor();
+// Session colors are optional tags; untagged sessions keep the neutral surface.
+export function sessionColorStyle(tag?: string): CSSProperties | undefined {
+  if (!tag) return undefined;
+  const color = tag;
   const palette = sessionPalette(color, theme.panelBackground(), theme.sessionTextOn(false), theme.sessionTextOn(true), theme.warningColor());
   if (!palette) return { "--session-color": color, ...tintVars } as CSSProperties;
   return {

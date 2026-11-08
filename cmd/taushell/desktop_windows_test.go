@@ -576,14 +576,24 @@ func TestBeforeCloseKeepsWindowOpenWhenStoppingSessionsFails(t *testing.T) {
 		stopAll: func(context.Context) error { return stopErr },
 	}
 	var failureShown bool
+	var failureShownBeforeProgressFinished bool
+	progressFinished := false
 	application := &App{
 		manager: manager,
+		emitEvent: func(name string, data ...any) {
+			if name == "shutdown-progress" && len(data) > 0 {
+				if progress, ok := data[0].(ShutdownProgress); ok && progress.Phase == "done" {
+					progressFinished = true
+				}
+			}
+		},
 		showMessageDialog: func(_ context.Context, options runtime.MessageDialogOptions) (string, error) {
 			if options.Title == "Sessions are still running" {
 				return "Yes", nil
 			}
 			if options.Title == "Unable to stop all sessions" && strings.Contains(options.Message, stopErr.Error()) {
 				failureShown = true
+				failureShownBeforeProgressFinished = !progressFinished
 			}
 			return "", nil
 		},
@@ -595,8 +605,11 @@ func TestBeforeCloseKeepsWindowOpenWhenStoppingSessionsFails(t *testing.T) {
 	if !failureShown {
 		t.Fatal("stop failure was not reported")
 	}
-	if manager.stopAllCalls != 1 || manager.listCalls != 1 {
-		t.Fatalf("shutdown calls: StopAll=%d List=%d, want 1 each", manager.stopAllCalls, manager.listCalls)
+	if failureShownBeforeProgressFinished {
+		t.Fatal("stop failure dialog was requested before the shutdown progress overlay was dismissed")
+	}
+	if manager.stopAllCalls != 1 || manager.listCalls != 3 {
+		t.Fatalf("shutdown calls: StopAll=%d List=%d, want 1 StopAll and 3 List calls", manager.stopAllCalls, manager.listCalls)
 	}
 }
 

@@ -132,3 +132,20 @@ func TestUpgradeCancelledDoesNotRunWinget(t *testing.T) {
 		t.Fatalf("result %+v err %v ran %v", result, err, ran)
 	}
 }
+
+func TestWingetProgressMessageNamesInstallAndUpdate(t *testing.T) {
+	powershell, _ := Lookup(PowerShell)
+	copilot, _ := Lookup(CopilotCLI)
+	for _, test := range []struct {
+		args []string
+		want string
+	}{
+		{WingetArgs(powershell), "Installing PowerShell 7. Please wait..."},
+		{UpgradeArgs(copilot), "Updating GitHub Copilot CLI. Please wait..."},
+		{[]string{"upgrade", "--id", "unknown.package"}, "Running WinGet. Please wait..."},
+	} {
+		if got := wingetProgressMessage(test.args); got != test.want {
+			t.Errorf("wingetProgressMessage(%v) = %q, want %q", test.args, got, test.want)
+		}
+	}
+}

@@ -49,6 +49,29 @@ func WingetArgs(spec Spec) []string {
 	return []string{"install", "--id", spec.Install.WingetID, "--exact", "--source", spec.Install.Source}
 }
 
+func wingetProgressMessage(args []string) string {
+	action := "Running"
+	switch {
+	case len(args) > 0 && args[0] == "install":
+		action = "Installing"
+	case len(args) > 0 && args[0] == "upgrade":
+		action = "Updating"
+	}
+	for index := 0; index+1 < len(args); index++ {
+		if args[index] != "--id" {
+			continue
+		}
+		packageID := args[index+1]
+		for _, spec := range Specs() {
+			if spec.Install.WingetID != "" && strings.EqualFold(spec.Install.WingetID, packageID) {
+				return fmt.Sprintf("%s %s. Please wait...", action, spec.Name)
+			}
+		}
+		break
+	}
+	return "Running WinGet. Please wait..."
+}
+
 // NpmArgs returns the discrete npm arguments for a global package install.
 func NpmArgs(spec Spec) []string {
 	return []string{"install", "--global", spec.Install.NpmPackage}

@@ -226,6 +226,14 @@ snapshot; other plans use `premium_interactions`. Failures are logged once
 without detail and the chip is hidden. It is on by default and disabled with
 `quota: { copilot: false }` in `~/.tau_shell/config.yaml`.
 
+The Codex quota chip uses a separate local Codex app-server process and only
+requests `account/rateLimits/read`; it does not call OpenAI organization
+endpoints or account-mutating methods. TauShell never reads, copies, persists,
+or logs raw Codex credentials or response bodies. The app-server authentication
+path and returned data have not yet been verified against a live supported
+Codex installation. Disable it with `quota: { codex: false }` in
+`~/.tau_shell/config.yaml`. See the [Codex quota handoff](27-codex-quota-handoff.md).
+
 ## Control channel
 
 Off by default (`control.enabled` in `~/.tau_shell/config.yaml`, read at

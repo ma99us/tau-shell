@@ -27,6 +27,7 @@ type Price struct {
 type PriceTable map[string]Price
 
 var modelPattern = regexp.MustCompile(`(opus|sonnet|haiku|fable|mythos)-(\d+)(?:-(\d{1,2}))?(?:-|\[|$)`)
+var openAISnapshotSuffix = regexp.MustCompile(`-\d{4}-\d{2}-\d{2}$`)
 
 // NormalizeModel maps a transcript model ID such as "claude-opus-5-5",
 // "claude-sonnet-4-5-20250929" or "claude-opus-5-5[1m]" to a table key. The
@@ -53,8 +54,9 @@ func NormalizeModel(model string) (string, bool) {
 func (table PriceTable) Lookup(model string) (Price, bool) {
 	key, ok := NormalizeModel(model)
 	if !ok {
-		// Non-Claude models (OpenAI) are keyed by their lowercase model ID.
-		price, found := table[strings.ToLower(model)]
+		// OpenAI snapshots share the price of their base model ID.
+		key := openAISnapshotSuffix.ReplaceAllString(strings.ToLower(model), "")
+		price, found := table[key]
 		return price, found
 	}
 	if price, found := table[key]; found {

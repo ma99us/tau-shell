@@ -2,13 +2,14 @@ import { Component, DragEvent, ErrorInfo, KeyboardEvent, MouseEvent, ReactNode, 
 import { createRoot } from "react-dom/client";
 import "@xterm/xterm/css/xterm.css";
 import { app, DialogRequest, InstallResult, Session, SessionEvent, ShutdownProgress, SkillsView, SystemStatus, ToolStatus, UpdateResult } from "./bridge";
+import { HomePanelId, PanelFeedbackState } from "./homePanel";
 import "./theme/tokens.css";
 import "./style.css";
 import { Activity, AttentionKind, answerPlan, attentionEdge, combineSignal, hasCueSignal, logActivityTtlMs, nextActivity, promptKind, readDraft, readHarnessSignal, readScreen, reportedState } from "./attention";
 import { moveId } from "./order";
 import { CommandPalette, PaletteItem } from "./harnessActions";
 import { GearIcon, HomeIcon } from "./harnessIcons";
-import { hasActivityReader, setHarnesses } from "./harnesses";
+import { hasActivityReader, isHarness, setHarnesses } from "./harnesses";
 import appIcon from "./assets/appicon.png";
 import { errorDetails, reportFrontendFailure, isStoppedSessionError } from "./errors";
 import { AppDialog, ShutdownPopup, RenameDialog } from "./dialogs";
@@ -23,6 +24,17 @@ import { Workspace, WorkspaceGroup, flattenWorkspaces, groupSessions, moveGroup,
 import { GroupControls } from "./workspaceView";
 import { SessionTree } from "./sessionTree";
 import { readRecentFolders, readTabs, recentFoldersKey, savedTabsKey, Tab, writeStored } from "./storage";
+
+function homePanelForError(source: string): HomePanelId | undefined {
+  if (source.startsWith("ui.phone-")) return "phone";
+  if (source.startsWith("ui.control-")) return "control";
+  if (source.startsWith("ui.secret")) return "secrets";
+  if (source.includes("harness")) return "harnesses";
+  if (source.includes("skill")) return "skills";
+  if (source.includes("tool") || source === "ui.refresh") return "tools";
+  if (source.includes("session") || source.includes("auto-resume")) return "sessions";
+  return undefined;
+}
 
 window.addEventListener("error", (event) => {
   const details = errorDetails(event.error ?? event.message);
@@ -137,11 +149,13 @@ function App() {
   const [shutdown, setShutdown] = useState<ShutdownProgress | null>(null);
   const [renameRequest, setRenameRequest] = useState<Session | null>(null);
   const [error, setError] = useState("");
+  const [homeFeedback, setHomeFeedback] = useState<Partial<Record<HomePanelId, PanelFeedbackState>>>({});
   const [notice, setNotice] = useState<{ sessionId: string; message: string; isError: boolean } | null>(null);
   const [palette, setPalette] = useState<PaletteItem[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [installing, setInstalling] = useState("");
   const [toolNotice, setToolNotice] = useState<InstallResult | null>(null);
+  const [toolNoticeToolId, setToolNoticeToolId] = useState("");
   const [toolUpdates, setToolUpdates] = useState<Record<string, string>>({});
   const [refreshing, setRefreshing] = useState(false);
   const [skillsView, setSkillsView] = useState<SkillsView | null>(null);
@@ -156,8 +170,17 @@ function App() {
   const [updateNote, setUpdateNote] = useState("");
   const showError = (source: string, failure: unknown) => {
     const message = reportFrontendFailure(source, failure);
-    setError(message);
+    const panel = homePanelForError(source);
+    if (panel) setHomeFeedback((current) => ({ ...current, [panel]: { tone: "error", message } }));
+    else setError(message);
     return message;
+  };
+  const setPanelFeedback = (panel: HomePanelId, feedback?: PanelFeedbackState) => {
+    setHomeFeedback((current) => ({ ...current, [panel]: feedback }));
+  };
+  const showPanelError = (panel: HomePanelId, source: string, failure: unknown) => {
+    const message = reportFrontendFailure(source, failure);
+    setPanelFeedback(panel, { tone: "error", message });
   };
 
   // Once per app launch, resume the sessions flagged for it (or all, when the global flag is on).
@@ -189,7 +212,7 @@ function App() {
     })();
   }, [loaded]);
 
-  const refresh = async (redetectTools = false) => {
+  const refresh = async (redetectTools = false): Promise<boolean> => {
     try {
       const [nextSessions, nextStatus, nextGroups] = await Promise.all([
         app().GetSessions(),
@@ -209,15 +232,17 @@ function App() {
       setSelected((current) => nextSessions.some((session) => session.id === current) ? current : "");
       setStatus(nextStatus);
       setError("");
+      return true;
     } catch (err) {
       showError("ui.refresh", err);
+      return false;
     } finally {
       setLoaded(true);
     }
   };
 
   useEffect(() => {
-    void refreshAll();
+    void refreshAll(false);
     const runtime = window.runtime;
     if (!runtime) return;
     runtime.EventsOnMultiple("session-event", (event: SessionEvent) => {
@@ -622,15 +647,17 @@ function App() {
         setInstalling(node.id);
         const nodeResult = await app().InstallTool(node.id);
         setToolNotice(nodeResult);
+        setToolNoticeToolId(node.id);
         if (nodeResult.outcome !== "installed") return;
         await refresh(true);
         setInstalling(tool.id);
         result = await app().InstallTool(tool.id);
       }
       setToolNotice(result);
+      setToolNoticeToolId(tool.id);
       if (result.outcome === "installed" || result.outcome === "failed") await refresh(true);
     } catch (err) {
-      showError("ui.install-tool", err);
+      showPanelError(isHarness(tool.id) ? "harnesses" : "tools", "ui.install-tool", err);
     } finally {
       setInstalling("");
     }
@@ -641,12 +668,13 @@ function App() {
     try {
       const result = await app().UpdateTool(tool.id);
       setToolNotice(result);
+      setToolNoticeToolId(tool.id);
       if (result.outcome === "installed" || result.outcome === "failed") {
         await refresh(true);
         setToolUpdates(await app().GetToolUpdates());
       }
     } catch (err) {
-      showError("ui.update-tool", err);
+      showPanelError(isHarness(tool.id) ? "harnesses" : "tools", "ui.update-tool", err);
     } finally {
       setInstalling("");
     }
@@ -667,8 +695,14 @@ function App() {
   }, []);
   const updateSkills = async () => {
     setSkillsUpdating(true);
+    setPanelFeedback("skills", { tone: "progress", message: "Updating skills..." });
     try {
-      setSkillsView(await app().UpdateSkills());
+      const view = await app().UpdateSkills();
+      setSkillsView(view);
+      const warnings = [...(view.status.warnings ?? []), ...(view.unsupported ?? []).map((tool) => `Skills are not supported by ${tool}.`)];
+      setPanelFeedback("skills", warnings.length
+        ? { tone: "warning", message: warnings.join(" ") }
+        : { tone: "success", message: view.status.message || "Skills updated." });
     } catch (err) {
       showError("ui.update-skills", err);
     } finally {
@@ -679,14 +713,18 @@ function App() {
     if (skillsToggleInProgress.current) return;
     skillsToggleInProgress.current = true;
     setSkillsSaving(true);
+    setPanelFeedback("skills", { tone: "progress", message: "Saving skill preferences..." });
+    let saved = false;
     try {
       try {
         await app().SetSkillEnabled(name, enabled);
+        saved = true;
       } catch (err) {
         showError("ui.set-skill-enabled", err);
       }
       try {
         setSkillsView(await app().GetSkills());
+        if (saved) setPanelFeedback("skills", { tone: "success", message: `Skill ${name} ${enabled ? "enabled" : "disabled"}.` });
       } catch (err) {
         showError("ui.refresh-skills", err);
       }
@@ -696,15 +734,26 @@ function App() {
     }
   };
   const skillActions: SkillsActions = { view: skillsView, refreshing, updating: skillsUpdating, saving: skillsSaving, onUpdate: () => void updateSkills(), onToggle: toggleSkill };
-  const refreshAll = async () => {
+  const refreshAll = async (announce = true) => {
     if (refreshing) return;
     setRefreshing(true);
+    if (announce) {
+      setPanelFeedback("tools", { tone: "progress", message: "Refreshing tool inventory..." });
+      setPanelFeedback("harnesses", { tone: "progress", message: "Refreshing harness inventory..." });
+      setPanelFeedback("skills", { tone: "progress", message: "Checking skill updates..." });
+    }
     try {
-      await Promise.all([
+      const [sessionsReady, toolsReady, skillsReady] = await Promise.all([
         refresh(true),
-        app().CheckToolUpdates().then((value) => setToolUpdates(value ?? {})).catch((err) => showError("ui.check-tool-updates", err)),
-        app().CheckSkills().then(setSkillsView).catch((err) => showError("ui.check-skills", err)),
+        app().CheckToolUpdates().then((value) => { setToolUpdates(value ?? {}); return true; }).catch((err) => { showError("ui.check-tool-updates", err); return false; }),
+        app().CheckSkills().then((value) => { setSkillsView(value); return true; }).catch((err) => { showError("ui.check-skills", err); return false; }),
       ]);
+      if (announce && sessionsReady) {
+        setPanelFeedback("harnesses", { tone: "success", message: "Harness inventory refreshed." });
+      }
+      if (announce && sessionsReady && toolsReady) setPanelFeedback("tools", { tone: "success", message: "Tool inventory refreshed." });
+      if (announce && !sessionsReady) setPanelFeedback("harnesses", { tone: "error", message: "Could not refresh harness inventory. See Tools for the refresh error." });
+      if (announce && skillsReady) setPanelFeedback("skills", { tone: "success", message: "Skills checked." });
     } catch (err) {
       showError("ui.refresh", err);
     } finally {
@@ -712,11 +761,11 @@ function App() {
     }
   };
   const openSetupPage = (tool: ToolStatus) => {
-    app().OpenToolSetupPage(tool.id).catch((err) => showError("ui.open-setup-page", err));
+    app().OpenToolSetupPage(tool.id).catch((err) => showPanelError(isHarness(tool.id) ? "harnesses" : "tools", "ui.open-setup-page", err));
   };
   const powershell = status?.tools.find((tool) => tool.id === "powershell");
   const showSetup = Boolean(powershell && !toolUsable(powershell) && !setupDismissed);
-  const toolActions = { status, installing, notice: toolNotice, updates: toolUpdates, refreshing, onUpdate: (tool: ToolStatus) => void updateTool(tool), onInstall: (tool: ToolStatus) => void installTool(tool), onOpenSetup: openSetupPage, onDismissNotice: () => setToolNotice(null), onError: (err: unknown) => showError("ui.open-tool-config", err) };
+  const toolActions = { status, installing, notice: toolNotice, noticeToolId: toolNoticeToolId, updates: toolUpdates, refreshing, onUpdate: (tool: ToolStatus) => void updateTool(tool), onInstall: (tool: ToolStatus) => void installTool(tool), onOpenSetup: openSetupPage, onDismissNotice: () => { setToolNotice(null); setToolNoticeToolId(""); }, onError: (tool: ToolStatus, err: unknown) => showPanelError(isHarness(tool.id) ? "harnesses" : "tools", "ui.open-tool-config", err) };
 
   return (
     <div className="app">
@@ -746,7 +795,7 @@ function App() {
                 onClick={() => setSelected("")}
               ><HomeIcon /></button>
               {orderedTabs.map((tab) => (
-                <div className={`tab-item ${selected === tab.id ? "active" : ""} ${dragId === tab.id ? "dragging" : ""} ${dropClass(tab.id)}`} key={tab.id} role="presentation" {...dragProps(tab.id, true)} style={sessionColorStyle(colorOf(tab.id))} data-colored="" onContextMenu={(event) => { const session = sessions.find((current) => current.id === tab.id); if (session) openMenu(event, session); }}>
+                <div className={`tab-item ${selected === tab.id ? "active" : ""} ${dragId === tab.id ? "dragging" : ""} ${dropClass(tab.id)}`} key={tab.id} role="presentation" {...dragProps(tab.id, true)} style={sessionColorStyle(colorOf(tab.id))} data-colored={colorOf(tab.id) ? "" : undefined} onContextMenu={(event) => { const session = sessions.find((current) => current.id === tab.id); if (session) openMenu(event, session); }}>
                   <button
                     id={`tab-${tab.id}`}
                     className="tab tab-label"
@@ -769,8 +818,8 @@ function App() {
           {notice && notice.sessionId === selected && <div className={notice.isError ? "error-banner" : "notice-banner"} role="status">{notice.message}<button onClick={() => setNotice(null)}>Dismiss</button></div>}
           <section className="main-content">
             <div id="panel-home" className={`home-container ${selected ? "hidden" : ""}`} role="tabpanel" aria-labelledby="tab-home" tabIndex={0}>
-              {showSetup && powershell ? <Setup powershell={powershell} actions={toolActions} onRecheck={() => void refresh(true)} onContinue={() => setSetupDismissed(true)} /> :
-                <Home sessions={displaySessions} workspaces={workspaces} groupControls={groupControls} loaded={loaded} autoResumeAll={autoResumeAll} onAutoResumeAll={(enabled) => { setAutoResumeAll(enabled); void app().SetAutoResumeAll(enabled).catch((err) => { setAutoResumeAll(!enabled); showError("ui.auto-resume-all", err); }); }} onAutoResume={(session, enabled) => void updateSession("ui.auto-resume", () => app().SetSessionAutoResume(session.id, enabled))} status={status} busy={busy} tools={toolActions} skills={skillActions} onNew={() => setDialogOpen(true)} onRefresh={() => void refreshAll()} onHome={() => setSelected("")} onLaunch={launch} onDelete={setDeleteRequest} onDuplicate={duplicateSession} onError={showError} dragProps={dragProps} dropClass={dropClass} dragId={dragId} />}
+              {showSetup && powershell ? <Setup powershell={powershell} actions={toolActions} onRecheck={() => void refresh(true)} onContinue={() => setSetupDismissed(true)} feedback={homeFeedback.tools} onDismissFeedback={() => setPanelFeedback("tools", undefined)} /> :
+                <Home sessions={displaySessions} workspaces={workspaces} groupControls={groupControls} loaded={loaded} autoResumeAll={autoResumeAll} onAutoResumeAll={(enabled) => { setAutoResumeAll(enabled); void app().SetAutoResumeAll(enabled).catch((err) => { setAutoResumeAll(!enabled); showError("ui.auto-resume-all", err); }); }} onAutoResume={(session, enabled) => void updateSession("ui.auto-resume", () => app().SetSessionAutoResume(session.id, enabled))} status={status} busy={busy} tools={toolActions} skills={skillActions} onNew={() => setDialogOpen(true)} onRefresh={() => void refreshAll()} onHome={() => setSelected("")} onLaunch={launch} onDelete={setDeleteRequest} onDuplicate={duplicateSession} onError={showError} panelFeedback={homeFeedback} onDismissPanelFeedback={(panel) => setPanelFeedback(panel, undefined)} onPanelFeedback={setPanelFeedback} dragProps={dragProps} dropClass={dropClass} dragId={dragId} />}
             </div>
             {terminalIds.map((id) => {
               const tab = tabs.find((current) => current.id === id);

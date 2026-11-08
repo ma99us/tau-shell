@@ -711,8 +711,24 @@ func (manager *Manager) StopAll(ctx context.Context) error {
 			}
 		}(current)
 	}
-	wait.Wait()
-	close(errorsOut)
+	finished := make(chan struct{})
+	go func() {
+		wait.Wait()
+		close(errorsOut)
+		close(finished)
+	}()
+	select {
+	case <-finished:
+	case <-ctx.Done():
+		select {
+		case <-finished:
+		default:
+			manager.mu.Lock()
+			manager.closed = false
+			manager.mu.Unlock()
+			return ctx.Err()
+		}
+	}
 	var stopErr error
 	for err := range errorsOut {
 		stopErr = errors.Join(stopErr, err)

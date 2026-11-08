@@ -28,6 +28,9 @@ func main() {
 }
 
 func runMain() (exitCode int) {
+	if tools.IsWingetConsoleCommand(os.Args[1:]) {
+		return tools.RunWingetConsoleCommand(os.Args[2:])
+	}
 	closeLog, err := diagnostics.Init()
 	if err != nil {
 		message := fmt.Sprintf("TauShell could not create its diagnostic log at %s: %v", diagnostics.LogPath(), err)

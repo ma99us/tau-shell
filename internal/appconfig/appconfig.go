@@ -86,13 +86,14 @@ type Config struct {
 	Skills        Skills        `yaml:"skills"`
 }
 
-// Quota controls the Home screen's Copilot premium-request chip, which reads
-// the quota through the GitHub CLI. A nil flag means enabled.
+// Quota controls optional Home screen quota chips. A nil flag means enabled.
 type Quota struct {
 	Copilot *bool `yaml:"copilot,omitempty"`
+	Codex   *bool `yaml:"codex,omitempty"`
 }
 
 func (q Quota) CopilotEnabled() bool { return q.Copilot == nil || *q.Copilot }
+func (q Quota) CodexEnabled() bool   { return q.Codex == nil || *q.Codex }
 
 // Skills controls the skill library TauShell loads into harness sessions.
 // Repo is a pointer so an explicit empty string can turn fetching off.
@@ -163,7 +164,7 @@ func (u Usage) StartDay() int {
 	return u.MonthStartDay
 }
 
-// PriceUpdatesEnabled reports whether Claude prices are refreshed from the web.
+// PriceUpdatesEnabled reports whether model prices are refreshed from the web.
 func (u Usage) PriceUpdatesEnabled() bool { return u.PriceUpdates == nil || *u.PriceUpdates }
 
 func (u Usage) validate() error {
@@ -240,7 +241,7 @@ notifications:
 usage:
   # Day of the month (1-28) the monthly token and cost totals reset.
   # month_start_day: 1
-  # Refresh Claude prices from Anthropic's pricing page every 24 hours.
+  # Refresh Claude prices from Anthropic and OpenAI prices from LiteLLM every 24 hours.
   # price_updates: true
   # Override Claude prices (USD per million tokens). Cache prices are optional.
   # claude_prices:
@@ -251,6 +252,8 @@ quota:
   # Runs "gh api /copilot_internal/user" with your own GitHub CLI sign-in; set
   # false to stop all quota calls. The chip is hidden if gh is missing or signed out.
   # copilot: true
+	# Show remaining Codex plan windows reported by the local Codex app-server.
+	# codex: true
 
 skills:
   # Load TauShell's skill library (from the ai-cookbook) into Claude Code and Copilot CLI sessions.

@@ -83,6 +83,10 @@ type App struct {
 	quotaValue             *quota.Snapshot
 	quotaLogged            bool
 	quotaRunner            quota.Runner
+	codexQuotaAt           time.Time
+	codexQuotaValue        *quota.CodexSnapshot
+	codexQuotaLogged       bool
+	codexQuotaRunner       quota.CodexRunner
 }
 
 type desktopSessionManager interface {
@@ -832,13 +836,17 @@ func (application *App) confirmShutdown(ctx context.Context) bool {
 	stopCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 	finishProgress := application.trackShutdownProgress(active)
-	defer finishProgress()
-	if err := application.manager.StopAll(stopCtx); err != nil {
-		diagnostics.Error("stop sessions for shutdown failed", err)
+	var finishProgressOnce sync.Once
+	finish := func() { finishProgressOnce.Do(finishProgress) }
+	defer finish()
+	stopErr := application.manager.StopAll(stopCtx)
+	finish()
+	if stopErr != nil {
+		diagnostics.Error("stop sessions for shutdown failed", stopErr)
 		_, dialogErr := application.messageDialog(ctx, runtime.MessageDialogOptions{
 			Type:    runtime.ErrorDialog,
 			Title:   "Unable to stop all sessions",
-			Message: err.Error(),
+			Message: stopErr.Error(),
 			Buttons: []string{"Keep TauShell open"},
 		})
 		if dialogErr != nil {

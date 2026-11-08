@@ -137,27 +137,23 @@ func codexActivityFromLines(lines [][]byte, now time.Time) string {
 		if len(line) == 0 {
 			continue
 		}
-		var entry struct {
-			Type      string `json:"type"`
-			Timestamp string `json:"timestamp"`
-			Payload   struct {
-				Type string `json:"type"`
-			} `json:"payload"`
-		}
-		if json.Unmarshal(line, &entry) != nil || entry.Type != "event_msg" {
+		kind, stamp, ok := codexEventKind(line)
+		if !ok {
 			continue
 		}
 		var next string
-		switch entry.Payload.Type {
-		case "task_started":
+		switch kind {
+		// Codex's rollout protocol historically used task_* names. Newer
+		// versions also emit turn_* lifecycle events and may only surface an
+		// in-progress reasoning, message, tool, or command item while it is
+		// thinking. Treat those items as work until a terminal lifecycle event.
+		case "task_started", "turn_started", "agent_reasoning", "agent_reasoning_delta",
+			"agent_message_delta", "exec_command_begin", "exec_command_output_delta",
+			"custom_tool_call", "mcp_tool_call_begin":
 			next = ActivityWorking
-		case "task_complete":
+		case "task_complete", "turn_complete", "turn_completed", "task_aborted", "turn_aborted":
 			next = ActivityIdle
 		default:
-			continue
-		}
-		stamp, err := time.Parse(time.RFC3339Nano, entry.Timestamp)
-		if err != nil {
 			continue
 		}
 		state, lastEvent = next, stamp
@@ -166,6 +162,27 @@ func codexActivityFromLines(lines [][]byte, now time.Time) string {
 		return ActivityWorking
 	}
 	return state
+}
+
+// codexEventKind accepts the rollout event envelope used by both the older
+// task lifecycle and newer turn/item streams. The files are an undocumented
+// Codex implementation detail, so malformed or incomplete lines are ignored.
+func codexEventKind(line []byte) (string, time.Time, bool) {
+	var entry struct {
+		Type      string `json:"type"`
+		Timestamp string `json:"timestamp"`
+		Payload   struct {
+			Type string `json:"type"`
+		} `json:"payload"`
+	}
+	if json.Unmarshal(line, &entry) != nil || entry.Type != "event_msg" || entry.Payload.Type == "" {
+		return "", time.Time{}, false
+	}
+	stamp, err := time.Parse(time.RFC3339Nano, entry.Timestamp)
+	if err != nil {
+		return "", time.Time{}, false
+	}
+	return entry.Payload.Type, stamp, true
 }
 
 func gsdActivityFromLines(lines [][]byte, now time.Time) string {

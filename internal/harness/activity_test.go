@@ -50,8 +50,14 @@ func TestCodexActivityFromLines(t *testing.T) {
 	}{
 		{"empty", nil, ""},
 		{"task running", []string{line("task_started", "2026-11-03T22:00:01Z")}, ActivityWorking},
+		{"turn running", []string{line("turn_started", "2026-11-03T22:00:01Z")}, ActivityWorking},
+		{"reasoning is working", []string{line("agent_reasoning_delta", "2026-11-03T22:00:01Z")}, ActivityWorking},
+		{"tool is working", []string{line("custom_tool_call", "2026-11-03T22:00:01Z")}, ActivityWorking},
 		{"task just completed", []string{line("task_started", "2026-11-03T22:00:01Z"), line("task_complete", "2026-11-03T22:00:09Z")}, ActivityWorking},
+		{"turn just completed", []string{line("turn_started", "2026-11-03T22:00:01Z"), line("turn_complete", "2026-11-03T22:00:09Z")}, ActivityWorking},
 		{"task finished", []string{line("task_started", "2026-11-03T22:00:01Z"), line("task_complete", "2026-11-03T22:00:05Z")}, ActivityIdle},
+		{"turn finished", []string{line("turn_started", "2026-11-03T22:00:01Z"), line("turn_complete", "2026-11-03T22:00:05Z")}, ActivityIdle},
+		{"turn aborted", []string{line("turn_started", "2026-11-03T22:00:01Z"), line("turn_aborted", "2026-11-03T22:00:05Z")}, ActivityIdle},
 		{"ignores other events", []string{line("task_complete", "2026-11-03T22:00:05Z"), line("item_completed", "2026-11-03T22:00:09Z")}, ActivityIdle},
 	}
 	for _, test := range cases {

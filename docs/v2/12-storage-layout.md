@@ -11,7 +11,7 @@ Configuration is human-edited YAML; mutable runtime/session state is stored sepa
 │     (temporary <session-id>.yaml.deleting during recoverable deletion)
 ├─ prompts.yaml          (optional, hand-edited prompt presets)
 ├─ config.yaml           (optional, hand-edited app settings: notifications, usage)
-├─ prices.json           (cached Claude prices fetched from the web; safe to delete)
+├─ prices.json           (cached Claude and OpenAI prices fetched from the web; safe to delete)
 ├─ logs/
 └─ state.db              (runtime state, order, usage ledger and deletion journal)
 ```
