@@ -2,7 +2,9 @@ package sessionhost
 
 import (
 	"context"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -74,14 +76,21 @@ func TestRealSessionGracefulExitIsNotReportedAsForced(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	readyPath := filepath.Join(workingDir, "ready")
+	pwshReadyPath := strings.ReplaceAll(readyPath, "'", "''")
 	// Copilot's graceful exit is Ctrl+C, "/exit", Enter; this stand-in quits on that line.
 	useRealPowerShell(t, manager, realPwsh,
-		"[Console]::TreatControlCAsInput = $true; $typed = ''; while ($true) { $typed += [Console]::ReadKey($true).KeyChar; if ($typed.EndsWith('/exit')) { exit 0 } }")
+		"[Console]::TreatControlCAsInput = $true; [IO.File]::WriteAllText('"+pwshReadyPath+"', 'ready'); $typed = ''; while ($true) { $typed += [Console]::ReadKey($true).KeyChar; if ($typed.EndsWith('/exit')) { exit 0 } }")
 	ctx := context.Background()
 	if _, err := manager.Start(ctx, "real-graceful", false, 80, 24); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(time.Second)
+	if !waitFor(10*time.Second, func() bool {
+		_, err := os.Stat(readyPath)
+		return err == nil
+	}) {
+		t.Fatal("PowerShell fixture did not reach its input loop")
+	}
 	if err := manager.Stop(ctx, "real-graceful"); err != nil {
 		t.Fatal(err)
 	}

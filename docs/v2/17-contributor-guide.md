@@ -78,6 +78,10 @@ Go extension (Delve) is required.
   fetched asynchronously, so sample the visible version after Home renders.
   Also clear `TAUSHELL_LIVE` before `go test ./...` unless you intend to run
   the real, model-using harness probe.
+- Real ConPTY tests must wait for a deterministic fixture-ready marker before
+  sending terminal input. A fixed sleep can pass locally but race on hosted
+  Windows CI: the process may exit before the write, causing `invalid argument`
+  and invalid process/job handles during cleanup.
 - Releases: push a SemVer tag (`git tag v1.0.0 && git push origin v1.0.0`).
   `.github/workflows/release.yml` tests, builds
   `TauShell-<version>-windows-x64.zip` with `scripts/build-release.ps1`, writes
