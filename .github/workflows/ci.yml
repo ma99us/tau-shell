@@ -81,7 +81,7 @@ jobs:
           ./scripts/smoke-test.ps1 -Zip dist/TauShell-0.0.0-ci-windows-x64.zip -Version 0.0.0-ci -Lifecycle
           if ($LASTEXITCODE -ne 0) { throw 'smoke test failed' }
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: TauShell-ci-windows-x64
           path: dist/TauShell-0.0.0-ci-windows-x64.zip
