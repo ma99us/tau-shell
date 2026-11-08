@@ -90,10 +90,12 @@ type Config struct {
 type Quota struct {
 	Copilot *bool `yaml:"copilot,omitempty"`
 	Codex   *bool `yaml:"codex,omitempty"`
+	Claude  *bool `yaml:"claude,omitempty"`
 }
 
 func (q Quota) CopilotEnabled() bool { return q.Copilot == nil || *q.Copilot }
 func (q Quota) CodexEnabled() bool   { return q.Codex == nil || *q.Codex }
+func (q Quota) ClaudeEnabled() bool  { return q.Claude == nil || *q.Claude }
 
 // Skills controls the skill library TauShell loads into harness sessions.
 // Repo is a pointer so an explicit empty string can turn fetching off.
@@ -254,6 +256,10 @@ quota:
   # copilot: true
 	# Show remaining Codex plan windows reported by the local Codex app-server.
 	# codex: true
+	# Show your Claude spend against your LiteLLM team-member budget on Home when
+	# Claude Code uses a LiteLLM proxy. Reads the endpoint and key from Claude Code's
+	# own settings; set false to stop these calls.
+	# claude: true
 
 skills:
   # Load TauShell's skill library (from the ai-cookbook) into Claude Code and Copilot CLI sessions.

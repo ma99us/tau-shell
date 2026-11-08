@@ -234,6 +234,22 @@ path and returned data have not yet been verified against a live supported
 Codex installation. Disable it with `quota: { codex: false }` in
 `~/.tau_shell/config.yaml`. See the [Codex quota handoff](27-codex-quota-handoff.md).
 
+The Claude proxy quota line appears only when Claude Code is routed through a
+LiteLLM proxy. The Go host reads the endpoint and key from `env` in Claude
+Code's `settings.json` (`ANTHROPIC_BASE_URL` or `ANTHROPIC_FOUNDRY_BASE_URL`,
+and the matching API key), falling back to the process environment, and skips
+`api.anthropic.com`. The key is sent only as a bearer token to that endpoint
+(https, or http for loopback), redirects are refused, and it is never logged,
+persisted or returned to the UI. Two read-only calls are made, `GET /key/info`
+and `GET /team/info`; the team response also lists other members, so only the
+caller's own row is kept. Spend is the proxy's own estimate for the current
+budget cycle, and the budget is the proxy's team-member budget (the team budget
+if there is none). The proxy's API may not expose every limit its portal shows,
+so the budget field on Home can be overridden by hand. That override is a
+presentation setting kept in the WebView's localStorage, not in YAML. Disable
+the line with `quota: { claude: false }` in `~/.tau_shell/config.yaml`. This was
+verified against one real proxy only.
+
 ## Control channel
 
 Off by default (`control.enabled` in `~/.tau_shell/config.yaml`, read at

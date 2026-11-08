@@ -1,4 +1,5 @@
 import type { SessionUsage, UsageSummary } from "./usage";
+import type { ClaudeQuota } from "./claudeQuota";
 
 export type CopilotQuota = {
   account: string;
@@ -268,6 +269,7 @@ type WailsApp = {
   GetUsageSummary(): Promise<UsageSummary>;
   GetCopilotQuota(refresh: boolean): Promise<CopilotQuota | null>;
   GetCodexQuota(refresh: boolean): Promise<CodexQuota | null>;
+  GetClaudeQuota(refresh: boolean): Promise<ClaudeQuota | null>;
   GetAppVersion(): Promise<string>;
   CheckAppUpdate(): Promise<AppUpdate | null>;
   GetUpdateResult(): Promise<UpdateResult | null>;

@@ -6,6 +6,17 @@ export const savedTabsKey = "taushell.tabs.v1";
 export const recentFoldersKey = "taushell.recent-folders.v1";
 export const maxRecentFolders = 5;
 export const groupedKey = "taushell.home-grouped.v1";
+export const claudeBudgetKey = "taushell.claude-budget.v1";
+
+// A hand-set monthly Claude budget in USD; null means use the proxy's value.
+export function readClaudeBudget(storage: Pick<Storage, "getItem">): number | null {
+  try {
+    const value: unknown = JSON.parse(storage.getItem(claudeBudgetKey) ?? "null");
+    return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+  } catch {
+    return null;
+  }
+}
 
 // Home lists sessions flat unless the user switched grouping on.
 export function readGrouped(storage: Pick<Storage, "getItem">): boolean {

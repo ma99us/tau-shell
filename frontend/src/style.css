@@ -1369,6 +1369,37 @@ h3 {
   color: inherit;
 }
 
+.quota-budget {
+  margin-left: 8px;
+  white-space: nowrap;
+}
+
+.quota-budget input {
+  width: 64px;
+  margin-left: 2px;
+  padding: 1px 6px;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-5);
+  background: var(--bg-control);
+  color: inherit;
+  font: inherit;
+}
+
+.quota-budget input:focus-visible {
+  outline: 1px solid var(--accent);
+}
+
+.quota-reset {
+  margin-left: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
 .control-audit .warn,
 .phone-pane .warn {
   color: var(--status-warn);

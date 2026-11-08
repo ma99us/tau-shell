@@ -10,7 +10,8 @@ import { ControlAudit } from "./controlAudit";
 import { PhonePane } from "./phonePane";
 import { SecretsPane } from "./secretsPane";
 import { Workspace, ungrouped } from "./workspaces";
-import { groupedKey, readGrouped, writeStored } from "./storage";
+import { claudeBudgetKey, groupedKey, readClaudeBudget, readGrouped, writeStored } from "./storage";
+import { ClaudeQuota, claudeQuotaView, formatDollars, parseBudgetInput } from "./claudeQuota";
 import { UpdateDialog } from "./updateDialog";
 import { GroupControls, GroupHeader } from "./workspaceView";
 import { HomePanel, HomePanelId, PanelFeedback, PanelFeedbackState } from "./homePanel";
@@ -104,6 +105,33 @@ export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAl
     const timer = window.setInterval(load, 300000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, []);
+  const [claudeQuota, setClaudeQuota] = useState<ClaudeQuota | null>(null);
+  const [claudeBudget, setClaudeBudget] = useState<number | null>(() => readClaudeBudget(localStorage));
+  const [budgetDraft, setBudgetDraft] = useState<string | null>(null);
+  const commitBudget = (text: string) => {
+    const value = parseBudgetInput(text);
+    setClaudeBudget(value);
+    writeStored(claudeBudgetKey, value, onError);
+    setBudgetDraft(null);
+  };
+  useEffect(() => {
+    let cancelled = false;
+    let loading = false;
+    const load = () => {
+      if (loading) return;
+      loading = true;
+      void app().GetClaudeQuota(false).then((value) => {
+        if (cancelled) return;
+        clearPollFailure(pollFailures.current, "claude-quota");
+        setClaudeQuota(value ?? null);
+      }).catch((error) => {
+        if (!cancelled && shouldReportPollFailure(pollFailures.current, "claude-quota")) onError("ui.poll-claude-quota", error);
+      }).finally(() => { loading = false; });
+    };
+    load();
+    const timer = window.setInterval(load, 300000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, []);
   const [resumeProgress, setResumeProgress] = useState("");
   const [appVersion, setAppVersion] = useState("");
   const [appUpdate, setAppUpdate] = useState<AppUpdate | null>(null);
@@ -140,6 +168,13 @@ export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAl
       <div className="section-title"><div><h2>Your sessions</h2></div>{!loaded && <span className="spinner" role="status" aria-label="Loading sessions" />}<label className="check-option" title="Group sessions by workspace, or list them all in one row of cards"><input type="checkbox" role="switch" checked={grouped} onChange={(event) => changeGrouped(event.target.checked)} />Group by workspace</label></div>
       {quota && !quota.unlimited && <p className={`home-usage home-quota${quota.canProject && quota.projected > quota.entitlement ? " warn" : ""}`} title={`${quota.account ? `Copilot account: ${quota.account}. ` : ""}Plan: ${quota.plan}. Read through your GitHub CLI sign-in. ${quota.daysLeft} days left in the cycle.`}>Copilot{quota.account ? ` (${quota.account})` : ""}: <b className="kv">{Math.round(quota.used)} / {Math.round(quota.entitlement)} credits ({Math.round(quota.percentUsed)}%)</b>, resets {quota.resetDate}{quota.canProject ? <>, on pace for <b className="kv">~{Math.round(quota.projected)}</b></> : ""}</p>}
       {codexQuota && <p className="home-usage home-quota" title="Codex plan windows reported by the local Codex app-server. Separate from TauShell token and cost estimates.">Codex{codexQuota.plan ? ` (${codexQuota.plan})` : ""}: <b className="kv">{codexQuota.windows.map((window) => `${window.label}: ${Math.round(100 - window.usedPercent)}% remaining${window.resetAt ? `, resets ${new Date(window.resetAt).toLocaleString()}` : ""}`).join(" | ")}</b></p>}
+      {claudeQuota && (() => {
+        const view = claudeQuotaView(claudeQuota, claudeBudget);
+        const source = view.overridden ? "set by you" : claudeQuota.budgetSource === "team" ? "team budget from the proxy" : claudeQuota.budgetSource === "member" ? "your budget from the proxy" : "no limit reported by the proxy";
+        return <p className={`home-usage home-quota${view.overBudget ? " warn" : ""}`} title={`Claude Code through the ${claudeQuota.host} LiteLLM proxy. Spend is estimated by the proxy for the current budget cycle${claudeQuota.daysLeft ? `, ${claudeQuota.daysLeft} days left` : ""}. Budget: ${source}.${claudeQuota.teamBudget > 0 ? ` Team${claudeQuota.teamName ? ` ${claudeQuota.teamName}` : ""}: ${formatDollars(claudeQuota.teamSpend)} of ${formatDollars(claudeQuota.teamBudget)}.` : ""}`}>Claude ({claudeQuota.host}): <b className="kv">{formatDollars(claudeQuota.spend)}{view.budget > 0 ? ` / ${formatDollars(view.budget)} (${Math.round(view.percent)}%)` : ""}</b>{claudeQuota.resetAt ? `, resets ${new Date(claudeQuota.resetAt).toLocaleDateString()}` : ""}{claudeQuota.canProject ? <>, on pace for <b className="kv">~{formatDollars(claudeQuota.projected)}</b></> : ""}{claudeQuota.teamBudget > 0 ? `, team ${formatDollars(claudeQuota.teamSpend)} / ${formatDollars(claudeQuota.teamBudget)}` : ""}
+          <label className="quota-budget" title="Monthly budget in USD. Defaults to the value the proxy reports; type your own to override it, clear the field to go back."> budget $<input inputMode="decimal" aria-label="Claude monthly budget in USD" value={budgetDraft ?? (view.budget > 0 ? String(view.budget) : "")} placeholder="none" onChange={(event) => setBudgetDraft(event.target.value)} onBlur={() => { if (budgetDraft !== null) commitBudget(budgetDraft); }} onKeyDown={(event) => { if (event.key === "Enter") commitBudget(event.currentTarget.value); if (event.key === "Escape") setBudgetDraft(null); }} /></label>
+          {view.overridden && <button className="quota-reset" title={`Use the proxy value${claudeQuota.budget > 0 ? ` (${formatDollars(claudeQuota.budget)})` : ""}`} onClick={() => commitBudget("")}>reset</button>}</p>;
+      })()}
       {summary && hasUsage(summary.month) && <p className="home-usage" title={monthTooltip(summary)}>This month: <b className="kv">{usageText(summary.month)}</b>{harnessIds().map((tool) => hasUsage(summary.monthByTool?.[tool]) ? <span key={tool}> | {harnessShort(tool)} <b className="kv">{usageText(summary.monthByTool![tool])}</b></span> : null)}</p>}
       {sessions.length === 0 ? (!loaded ? <div className="loading-card" role="status"><span className="spinner" aria-hidden="true" /><span className="muted">Loading sessions...</span></div> : <div className="empty-card"><div className="empty-icon">+</div><h3>No sessions yet</h3><p>Create a session to connect a project folder to an AI harness such as Claude Code or GitHub Copilot CLI.</p>      <button className="primary-button" onClick={onNew}>New session</button></div>) :
         <>{(grouped ? workspaces : [{ group: ungrouped, sessions }]).map((workspace) => <div className="home-group" key={workspace.group.key}>

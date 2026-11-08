@@ -87,6 +87,10 @@ type App struct {
 	codexQuotaValue        *quota.CodexSnapshot
 	codexQuotaLogged       bool
 	codexQuotaRunner       quota.CodexRunner
+	claudeQuotaAt          time.Time
+	claudeQuotaValue       *quota.LiteLLMSnapshot
+	claudeQuotaLogged      bool
+	claudeQuotaGetter      quota.LiteLLMGetter
 }
 
 type desktopSessionManager interface {

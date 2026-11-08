@@ -39,6 +39,33 @@ func TestGetCopilotQuotaCachesAndHonorsOptOut(t *testing.T) {
 	}
 }
 
+func TestGetClaudeQuotaCachesAndHonorsOptOut(t *testing.T) {
+	configDir := filepath.Join(t.TempDir(), "sessions")
+	calls := 0
+	application := &App{configDirectory: configDir, claudeQuotaGetter: func(_ context.Context, path string) ([]byte, error) {
+		calls++
+		if path == "/key/info" {
+			return []byte(`{"info":{"user_id":"me","team_id":"t"}}`), nil
+		}
+		return []byte(`{"team_info":{"max_budget":5000,"spend":1},"team_memberships":[{"user_id":"me","spend":12,"litellm_budget_table":{"max_budget":3000}}]}`), nil
+	}}
+
+	if got := application.GetClaudeQuota(false); got == nil || got.Spend != 12 || got.Budget != 3000 {
+		t.Fatalf("quota = %+v", got)
+	}
+	application.GetClaudeQuota(false)
+	if calls != 2 {
+		t.Fatalf("calls = %d, want one cached fetch (2 requests)", calls)
+	}
+
+	if err := os.WriteFile(application.settingsPath(), []byte("version: 1\nquota:\n  claude: false\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := application.GetClaudeQuota(true); got != nil || calls != 2 {
+		t.Fatalf("disabled quota = %+v, calls = %d", got, calls)
+	}
+}
+
 func TestGetCodexQuotaCachesAndHonorsOptOut(t *testing.T) {
 	configDir := filepath.Join(t.TempDir(), "sessions")
 	calls := 0

@@ -4,6 +4,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"os"
 	"time"
 
 	"github.com/ma99us/tau-shell/internal/appconfig"
@@ -75,4 +77,48 @@ func (application *App) GetCodexQuota(refresh bool) *quota.CodexSnapshot {
 	application.codexQuotaLogged = false
 	application.codexQuotaValue = &snapshot
 	return application.codexQuotaValue
+}
+
+// GetClaudeQuota returns the caller's LiteLLM team-member spend and budget when
+// Claude Code is routed through a LiteLLM proxy, or nil when disabled or not
+// available. The credential is read in the host from Claude Code's own
+// settings and is never returned to the UI.
+func (application *App) GetClaudeQuota(refresh bool) *quota.LiteLLMSnapshot {
+	settings, err := appconfig.Load(application.settingsPath())
+	if err != nil || !settings.Quota.ClaudeEnabled() {
+		return nil
+	}
+	application.quotaMu.Lock()
+	defer application.quotaMu.Unlock()
+	if !refresh && !application.claudeQuotaAt.IsZero() && time.Since(application.claudeQuotaAt) < quotaCacheTTL {
+		return application.claudeQuotaValue
+	}
+	application.claudeQuotaAt = time.Now()
+	get, host := application.claudeQuotaGetter, "proxy"
+	var fetchErr error
+	if get == nil {
+		home, _ := os.UserHomeDir()
+		var config quota.LiteLLMConfig
+		config, fetchErr = quota.ResolveLiteLLMConfig(os.Getenv, os.ReadFile, home)
+		if fetchErr == nil {
+			get, host = config.HTTPGetter(), config.Host()
+		}
+	}
+	var snapshot quota.LiteLLMSnapshot
+	if fetchErr == nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		defer cancel()
+		snapshot, fetchErr = quota.FetchLiteLLM(ctx, get, host, time.Now())
+	}
+	if fetchErr != nil {
+		if !application.claudeQuotaLogged && !errors.Is(fetchErr, quota.ErrLiteLLMUnavailable) {
+			diagnostics.Warn("Claude proxy quota unavailable", fetchErr)
+			application.claudeQuotaLogged = true
+		}
+		application.claudeQuotaValue = nil
+		return nil
+	}
+	application.claudeQuotaLogged = false
+	application.claudeQuotaValue = &snapshot
+	return application.claudeQuotaValue
 }
