@@ -151,6 +151,9 @@ export type WSLStatus = {
   error?: string;
 };
 
+export type WSLInstallResult = { outcome: "installed" | "restart-required" | "cancelled" | "failed"; message: string; status: WSLStatus };
+export type WSLAction = "wsl" | "distro" | "update";
+
 export type LaunchPreview = {
   executable: string;
   arguments: string[];
@@ -240,6 +243,8 @@ type WailsApp = {
   SelectWorkingDirectory(): Promise<string>;
   SelectWSLWorkingDirectory(distro: string): Promise<string>;
   GetWSLStatus(): Promise<WSLStatus>;
+  GetWSLOnlineDistros(): Promise<string[]>;
+  InstallWSL(action: WSLAction, distro: string): Promise<WSLInstallResult>;
   GetSessionTemplate(tool: string): Promise<SessionTemplate>;
   GetHarnesses(): Promise<{ harnesses: HarnessInfo[]; errors: HarnessLoadError[] }>;
   ConfirmHarness(id: string): Promise<void>;

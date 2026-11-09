@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { defaultDistro, isWindowsMount, wslChoices, wslHarnessSupported } from "../src/wslRuntime.ts";
+import { defaultDistro, isWindowsMount, runtimeLabel, wslChoices, wslHarnessSupported } from "../src/wslRuntime.ts";
 
 const status = (installed: boolean, names: [string, boolean][]) => ({
   installed, distros: names.map(([name, isDefault]) => ({ name, default: isDefault, running: false, version: 2, state: "Stopped" })),
@@ -26,4 +26,10 @@ test("windows mounts are detected and codex is gated", () => {
   assert.equal(isWindowsMount("/home/me/x"), false);
   assert.equal(wslHarnessSupported("codex"), false);
   assert.equal(wslHarnessSupported("claude-code"), true);
+});
+
+test("runtime badge names the distro", () => {
+  assert.equal(runtimeLabel({}), "PowerShell");
+  assert.equal(runtimeLabel({ runtime: "wsl", distro: "Ubuntu" }), "WSL: Ubuntu");
+  assert.equal(runtimeLabel({ runtime: "wsl" }), "WSL");
 });

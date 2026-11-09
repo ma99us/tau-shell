@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/ma99us/tau-shell/internal/diagnostics"
+	"github.com/ma99us/tau-shell/internal/harness"
 	"github.com/ma99us/tau-shell/internal/session"
 	"github.com/ma99us/tau-shell/internal/sessionhost"
 )
@@ -61,6 +62,12 @@ func (application *App) DuplicateSession(id, toolName string, launchArgs []strin
 	copied := source
 	if toolName != "" {
 		copied.Tool = session.Harness(toolName)
+	}
+	if copied.IsWSL() {
+		// The runtime and distro are inherited like the folder; only harnesses WSL supports can be chosen.
+		if adapter, adapterErr := harness.For(copied.Tool); adapterErr == nil && adapter.DiscoversSessionID() {
+			return sessionhost.Snapshot{}, fmt.Errorf("%s sessions are not supported in WSL yet", copied.Tool)
+		}
 	}
 	copied.LaunchArgs = append([]string(nil), source.LaunchArgs...)
 	if launchArgs != nil {

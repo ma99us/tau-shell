@@ -1,7 +1,7 @@
 import { Component, DragEvent, ErrorInfo, KeyboardEvent, MouseEvent, ReactNode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "@xterm/xterm/css/xterm.css";
-import { app, DialogRequest, InstallResult, Session, SessionEvent, ShutdownProgress, SkillsView, SystemStatus, ToolStatus, UpdateResult } from "./bridge";
+import { app, DialogRequest, InstallResult, Session, SessionEvent, ShutdownProgress, SkillsView, SystemStatus, ToolStatus, UpdateResult, WSLAction, WSLStatus } from "./bridge";
 import { HomePanelId, PanelFeedbackState } from "./homePanel";
 import "./theme/tokens.css";
 import "./style.css";
@@ -70,6 +70,8 @@ function App() {
   const [collapsedGroups, setCollapsedGroups] = useState(() => readCollapsed(localStorage));
   const [stopGroup, setStopGroup] = useState<Workspace | null>(null);
   const [status, setStatus] = useState<SystemStatus | null>(null);
+  const [wsl, setWsl] = useState<WSLStatus | null>(null);
+  const [wslBusy, setWslBusy] = useState(false);
   const [tabs, setTabs] = useState<Tab[]>(() => readTabs(reportFrontendFailure));
   const [recentFolders, setRecentFolders] = useState<string[]>(() => readRecentFolders(reportFrontendFailure));
   const [selected, setSelected] = useState("");
@@ -216,11 +218,13 @@ function App() {
 
   const refresh = async (redetectTools = false): Promise<boolean> => {
     try {
-      const [nextSessions, nextStatus, nextGroups] = await Promise.all([
+      const [nextSessions, nextStatus, nextGroups, nextWsl] = await Promise.all([
         app().GetSessions(),
         status && !redetectTools ? Promise.resolve(status) : app().GetSystemStatus(),
         app().GetWorkspaces(),
+        wsl && !redetectTools ? Promise.resolve(wsl) : app().GetWSLStatus().catch(() => null),
       ]);
+      setWsl(nextWsl);
       setSessions(nextSessions);
       setWorkspaceMap(nextGroups ?? {});
       setTabs((current) => {
@@ -673,6 +677,19 @@ function App() {
       setInstalling("");
     }
   };
+  const changeWSL = async (action: WSLAction, distro = "") => {
+    setWslBusy(true);
+    setPanelFeedback("tools", { tone: "progress", message: action === "update" ? "Updating WSL in a separate console..." : "Installing WSL components in a separate console..." });
+    try {
+      const result = await app().InstallWSL(action, distro);
+      setWsl(result.status);
+      setPanelFeedback("tools", result.outcome === "cancelled" ? undefined : { tone: result.outcome === "installed" ? "success" : result.outcome === "failed" ? "error" : "warning", message: result.message });
+    } catch (err) {
+      showPanelError("tools", "ui.install-wsl", err);
+    } finally {
+      setWslBusy(false);
+    }
+  };
   const updateTool = async (tool: ToolStatus) => {
     setInstalling(tool.id);
     setToolNotice(null);
@@ -775,8 +792,10 @@ function App() {
     app().OpenToolSetupPage(tool.id).catch((err) => showPanelError(isHarness(tool.id) ? "harnesses" : "tools", "ui.open-setup-page", err));
   };
   const powershell = status?.tools.find((tool) => tool.id === "powershell");
-  const showSetup = Boolean(powershell && !toolUsable(powershell) && !setupDismissed);
-  const toolActions = { status, installing, notice: toolNotice, noticeToolId: toolNoticeToolId, updates: toolUpdates, refreshing, onUpdate: (tool: ToolStatus) => void updateTool(tool), onInstall: (tool: ToolStatus) => void installTool(tool), onOpenSetup: openSetupPage, onDismissNotice: () => { setToolNotice(null); setToolNoticeToolId(""); }, onError: (tool: ToolStatus, err: unknown) => showPanelError(isHarness(tool.id) ? "harnesses" : "tools", "ui.open-tool-config", err) };
+  // PowerShell 7 is only required when WSL cannot host sessions instead.
+  const wslReady = Boolean(wsl?.installed && wsl.distros.length > 0);
+  const showSetup = Boolean(powershell && !toolUsable(powershell) && !setupDismissed && !wslReady);
+  const toolActions = { status, wsl, wslBusy, onWSLChange: (action: WSLAction, distro?: string) => void changeWSL(action, distro), installing, notice: toolNotice, noticeToolId: toolNoticeToolId, updates: toolUpdates, refreshing, onUpdate: (tool: ToolStatus) => void updateTool(tool), onInstall: (tool: ToolStatus) => void installTool(tool), onOpenSetup: openSetupPage, onDismissNotice: () => { setToolNotice(null); setToolNoticeToolId(""); }, onError: (tool: ToolStatus, err: unknown) => showPanelError(isHarness(tool.id) ? "harnesses" : "tools", "ui.open-tool-config", err) };
 
   return (
     <div className="app">
@@ -843,7 +862,7 @@ function App() {
           </section>
         </main>
       </div>
-      {dialogOpen && <CreateSession recentFolders={recentFolders} onClose={() => setDialogOpen(false)} onCreated={(session) => {
+      {dialogOpen && <CreateSession recentFolders={recentFolders} wsl={wsl} powershellUsable={!powershell || toolUsable(powershell)} onClose={() => setDialogOpen(false)} onCreated={(session) => {
         setSessions((current) => [...current, session]);
         setRecentFolders((current) => [session.workingDir, ...current.filter((folder) => folder.toLowerCase() !== session.workingDir.toLowerCase())].slice(0, 5));
         setDialogOpen(false);

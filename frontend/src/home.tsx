@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { app, AppUpdate, CodexQuota, CopilotQuota, InstallResult, Session, SkillsView, SystemStatus, ToolStatus, WSLStatus } from "./bridge";
+import { app, AppUpdate, CodexQuota, CopilotQuota, InstallResult, Session, SkillsView, SystemStatus, ToolStatus, WSLAction, WSLStatus } from "./bridge";
 import { UsageSummary, hasUsage, monthTooltip, usageText } from "./usage";
 import { GearIcon } from "./harnessIcons";
 import { getHarnesses, harnessIds, harnessShort, isHarness } from "./harnesses";
@@ -10,6 +10,7 @@ import { ControlAudit } from "./controlAudit";
 import { PhonePane } from "./phonePane";
 import { SecretsPane } from "./secretsPane";
 import { Workspace, ungrouped } from "./workspaces";
+import { runtimeLabel } from "./wslRuntime";
 import { claudeBudgetKey, groupedKey, readClaudeBudget, readGrouped, writeStored } from "./storage";
 import { ClaudeQuota, claudeQuotaView, formatDollars, parseBudgetInput } from "./claudeQuota";
 import { UpdateDialog } from "./updateDialog";
@@ -182,7 +183,7 @@ export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAl
         {grouped && <GroupHeader workspace={workspace} controls={groupControls} variant="home" />}
         {(!grouped || !groupControls.collapsed.has(workspace.group.key)) && <div className="session-grid">{workspace.sessions.map((session) => <article className={`session-card ${session.runningHere ? "running" : ""} ${dragId === session.id ? "dragging" : ""} ${dropClass(session.id)}`} key={session.id} style={sessionColorStyle(session.color)} data-colored={session.color ? "" : undefined} {...dragProps(session.id)}>
           <div className="card-top"><ProjectIcon session={session} /><span className={`state-pill ${session.runningHere ? "running" : ""} ${!session.runningHere && session.status === "failed" ? "status-warn-text" : ""}`}>{session.runningHere ? "Running" : statusLabel(session.status)}</span><button className="delete-button" aria-label={`Delete ${session.name}`} title="Delete session" onClick={() => onDelete(session)}>x</button></div>
-          <div className="card-title"><h3>{session.name}</h3>{hasUsage(summary?.sessions?.[session.id]) && <span className="card-usage" title="Estimate from harness logs; never reset">{usageText(summary!.sessions![session.id])}</span>}</div><p className="path">{session.workingDir}</p><p className="session-meta">{session.tool}</p>
+          <div className="card-title"><h3>{session.name}</h3>{hasUsage(summary?.sessions?.[session.id]) && <span className="card-usage" title="Estimate from harness logs; never reset">{usageText(summary!.sessions![session.id])}</span>}</div><p className="path">{session.workingDir}</p><p className="session-meta">{session.tool}<span className="runtime-badge" title={session.runtime === "wsl" ? `Runs inside WSL distro ${session.distro}` : "Runs in PowerShell 7 on Windows"}>{runtimeLabel(session)}</span></p>
           {session.lastError && <p className="card-error">{session.lastError}</p>}
           <SessionNotes session={session} onOpen={(url) => app().OpenSessionLink(session.id, url).catch((error) => onError("ui.open-session-link", error))} />
           <div className="card-sizer" aria-hidden="true"><span className="tile-button">Start fresh</span><span className="tile-button">Resume</span><span className="tile-button">Clone</span><span className="check-option"><input type="checkbox" tabIndex={-1} />Auto resume</span></div>
@@ -200,7 +201,7 @@ export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAl
         onFeedbackAction={() => openToolNoticeAction(tools, "tools")}>
         <div className="tool-list">
         {status?.tools.filter((tool) => !isHarness(tool.id)).map((tool) => <ToolRow key={tool.id} tool={tool} actions={tools} />) ?? <div className="loading-card" role="status"><span className="spinner" aria-hidden="true" /><span className="muted">Detecting tools...</span></div>}
-        <WSLRow refreshing={tools.refreshing} />
+        <WSLRow actions={tools} />
         </div>
       </HomePanel>
       <HomePanel title="AI Harnesses" feedback={toolNoticeFeedback(tools, "harnesses", panelFeedback.harnesses)} onDismissFeedback={() => dismissToolFeedback(tools, "harnesses", onDismissPanelFeedback)}
@@ -274,6 +275,9 @@ function SkillsPanel({ skills, unsupportedNote, feedback, onDismissFeedback }: {
 
 type ToolActions = {
   status: SystemStatus | null;
+  wsl: WSLStatus | null;
+  wslBusy: boolean;
+  onWSLChange: (action: WSLAction, distro?: string) => void;
   installing: string;
   notice: InstallResult | null;
   noticeToolId?: string;
@@ -329,14 +333,14 @@ export function Setup({ powershell, actions, onRecheck, onContinue, feedback, on
   onDismissFeedback?: () => void;
 }) {
   return <div className="home setup-screen">
-    <div className="hero"><div><p className="eyebrow">FIRST-RUN SETUP</p><h1>PowerShell 7 is required.</h1>
-      <p className="muted">TauShell hosts every session through PowerShell 7. Install it, then re-check to continue.</p></div></div>
+    <div className="hero"><div><p className="eyebrow">FIRST-RUN SETUP</p><h1>PowerShell 7 or WSL is required.</h1>
+      <p className="muted">TauShell hosts sessions through PowerShell 7, or inside a WSL distribution if you prefer. Install either, then re-check to continue.</p></div></div>
     <HomePanel feedback={toolNoticeFeedback(actions, "tools", feedback)} onDismissFeedback={() => dismissToolFeedback(actions, "tools", onDismissFeedback ? () => onDismissFeedback() : undefined)}
       onFeedbackAction={() => openToolNoticeAction(actions, "tools")}>
-      <div className="tool-list"><ToolRow tool={powershell} actions={actions} /></div>
+      <div className="tool-list"><ToolRow tool={powershell} actions={actions} /><WSLRow actions={actions} /></div>
     </HomePanel>
     <div className="modal-actions"><button className="secondary-button" onClick={onRecheck}>Re-check</button>
-      <button className="text-button" onClick={onContinue}>Continue without PowerShell 7</button></div>
+      <button className="text-button" onClick={onContinue}>Continue without PowerShell 7 or WSL</button></div>
   </div>;
 }
 
@@ -357,32 +361,45 @@ function installHint(tool: ToolStatus, status: SystemStatus | null): string {
   return `winget was not found. Open the vendor setup instructions for ${tool.name}.`;
 }
 
-// WSL is optional and never installed by TauShell (it needs administrator rights and a reboot), so this row only reports readiness and gives guidance.
-function WSLRow({ refreshing }: { refreshing: boolean }) {
-  const [wsl, setWsl] = useState<WSLStatus | null>(null);
-  useEffect(() => {
-    if (refreshing) return;
-    let cancelled = false;
-    app().GetWSLStatus().then((next) => { if (!cancelled) setWsl(next); }).catch(() => undefined);
-    return () => { cancelled = true; };
-  }, [refreshing]);
+// WSL is optional. Install and update actions only start wsl.exe after a native confirmation; TauShell never elevates itself or restarts Windows.
+function WSLRow({ actions }: { actions: ToolActions }) {
+  const wsl = actions.wsl;
+  const [online, setOnline] = useState<string[] | null>(null);
+  const [choice, setChoice] = useState("");
+  const [loadError, setLoadError] = useState("");
   if (!wsl) return null;
   const ready = wsl.installed && wsl.distros.length > 0;
   const details = [wsl.version && `WSL ${wsl.version}`, wsl.kernelVersion && `kernel ${wsl.kernelVersion}`, wsl.wslgVersion && `WSLg ${wsl.wslgVersion}`].filter(Boolean).join(" | ");
   const failed = wsl.checks.filter((check) => !check.ok);
   const notes = [wsl.error, ...failed.map((check) => check.detail ? `${check.name}: ${check.detail}` : check.name), ...wsl.warnings].filter(Boolean);
+  const loadOnline = () => {
+    setLoadError("");
+    app().GetWSLOnlineDistros().then((names) => { setOnline(names); setChoice((current) => current || (names.includes("Ubuntu") ? "Ubuntu" : names[0] ?? "")); })
+      .catch((error) => setLoadError(error instanceof Error ? error.message : String(error)));
+  };
+  const installed = new Set(wsl.distros.map((distro) => distro.name.toLowerCase()));
+  const available = (online ?? []).filter((name) => !installed.has(name.toLowerCase()));
   return <div className="tool-row" title={notes.join("\n") || undefined}>
     <span className={`status-dot ${ready && failed.length === 0 ? "online" : wsl.installed ? "warn" : ""}`} />
     <div className="tool-details">
       <div className="tool-heading"><strong>WSL (optional)</strong><span className="tool-version">{wsl.installed ? details || "Installed" : "Not installed"}</span></div>
       {wsl.distros.length > 0 && <span className="tool-path">{wsl.distros.map((distro) => `${distro.name}${distro.default ? " (default)" : ""}: ${distro.running ? "running" : "stopped"}`).join(" | ")}</span>}
       {notes.map((note) => <span key={note} className="tool-warning tool-support-note">{note}</span>)}
-      {!wsl.installed && <span className="muted">Optional: run harnesses inside WSL. Install it yourself with "wsl --install" in an administrator terminal (a reboot is required); TauShell never installs or elevates it.</span>}
-      {wsl.installed && wsl.distros.length === 0 && <span className="muted">No distro found. Run "wsl --install -d Ubuntu" yourself, then Refresh.</span>}
+      {loadError && <span className="tool-warning tool-support-note">{loadError}</span>}
+      {!wsl.installed && <span className="muted">Optional: run harnesses inside WSL instead of PowerShell 7. Installing needs administrator approval and may need a Windows restart; TauShell asks first and never restarts Windows.</span>}
+      {wsl.installed && wsl.distros.length === 0 && <span className="muted">No distribution found. Install one below, then open it once to create your Linux user.</span>}
+      <div className="tool-actions">
+        {!wsl.installed && <button className="secondary-button tool-action" disabled={actions.wslBusy} title="Run wsl --install --no-distro (asks first)" onClick={() => actions.onWSLChange("wsl")}>{actions.wslBusy ? "Working..." : "Install WSL"}</button>}
+        {wsl.installed && <button className="secondary-button tool-action" disabled={actions.wslBusy} title="Run wsl --update (asks first)" onClick={() => actions.onWSLChange("update")}>{actions.wslBusy ? "Working..." : "Update WSL"}</button>}
+        {wsl.installed && online === null && <button className="secondary-button tool-action" disabled={actions.wslBusy} title="List the distributions Microsoft offers" onClick={loadOnline}>Install a distribution...</button>}
+        {wsl.installed && online !== null && (available.length > 0 ? <>
+          <select aria-label="Distribution to install" value={choice} onChange={(event) => setChoice(event.target.value)}>{available.map((name) => <option key={name} value={name}>{name}</option>)}</select>
+          <button className="secondary-button tool-action" disabled={actions.wslBusy || !choice} title={`Run wsl --install -d ${choice} (asks first)`} onClick={() => actions.onWSLChange("distro", choice)}>Install</button>
+        </> : <span className="muted">Every offered distribution is already installed.</span>)}
+      </div>
     </div>
   </div>;
 }
-
 function ToolRow({ tool, actions }: { tool: ToolStatus; actions: ToolActions }) {
   const usable = toolUsable(tool);
   const supportNote = tool.installed && tool.support === "below-minimum" ? `below minimum ${tool.minimum}` :

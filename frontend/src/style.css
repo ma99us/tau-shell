@@ -965,6 +965,15 @@ h3 {
   white-space: nowrap;
 }
 
+.runtime-badge {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border: 1px solid var(--accent-border-3);
+  border-radius: var(--radius-8);
+  color: var(--text-11);
+  font-size: var(--fs-10);
+}
+
 .session-meta {
   margin: 5px 0 0;
   overflow: hidden;

@@ -17,14 +17,14 @@ TauShell is a local Windows desktop session manager: a Go host (`cmd/taushell`, 
 - Do not treat [`docs/v1/`](docs/v1/) (historical) or [`docs/v3/`](docs/v3/) (future-only planning) as requirements unless the user asks.
 - The CLI keeps `list`, `start`, `restore` and `ctl`. There is no TUI and no TUI fallback.
 - Target Windows 10 and later. Keep TauShell-owned UI text ASCII; never rewrite provider output.
-- Detect WebView2, PowerShell 7, harnesses, versions and declared tool dependencies. Missing host prerequisites use first-run setup; missing harnesses do not block Home. Offer confirmed installs (winget, vendor links as fallback); never install or elevate silently.
+- Detect WebView2, PowerShell 7 (optional when WSL is ready), WSL, harnesses, versions and declared tool dependencies. Missing host prerequisites use first-run setup; missing harnesses do not block Home. Offer confirmed installs (winget, vendor links as fallback); never install or elevate silently.
 - Use installed tool versions; keep per-adapter tested ranges and capability probes; warn outside them; never silently pin, downgrade or auto-update.
 - Managed Node/npm and PortableGit installs affect only TauShell-launched processes, not registry PATH. Identify sources, confirm installs/upgrades separately, verify downloads, and re-detect the requested version before reporting success.
 - Closing TauShell with running sessions needs confirmation, then graceful interruption, a short wait, then forced termination. Closing a running session's tab needs the same confirmation. A graceful stop does not guarantee resume.
 
 ## Architecture rules
 
-- Keep PowerShell first-class; do not replace it with a custom shell. WSL is an additional per-session runtime behind `internal/runtime` (see [`docs/wsl/`](docs/wsl/)), never a replacement; PowerShell 7 stays the default and a required host prerequisite until the WSL plan makes it optional. WSL sessions launch with `wsl.exe --exec` (no shell), forward env through `WSLENV`, tag every launch with `TAUSHELL_LAUNCH` and clean up leftovers after exit. Do not start a stopped distro just to read state.
+- Keep PowerShell first-class; do not replace it with a custom shell. WSL is an additional per-session runtime behind `internal/runtime` (see [`docs/wsl/`](docs/wsl/)), never a replacement; PowerShell 7 stays the default, but first-run setup is skipped when WSL has a usable distro (PowerShell 7 or WSL is enough). WSL and distro install or update only start wsl.exe after a native confirmation; never restart Windows or elevate silently. WSL sessions launch with `wsl.exe --exec` (no shell), forward env through `WSLENV`, tag every launch with `TAUSHELL_LAUNCH` and clean up leftovers after exit. Do not start a stopped distro just to read state.
 - Model persistent sessions, not terminal tabs or windows.
 - Keep core session management tool-independent; harness launch/resume belongs in manifests/adapters.
 - Restoring the PowerShell process is not resuming the harness conversation. Claim a resume only when the harness confirms it; surface unsupported and failed resumes.

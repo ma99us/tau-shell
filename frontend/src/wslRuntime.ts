@@ -20,3 +20,8 @@ export function defaultDistro(distros: WSLDistro[]): string {
 export function isWindowsMount(path: string): boolean {
   return /^\/mnt\/[a-zA-Z](\/|$)/.test(path.trim());
 }
+
+// Badge text for a session card: where its harness runs.
+export function runtimeLabel(session: { runtime?: string; distro?: string }): string {
+  return session.runtime === "wsl" ? (session.distro ? `WSL: ${session.distro}` : "WSL") : "PowerShell";
+}

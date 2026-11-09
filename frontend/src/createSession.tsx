@@ -2,14 +2,17 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { app, LaunchPreview, Session, WSLStatus } from "./bridge";
 import { HarnessIcon } from "./harnessIcons";
 import { getHarnesses } from "./harnesses";
-import { defaultDistro, isWindowsMount, wslChoices, wslHarnessSupported } from "./wslRuntime";
+import { defaultDistro, isWindowsMount, runtimeLabel, wslChoices, wslHarnessSupported } from "./wslRuntime";
 
 function parseLaunchArgs(text: string): string[] {
   return text.split(/\r?\n/).map((arg) => arg.trim()).filter(Boolean);
 }
 
-export function CreateSession({ recentFolders, clone, onClose, onCreated, onError }: {
+export function CreateSession({ recentFolders, wsl, powershellUsable = true, clone, onClose, onCreated, onError }: {
   recentFolders: string[];
+  // Shared WSL readiness; the runtime can only be chosen for a new session.
+  wsl?: WSLStatus | null;
+  powershellUsable?: boolean;
   // Clone mode: the folder is inherited and fixed; harness and arguments start from the original's.
   clone?: { source: Session; launchArgs: string[] };
   onClose: () => void;
@@ -21,19 +24,12 @@ export function CreateSession({ recentFolders, clone, onClose, onCreated, onErro
   const [workingDir, setWorkingDir] = useState(clone?.source.workingDir ?? "");
   const [launchArgs, setLaunchArgs] = useState(clone ? clone.launchArgs.join("\n") : "");
   const toolChosen = useRef(false);
-  // The runtime picker appears only when WSL reports distros; clones inherit the original.
-  const [wslStatus, setWslStatus] = useState<WSLStatus | null>(null);
-  const [runtime, setRuntime] = useState<"" | "wsl">("");
-  const [distro, setDistro] = useState("");
-  const distros = wslChoices(wslStatus);
-  const inWSL = !clone && runtime === "wsl";
+  // The runtime picker appears only when WSL reports distros. A clone keeps the original's runtime and distro, like its folder.
+  const distros = wslChoices(wsl ?? null);
+  const [runtime, setRuntime] = useState<"" | "wsl">(clone ? (clone.source.runtime === "wsl" ? "wsl" : "") : !powershellUsable && distros.length > 0 ? "wsl" : "");
+  const [distro, setDistro] = useState(clone?.source.distro ?? (!powershellUsable ? defaultDistro(distros) : ""));
+  const inWSL = runtime === "wsl";
   const runtimeName = inWSL ? "wsl" : "";
-  useEffect(() => {
-    if (clone) return;
-    let cancelled = false;
-    app().GetWSLStatus().then((status) => { if (!cancelled) setWslStatus(status); }).catch(() => undefined);
-    return () => { cancelled = true; };
-  }, []);
   const [templateText, setTemplateText] = useState<string | null>(null);
   const [preview, setPreview] = useState<LaunchPreview | null>(null);
   const [previewError, setPreviewError] = useState("");
@@ -45,6 +41,7 @@ export function CreateSession({ recentFolders, clone, onClose, onCreated, onErro
   const [yamlDirty, setYamlDirty] = useState(false);
   const [yamlError, setYamlError] = useState("");
   const chooseRuntime = (next: "" | "wsl") => {
+    if (clone) return;
     setRuntime(next);
     setWorkingDir("");
     setFormError("");
@@ -125,6 +122,7 @@ export function CreateSession({ recentFolders, clone, onClose, onCreated, onErro
   return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="modal">
     <div className="modal-heading"><h2>{clone ? `Clone ${clone.source.name}` : "Start new AI session"}</h2><button className="icon-button" onClick={onClose}>x</button></div>
     <form onSubmit={(event) => void submit(event)}>
+      {clone && <label>Runtime <span className="optional">(inherited from the original, cannot be changed)</span><div className="folder-row"><input readOnly value={runtimeLabel(clone.source)} /></div></label>}
       {!clone && distros.length > 0 && <div className="harness-field"><span className="harness-label" id="runtime-label">Runtime</span>
         <div className="harness-picker" role="radiogroup" aria-labelledby="runtime-label">
           <button type="button" role="radio" aria-checked={!inWSL} className={`harness-option ${!inWSL ? "selected" : ""}`} onClick={() => chooseRuntime("")}><span className="harness-name">PowerShell</span></button>
