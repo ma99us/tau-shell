@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import { app, GitStatus, HarnessWidgets, Session } from "./bridge";
@@ -190,13 +190,15 @@ function UsageChips({ usage }: { usage: SessionUsage }) {
   </>;
 }
 
-export function TerminalPane({ session, visible, busy, harness, onSend, onNotice, onInterrupt, onLaunch, onResumeConversation, onError }: {
+export function TerminalPane({ session, visible, busy, harness, onSend, onNotice, toasts, onInterrupt, onLaunch, onResumeConversation, onError }: {
   session?: Session;
   visible: boolean;
   busy: boolean;
   harness?: { widgets: HarnessWidgets; modelSupported: boolean };
   onSend?: (text: string, submit: boolean, label: string) => void;
   onNotice?: (message: string) => void;
+  // This session's toasts, shown between the toolbar and the terminal.
+  toasts?: ReactNode;
   onInterrupt: () => void;
   onLaunch: (session: Session, mode: "start" | "restore" | "fresh") => void;
   onResumeConversation: (session: Session, harnessSessionId: string) => void;
@@ -371,6 +373,7 @@ export function TerminalPane({ session, visible, busy, harness, onSend, onNotice
       <span className={`terminal-status ${!session.runningHere && session.status === "failed" ? "status-warn-text" : ""}`}>{session.runningHere ? "" : statusLabel(session.status) || "Not started"}</span>
       {!session.runningHere && (session.hasResumeId && session.resumeNote ? <button className="secondary-button terminal-action" disabled={busy} title={session.resumeNote} onClick={() => onLaunch(session, "fresh")}>Start fresh</button> : <button className="primary-button terminal-action" disabled={busy} onClick={() => onLaunch(session, session.hasResumeId ? "restore" : "start")}>{session.hasResumeId ? "Resume" : "Start"}</button>)}
     </div>
+    {toasts}
     <div className="terminal-body">
       <div className="terminal-container" ref={container} />
       <div className="side-rail">

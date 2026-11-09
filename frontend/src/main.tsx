@@ -17,6 +17,8 @@ import { NotesDialog } from "./sessionNotesView";
 import { sessionColorStyle, SessionMenu, statusLabel, StateIcon } from "./sessionVisuals";
 import { Home, SkillsActions, toolUsable, Setup } from "./home";
 import { terminalInstances, lastInputAt, terminalTitles, echoWindowMs, fitInstances, waitForTerminal, sendToSession, controlSend, interruptSession, queueHooks, TerminalPane } from "./terminalPane";
+import { ToastStack, useToasts } from "./toast";
+import { APP_SCOPE } from "./toasts";
 import { clearQueue, queuedTotal, restoreQueues, runQueues, setQueueForceSender, setQueueKicker, setQueuePersister, subscribeQueues } from "./promptQueue";
 import { CreateSession } from "./createSession";
 import { duplicateAndLaunch } from "./sessionActions";
@@ -149,9 +151,8 @@ function App() {
   const [shutdown, setShutdown] = useState<ShutdownProgress | null>(null);
   const [renameRequest, setRenameRequest] = useState<Session | null>(null);
   const [notesRequest, setNotesRequest] = useState<Session | null>(null);
-  const [error, setError] = useState("");
+  const toasts = useToasts();
   const [homeFeedback, setHomeFeedback] = useState<Partial<Record<HomePanelId, PanelFeedbackState>>>({});
-  const [notice, setNotice] = useState<{ sessionId: string; message: string; isError: boolean } | null>(null);
   const [palette, setPalette] = useState<PaletteItem[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [installing, setInstalling] = useState("");
@@ -168,12 +169,12 @@ function App() {
   const [loaded, setLoaded] = useState(false);
   const [autoResumeAll, setAutoResumeAll] = useState(false);
   const autoResumeRan = useRef(false);
-  const [updateNote, setUpdateNote] = useState("");
-  const showError = (source: string, failure: unknown) => {
+  // A failure about one session passes its id so the toast shows on that session's panel, not on every tab.
+  const showError = (source: string, failure: unknown, sessionId = APP_SCOPE) => {
     const message = reportFrontendFailure(source, failure);
-    const panel = homePanelForError(source);
+    const panel = sessionId === APP_SCOPE ? homePanelForError(source) : undefined;
     if (panel) setHomeFeedback((current) => ({ ...current, [panel]: { tone: "error", message } }));
-    else setError(message);
+    else toasts.notify(sessionId, "error", message);
     return message;
   };
   const setPanelFeedback = (panel: HomePanelId, feedback?: PanelFeedbackState) => {
@@ -206,7 +207,7 @@ function App() {
       const targets = sessions.filter((session) => (all || session.autoResume || restore.has(session.id)) && !session.runningHere && session.hasResumeId && !session.resumeNote);
       if (updated) {
         const unresumed = (updated.sessions ?? []).length - targets.filter((session) => restore.has(session.id)).length;
-        setUpdateNote(`TauShell changed from ${updated.from} to ${updated.to}.${unresumed > 0 ? ` ${unresumed} session(s) could not be resumed automatically.` : ""}`);
+        toasts.notify(APP_SCOPE, "info", `TauShell changed from ${updated.from} to ${updated.to}.${unresumed > 0 ? ` ${unresumed} session(s) could not be resumed automatically.` : ""}`);
       }
       for (const session of targets) await launch(session, "restore");
       if (targets.length > 0) setSelected("");
@@ -232,7 +233,7 @@ function App() {
       });
       setSelected((current) => nextSessions.some((session) => session.id === current) ? current : "");
       setStatus(nextStatus);
-      setError("");
+      toasts.clear(APP_SCOPE, "error");
       return true;
     } catch (err) {
       showError("ui.refresh", err);
@@ -396,7 +397,8 @@ function App() {
 
   const launch = async (session: Session, mode: "start" | "restore" | "fresh" | "conversation", conversationId = "") => {
     setBusy(true);
-    setError("");
+    toasts.clear(APP_SCOPE, "error");
+    toasts.clear(session.id, "error");
     try {
       openTab(session);
       const terminal = await waitForTerminal(session.id);
@@ -415,13 +417,13 @@ function App() {
       for (const delay of [500, 2000]) {
         window.setTimeout(() => {
           const current = terminalInstances.get(started.id);
-          if (current) void app().ResizeTerminal(started.id, current.cols, current.rows).catch((err) => { if (!isStoppedSessionError(err)) showError("ui.terminal-layout", err); });
+          if (current) void app().ResizeTerminal(started.id, current.cols, current.rows).catch((err) => { if (!isStoppedSessionError(err)) showError("ui.terminal-layout", err, started.id); });
         }, delay);
       }
       await refresh();
-      if (started.launchNote) setError(started.launchNote);
+      if (started.launchNote) toasts.notify(started.id, "error", started.launchNote);
     } catch (err) {
-      showError("ui.session-launch", err);
+      showError("ui.session-launch", err, session.id);
     } finally {
       setBusy(false);
     }
@@ -449,7 +451,7 @@ function App() {
       setCloseRequest(null);
       await refresh();
     } catch (err) {
-      showError("ui.stop-session", err);
+      showError("ui.stop-session", err, session.id);
     } finally {
       setBusy(false);
     }
@@ -573,16 +575,12 @@ function App() {
     const tool = toolFor(session);
     return session.runningHere && tool?.widgets ? { widgets: tool.widgets, modelSupported: Boolean(tool.capabilities?.some((capability) => capability.option === "--model" && capability.available)) } : undefined;
   };
+  const toastTtl = 6000;
+  const notifySession = (sessionId: string, message: string) => toasts.notify(sessionId, "info", message, { ttl: toastTtl });
   const sendFor = (session: Session) => (text: string, submit: boolean, label: string) =>
     sendToSession(session, text, submit, label,
-      (message) => setNotice({ sessionId: session.id, message, isError: false }),
-      (message) => setNotice({ sessionId: session.id, message, isError: true }));
-
-  useEffect(() => {
-    if (!notice) return;
-    const timer = window.setTimeout(() => setNotice(null), 6000);
-    return () => window.clearTimeout(timer);
-  }, [notice]);
+      (message) => notifySession(session.id, message),
+      (message) => toasts.notify(session.id, "error", message, { ttl: toastTtl }));
 
   const openPalette = async () => {
     const items: PaletteItem[] = [
@@ -826,9 +824,7 @@ function App() {
             </div>
             <button className="tab-scroll-button" aria-label="Scroll tabs right" disabled={!tabScroll.right} onClick={() => scrollTabs(1)}>&gt;</button>
           </div>
-          {updateNote && <div className="notice-banner" role="status">{updateNote}<button onClick={() => setUpdateNote("")}>Dismiss</button></div>}
-          {error && <div className="error-banner">{error}<button onClick={() => setError("")}>Dismiss</button></div>}
-          {notice && notice.sessionId === selected && <div className={notice.isError ? "error-banner" : "notice-banner"} role="status">{notice.message}<button onClick={() => setNotice(null)}>Dismiss</button></div>}
+          <ToastStack toasts={toasts} scope={APP_SCOPE} />
           <section className="main-content">
             <div id="panel-home" className={`home-container ${selected ? "hidden" : ""}`} role="tabpanel" aria-labelledby="tab-home" tabIndex={0}>
               {showSetup && powershell ? <Setup powershell={powershell} actions={toolActions} onRecheck={() => void refresh(true)} onContinue={() => setSetupDismissed(true)} feedback={homeFeedback.tools} onDismissFeedback={() => setPanelFeedback("tools", undefined)} /> :
@@ -840,7 +836,7 @@ function App() {
               if (!tab && !session?.runningHere) return null;
               return (
                 <div id={`panel-${id}`} className={`terminal-tab-content ${tab && selected === id ? "" : "hidden"}`} role="tabpanel" aria-labelledby={`tab-${id}`} tabIndex={0} key={id}>
-                  <TerminalPane session={session} visible={Boolean(tab && selected === id)} busy={busy} harness={session ? harnessFor(session) : undefined} onSend={session ? sendFor(session) : undefined} onNotice={(message) => session && setNotice({ sessionId: session.id, message, isError: false })} onInterrupt={() => { const harness = session && harnessFor(session); if (session && harness) interruptSession(session, harness.widgets.interruptKeys); }} onLaunch={launch} onResumeConversation={(target, conversationId) => void launch(target, "conversation", conversationId)} onError={(failure) => showError("ui.terminal", failure)} />
+                  <TerminalPane session={session} visible={Boolean(tab && selected === id)} busy={busy} harness={session ? harnessFor(session) : undefined} onSend={session ? sendFor(session) : undefined} onNotice={(message) => notifySession(id, message)} onInterrupt={() => { const harness = session && harnessFor(session); if (session && harness) interruptSession(session, harness.widgets.interruptKeys); }} onLaunch={launch} onResumeConversation={(target, conversationId) => void launch(target, "conversation", conversationId)} onError={(failure) => showError("ui.terminal", failure, id)} toasts={<ToastStack toasts={toasts} scope={id} />} />
                 </div>
               );
             })}

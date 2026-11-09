@@ -163,8 +163,12 @@ never for body text or inside buttons.
   panel that owns the action. Tool install/update results route to Tools or AI
   Harnesses; refresh, skills, phone, control-channel, secrets, and session
   feedback stay with their own panels. Do not add a floating Home result banner.
-- **Session notices:** pending-command and other terminal notices remain scoped
-  to their session panel and are not shown on other tabs.
+- **Toasts:** `toasts.ts`/`toast.tsx` (`useToasts`, `ToastStack`) are the one
+  toast flow. A toast has a scope: `APP_SCOPE` for TauShell-wide results, which show
+  above every tab, or a session id, which shows between that session's toolbar and
+  terminal and only while its tab is selected. Session failures (launch, stop,
+  terminal, Git sync, queue send) pass the session id to `showError`/`notify`. A
+  scope keeps one toast per tone; info toasts may expire, errors stay until dismissed.
 - **Modals and palette:** centered over `--scrim`; eyebrow, then `h2`;
   actions right-aligned; Escape closes. The command palette (`Ctrl+K`) is a
   grouped, keyboard-navigable list.
