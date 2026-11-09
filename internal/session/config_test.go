@@ -2,8 +2,8 @@ package session
 
 import (
 	"bytes"
-	"fmt"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"

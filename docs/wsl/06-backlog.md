@@ -58,6 +58,13 @@ Harness-specific risks to check first:
 | Resume check, model, title, usage and activity readers for WSL sessions | partly verified | Claude resume check against the distro home was seen refusing a conversation-less session. Readers run only while the distro is running (they never start it); final usage of a stopped distro is ingested on the next launch. Model, title and usage on a real conversation not re-checked end to end |
 | Phone server with a WSL session | open | Confirm guards and queue behavior are unchanged |
 
+## 2a. Pending at the stop point (after Phase 5)
+
+- Phase 6 hardening not started: distro stopped mid-session, `wsl --shutdown`, Windows sleep, locale; AGENTS.md and docs/v2 wording; smoke test for the WSL setup row.
+- Codex, OpenCode and GSD do not run (or are not fully read) in WSL sessions; no login was possible on this machine.
+- CLI `start` and `restore` reject WSL sessions.
+- Install and update flows, update-available detection, first-run without pwsh and the WSL UI were never run for real or checked in a real window.
+- Multiple distros and users, `/mnt/c` repositories, credential helpers, corporate TLS CA in the distro are unverified.
 ## 3. How to close an item
 
 1. Run the check on a disposable or approved distro; never print credentials.

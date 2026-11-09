@@ -14,8 +14,8 @@ import (
 	"github.com/ma99us/tau-shell/internal/conpty"
 	"github.com/ma99us/tau-shell/internal/diagnostics"
 	"github.com/ma99us/tau-shell/internal/harness"
-	hostruntime "github.com/ma99us/tau-shell/internal/runtime"
 	"github.com/ma99us/tau-shell/internal/harness/manifest"
+	hostruntime "github.com/ma99us/tau-shell/internal/runtime"
 	"github.com/ma99us/tau-shell/internal/session"
 	"github.com/ma99us/tau-shell/internal/terminal"
 	"github.com/ma99us/tau-shell/internal/tools"
@@ -336,7 +336,7 @@ func runSession(id string, restoring bool) (returnErr error) {
 		Executable: command.Executable,
 		Directory:  config.WorkingDir,
 		Args:       command.Args,
-		Env: conpty.ChildEnvironment(launchEnv),
+		Env:        conpty.ChildEnvironment(launchEnv),
 		OnStart: func(processID int) error {
 			if err := store.MarkRunning(context.Background(), id, processID); err != nil {
 				return err
