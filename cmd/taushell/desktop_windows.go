@@ -532,6 +532,7 @@ func (application *App) saveNewConfig(config session.Config) (sessionhost.Snapsh
 		WorkingDir: config.WorkingDir,
 		Runtime:    config.Runtime,
 		Distro:     config.WSL.Distro,
+		Worktree:   config.WorktreeName(),
 		Status:     session.StatusNeverStarted,
 	}, nil
 }

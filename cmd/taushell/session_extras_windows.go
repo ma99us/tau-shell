@@ -48,6 +48,10 @@ func (application *App) GetSessionLaunchArgs(id string) ([]string, error) {
 // toolName or nil launchArgs keeps the source's). Runtime state (resume IDs,
 // restore outcomes) is never copied.
 func (application *App) DuplicateSession(id, toolName string, launchArgs []string) (snapshot sessionhost.Snapshot, err error) {
+	return application.duplicateSession(id, toolName, launchArgs, nil)
+}
+
+func (application *App) duplicateSession(id, toolName string, launchArgs []string, wt *WorktreeOptions) (snapshot sessionhost.Snapshot, err error) {
 	defer func() {
 		if err != nil {
 			diagnostics.Error("duplicate session failed", err, "session_id", id)
@@ -60,6 +64,8 @@ func (application *App) DuplicateSession(id, toolName string, launchArgs []strin
 		return sessionhost.Snapshot{}, err
 	}
 	copied := source
+	// A plain clone shares the folder, so it never owns (or may remove) the source's worktree.
+	copied.Worktree = nil
 	if toolName != "" {
 		copied.Tool = session.Harness(toolName)
 	}
@@ -96,6 +102,17 @@ func (application *App) DuplicateSession(id, toolName string, launchArgs []strin
 		if _, statErr := os.Stat(filepath.Join(application.configDirectory, copied.ID+".yaml")); errors.Is(statErr, os.ErrNotExist) {
 			break
 		}
+	}
+	if wt != nil {
+		cleanup, wtErr := application.attachWorktree(&copied, source.WorkingDir, *wt)
+		if wtErr != nil {
+			return sessionhost.Snapshot{}, wtErr
+		}
+		defer func() {
+			if err != nil {
+				cleanup()
+			}
+		}()
 	}
 	snapshot, err = application.saveNewConfig(copied)
 	if err != nil {

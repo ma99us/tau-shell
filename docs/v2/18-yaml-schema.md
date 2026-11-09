@@ -29,6 +29,15 @@ powershell:
 # wsl:
 #   distro: Ubuntu
 
+# Written by TauShell only when it created working_dir as a git worktree for this
+# session. Its presence is what allows "remove worktree" on delete; do not add it
+# by hand to a folder TauShell did not create.
+# worktree:
+#   name: fix-login
+#   branch: taushell/fix-login
+#   base: main
+#   repo: C:\Projects\app   # the main working tree
+
 # Ordered, optional arguments for the selected harness:
 launch_args:
   - --model
@@ -122,6 +131,10 @@ prefilled and editable. It then copies every other definition field
 (environment, PowerShell options, presets, color) into a new file named
 "name (n)" with a unique id and starts it. The copy is written by TauShell, so
 YAML comments in the source are not carried over. Runtime state is never copied.
+A plain clone shares the original's folder, so it never inherits the `worktree`
+block and can never remove the original's worktree. "Clone into a new git
+worktree" instead creates a new worktree from the original's repository and
+records it in the clone.
 
 ## App settings (`~/.tau_shell/config.yaml`)
 

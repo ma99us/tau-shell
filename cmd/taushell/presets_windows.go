@@ -68,16 +68,21 @@ func (application *App) GetGitBranch(sessionID string) (string, error) {
 
 // GetGitStatus returns the session repository's branch, dirty flag and
 // ahead/behind counts, or nil when the folder is not a repository.
-func (application *App) GetGitStatus(sessionID string) (*presets.RepoStatus, error) {
+func (application *App) GetGitStatus(sessionID string) (*GitStatusView, error) {
 	config, err := session.FindConfig(application.configDirectory, sessionID)
 	if err != nil {
 		return nil, err
 	}
-	status, ok := presets.GitStatus(gitContext(config), config.WorkingDir)
+	ctx := gitContext(config)
+	status, ok := presets.GitStatus(ctx, config.WorkingDir)
 	if !ok {
 		return nil, nil
 	}
-	return &status, nil
+	view := &GitStatusView{RepoStatus: status}
+	if info, linked := cachedInspect(ctx, config.WorkingDir); linked {
+		view.Worktree = &info
+	}
+	return view, nil
 }
 
 // ListGitChanges returns the changed files under the session's working

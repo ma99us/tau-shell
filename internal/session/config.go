@@ -99,6 +99,28 @@ type Config struct {
 	// Presets are session-level prompt presets merged over the global
 	// prompts.yaml entries by name.
 	Presets []presets.Preset `yaml:"presets,omitempty"`
+	// Worktree is present only when TauShell created working_dir as a git
+	// worktree for this session; only then may TauShell offer to remove it.
+	Worktree *WorktreeConfig `yaml:"worktree,omitempty"`
+}
+
+// WorktreeName is the TauShell-managed worktree's name, or "" when the session
+// does not own a worktree.
+func (config Config) WorktreeName() string {
+	if config.Worktree == nil {
+		return ""
+	}
+	return config.Worktree.Name
+}
+
+// WorktreeConfig records the worktree TauShell created for a session.
+type WorktreeConfig struct {
+	Name   string `yaml:"name"`
+	Branch string `yaml:"branch"`
+	// Base is the branch or commit the worktree branch started from.
+	Base string `yaml:"base,omitempty"`
+	// Repo is the main working tree the worktree belongs to.
+	Repo string `yaml:"repo"`
 }
 
 // LaunchEnvironment returns the session's literal environment plus its vault
@@ -208,6 +230,9 @@ func (config Config) Validate() error {
 	}
 	if err := ValidateLink(config.Link); err != nil {
 		return err
+	}
+	if wt := config.Worktree; wt != nil && (strings.TrimSpace(wt.Name) == "" || strings.TrimSpace(wt.Branch) == "" || strings.TrimSpace(wt.Repo) == "") {
+		return fmt.Errorf("worktree needs name, branch and repo")
 	}
 	if !config.UTF8Enabled() {
 		return fmt.Errorf("powershell.utf8 cannot be disabled in the Windows 10 Phase 1 runtime")

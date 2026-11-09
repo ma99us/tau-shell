@@ -37,6 +37,7 @@ export type Session = {
   workingDir: string;
   runtime?: string;
   distro?: string;
+  worktree?: string;
   status: string;
   lastError?: string;
   runningHere: boolean;
@@ -91,7 +92,29 @@ export type HarnessWidgets = {
   clearText: string;
 };
 
-export type GitStatus = { branch: string; dirty: boolean; ahead: number; behind: number };
+export type WorktreeInfo = { name: string; path: string; mainRepo: string; branch: string };
+export type GitStatus = { branch: string; dirty: boolean; ahead: number; behind: number; worktree?: WorktreeInfo };
+export type WorktreeOptions = { name: string; branch: string; base: string };
+export type WorktreePlan = {
+  name: string;
+  branch: string;
+  path: string;
+  repo: string;
+  base: string;
+  branches: string[];
+  dirty: boolean;
+};
+export type WorktreeEntry = { path: string; branch: string; main: boolean; detached: boolean; locked: boolean; prunable: boolean };
+export type WorktreeDeletePlan = {
+  managed: boolean;
+  name: string;
+  branch: string;
+  path: string;
+  dirty: boolean;
+  unpushed: number;
+  exists: boolean;
+  sharedBy?: string;
+};
 export type GitChange = { path: string; code: string; staged: boolean };
 export type ProjectEntry = { name: string; path: string; dir: boolean; size: number };
 export type ProjectListing = { entries: ProjectEntry[]; truncated: boolean };
@@ -287,6 +310,21 @@ type WailsApp = {
   UpdateTool(id: string): Promise<InstallResult>;
   GetGitBranch(sessionId: string): Promise<string>;
   GetGitStatus(sessionId: string): Promise<GitStatus | null>;
+  PlanWorktree(runtime: string, distro: string, dir: string, sessionName: string): Promise<WorktreePlan>;
+  ListWorktrees(runtime: string, distro: string, dir: string): Promise<WorktreeEntry[]>;
+  CreateSessionInWorktree(
+    runtime: string,
+    distro: string,
+    name: string,
+    tool: string,
+    workingDir: string,
+    launchArgs: string[],
+    options: WorktreeOptions,
+  ): Promise<Session>;
+  CloneSessionInWorktree(id: string, tool: string, launchArgs: string[], options: WorktreeOptions): Promise<Session>;
+  GetWorktreeDeletePlan(id: string): Promise<WorktreeDeletePlan>;
+  DeleteSessionWithWorktree(id: string, removeFolder: boolean, deleteBranch: boolean, force: boolean): Promise<void>;
+  OpenPullRequest(sessionId: string): Promise<void>;
   SyncGit(sessionId: string): Promise<string>;
   FetchGit(sessionId: string): Promise<boolean>;
   ListGitChanges(sessionId: string): Promise<GitChange[] | null>;

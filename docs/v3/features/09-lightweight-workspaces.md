@@ -2,7 +2,7 @@
 
 Status: **built (unit-tested; not exercised in the live UI)**. Rank 9. Sources: V3 ideas #1 and #9. User decision: lightweight, automatic by repo or folder.
 
-Implementation: `internal/workspaces` resolves each session's working folder to its nearest `.git` ancestor (no git process; a `.git` file makes a linked worktree its own group), else the folder; missing folders share one group. The `GetWorkspaces` binding feeds `frontend/src/workspaces.ts` (grouping, summaries, collapsed state in localStorage `taushell.workspaces-collapsed.v1`). Home and the sidebar tree show group headers with count and running/attention markers, hover Resume group and Stop group (Stop asks for confirmation; Resume follows the Resume All rules), and tabs follow the grouped order. Drag reordering works only inside a group. Not built: manual workspaces, nesting, per-group settings.
+Implementation: `internal/workspaces` resolves each session's working folder to its nearest `.git` ancestor (no git process; a `.git` file makes a linked worktree join its main repository's group and a submodule its own group), else the folder; missing folders share one group. The `GetWorkspaces` binding feeds `frontend/src/workspaces.ts` (grouping, summaries, collapsed state in localStorage `taushell.workspaces-collapsed.v1`). Home and the sidebar tree show group headers with count and running/attention markers, hover Resume group and Stop group (Stop asks for confirmation; Resume follows the Resume All rules), and tabs follow the grouped order. Drag reordering works only inside a group. Not built: manual workspaces, nesting, per-group settings.
 
 ## Problem
 
@@ -48,7 +48,7 @@ that group. Today the only group action is Resume All (every stopped session).
 
 ## Risks
 
-- Several worktrees or clones of one repo may group together or apart unexpectedly.
+- Several worktrees of one repo group with the main repo; separate clones of one repo may group apart.
 - Grouping by path may surprise users who think in "tasks" rather than repos.
 - Interaction with drag reorder across group boundaries.
 

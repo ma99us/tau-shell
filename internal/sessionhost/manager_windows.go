@@ -60,8 +60,10 @@ type Snapshot struct {
 	Tool       session.Harness `json:"tool"`
 	WorkingDir string          `json:"workingDir"`
 	// Runtime is wsl for a session hosted in a WSL distro; empty means PowerShell.
-	Runtime     string                `json:"runtime,omitempty"`
-	Distro      string                `json:"distro,omitempty"`
+	Runtime string `json:"runtime,omitempty"`
+	Distro  string `json:"distro,omitempty"`
+	// Worktree is the name of the git worktree TauShell created for the session.
+	Worktree    string                `json:"worktree,omitempty"`
 	Status      session.RuntimeStatus `json:"status"`
 	LastError   string                `json:"lastError,omitempty"`
 	RunningHere bool                  `json:"runningHere"`
@@ -297,6 +299,7 @@ func (manager *Manager) List(ctx context.Context) ([]Snapshot, error) {
 			WorkingDir:  config.WorkingDir,
 			Runtime:     config.Runtime,
 			Distro:      config.WSL.Distro,
+			Worktree:    config.WorktreeName(),
 			Status:      runtime.Status,
 			LastError:   runtime.LastError,
 			HasResumeID: runtime.HarnessSessionID != "",
@@ -1110,6 +1113,7 @@ func (current *managedSession) snapshot() Snapshot {
 		WorkingDir:  current.config.WorkingDir,
 		Runtime:     current.config.Runtime,
 		Distro:      current.config.WSL.Distro,
+		Worktree:    current.config.WorktreeName(),
 		Status:      current.status,
 		LastError:   current.detail,
 		RunningHere: current.status == session.StatusRunning,

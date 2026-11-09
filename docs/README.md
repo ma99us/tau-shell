@@ -18,6 +18,9 @@
   the verification backlog; [`06-backlog.md`](wsl/06-backlog.md) is authoritative
   for what is unverified or missing. Not future-only, unlike V3.
 
+- [Git worktrees](v2/27-git-worktrees.md): per-session worktrees (implemented,
+  lightly verified); supersedes the V3 rejection.
+
 - [Decision records](adr/0001-per-session-runtime.md): ADR 0001 (per-session runtime,
   proposed). Add new ADRs as `docs/adr/NNNN-title.md` with an explicit status.
 

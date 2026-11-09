@@ -22,7 +22,8 @@ type Group struct {
 
 // Resolve returns the workspace for a working folder. It only looks for a
 // `.git` entry on disk and never runs git. A `.git` file (a linked worktree
-// or submodule) makes that folder its own workspace.
+// or submodule) makes that folder its own workspace, except that a linked
+// worktree joins the workspace of its main checkout.
 func Resolve(workingDir string) Group {
 	dir := filepath.Clean(workingDir)
 	info, err := os.Stat(dir)
@@ -30,7 +31,13 @@ func Resolve(workingDir string) Group {
 		return Group{Key: MissingKey, Name: "Missing folders", Path: dir}
 	}
 	for current := dir; ; {
-		if _, err := os.Stat(filepath.Join(current, ".git")); err == nil {
+		dotGit := filepath.Join(current, ".git")
+		if info, err := os.Stat(dotGit); err == nil {
+			if !info.IsDir() {
+				if main, ok := worktreeMain(current, dotGit); ok {
+					return group(main, true)
+				}
+			}
 			return group(current, true)
 		}
 		parent := filepath.Dir(current)
@@ -40,6 +47,34 @@ func Resolve(workingDir string) Group {
 		current = parent
 	}
 	return group(dir, false)
+}
+
+// worktreeMain returns the main working tree of a linked worktree, read from
+// the gitdir pointer in its .git file (<main>/.git/worktrees/<name>). A
+// submodule pointer (.git/modules/...) has no such shape and stays its own workspace.
+func worktreeMain(folder, dotGit string) (string, bool) {
+	data, err := os.ReadFile(dotGit)
+	if err != nil {
+		return "", false
+	}
+	target, found := strings.CutPrefix(strings.TrimSpace(string(data)), "gitdir:")
+	if !found {
+		return "", false
+	}
+	target = filepath.FromSlash(strings.TrimSpace(target))
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(folder, target)
+	}
+	target = filepath.Clean(target)
+	gitDir := filepath.Dir(filepath.Dir(target))
+	if !strings.EqualFold(filepath.Base(filepath.Dir(target)), "worktrees") || !strings.EqualFold(filepath.Base(gitDir), ".git") {
+		return "", false
+	}
+	main := filepath.Dir(gitDir)
+	if info, err := os.Stat(main); err != nil || !info.IsDir() {
+		return "", false
+	}
+	return main, true
 }
 
 func group(root string, repo bool) Group {

@@ -67,6 +67,11 @@ TauShell -> ConPTY -> wsl.exe -> AI harness inside a WSL2 distro (experimental)
   stages and commits pending changes, pulls with rebase, then pushes. The
   file drawer has a **Git** tab listing only the changed files as a folder
   tree, with a status letter (M, A, D, R, U, !) on each row.
+- **Git worktrees (opt-in).** Start or clone a session into its own worktree and
+  branch so parallel sessions cannot collide. The top bar shows the worktree
+  name in place of the branch, Sync publishes the new branch, and deleting the
+  session can remove the folder and branch (blocked by unsaved work). Lightly
+  verified; see [git worktrees](docs/v2/27-git-worktrees.md).
 - **Know which agent needs you.** State indicators, taskbar flash and Windows
   toasts flag input requests and completed turns. Session colors tint tabs,
   sidebar rows, the top bar and terminal edge to reduce wrong-session mistakes.

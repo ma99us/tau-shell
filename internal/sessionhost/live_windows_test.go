@@ -19,8 +19,10 @@ import (
 	"time"
 
 	"github.com/ma99us/tau-shell/internal/harness"
+	"github.com/ma99us/tau-shell/internal/presets"
 	"github.com/ma99us/tau-shell/internal/session"
 	"github.com/ma99us/tau-shell/internal/skills"
+	"github.com/ma99us/tau-shell/internal/worktree"
 )
 
 var liveANSI = regexp.MustCompile(`\x1b(\[[0-9;?<>=]*[ -/]*[@-~]|\][^\x07\x1b]*(\x07|\x1b\\)|[()][A-Za-z0-9]|[=>78])`)
@@ -389,6 +391,31 @@ func createCodexTrustProfile(projectDir string) (string, string, error) {
 	return name, path, nil
 }
 
+func liveWorktree(t *testing.T, repo string) string {
+	t.Helper()
+	ctx := context.Background()
+	for _, args := range [][]string{
+		{"init", "--quiet"},
+		{"config", "user.email", "live@example.invalid"},
+		{"config", "user.name", "live"},
+		{"commit", "--allow-empty", "--quiet", "-m", "init"},
+	} {
+		if _, err := presets.RunGit(ctx, repo, nil, args...); err != nil {
+			t.Fatalf("git %v: %v", args, err)
+		}
+	}
+	result, err := worktree.Create(ctx, worktree.Spec{Dir: repo, Name: "live-wt", Branch: "taushell/live-wt"})
+	if err != nil {
+		t.Fatalf("create worktree: %v", err)
+	}
+	info, ok := worktree.Inspect(ctx, result.Path)
+	if !ok || info.Name != "live-wt" || info.Branch != "taushell/live-wt" {
+		t.Fatalf("worktree not detected as linked: %+v ok=%v", info, ok)
+	}
+	t.Logf("running harness in linked worktree %s (main %s)", result.Path, result.MainRepo)
+	return result.Path
+}
+
 func waitFor(timeout time.Duration, condition func() bool) bool {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -425,6 +452,10 @@ func TestLiveHarness(t *testing.T) {
 	}
 	if err := os.MkdirAll(workingDir, 0o700); err != nil {
 		t.Fatal(err)
+	}
+	if os.Getenv("TAUSHELL_LIVE_WORKTREE") == "1" {
+		// Run the harness inside a TauShell-created linked worktree of a disposable repo.
+		workingDir = liveWorktree(t, workingDir)
 	}
 	if tool == session.GSD {
 		skillDir := filepath.Join(workingDir, ".agents", "skills", "taushell-live-probe")

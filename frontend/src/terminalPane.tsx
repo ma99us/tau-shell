@@ -174,11 +174,12 @@ function GitChip({ session, git, onChange, onError, onNotice }: { session: Sessi
   };
   return <>
     <span className="toolbar-branch" title={gitTooltip(git)}>
-      {parts.branch}{parts.dirty && <b className="git-flag">*</b>}
+      {git.worktree && <Icon name="worktree" size={13} />}{parts.label}{parts.dirty && <b className="git-flag">*</b>}
       {parts.ahead > 0 && <span className="git-count" aria-label={`${parts.ahead} unpushed`}><Icon name="arrowUp" size={12} />{parts.ahead}</span>}
       {parts.behind > 0 && <span className="git-count" aria-label={`${parts.behind} to pull`}><Icon name="arrowDown" size={12} />{parts.behind}</span>}
     </span>
     <button className="text-button icon-button git-sync-button" disabled={syncing} title="Sync changes: commit all pending changes, pull (rebase) and push" aria-label="Sync changes" onClick={sync}><Icon name="sync" size={14} /></button>
+    {git.worktree && <button className="text-button icon-button git-sync-button" title="Open a GitHub pull request for this branch" aria-label="Open pull request" onClick={() => { app().OpenPullRequest(session.id).catch(onError); }}><Icon name="pullRequest" size={14} /></button>}
   </>;
 }
 

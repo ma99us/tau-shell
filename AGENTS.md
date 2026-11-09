@@ -35,6 +35,7 @@ TauShell is a local Windows desktop session manager: a Go host (`cmd/taushell`, 
 - Keep managed session/resume arguments under adapter control; user harness arguments are discrete argv values, not shell strings. Harness-dependent widgets are capability-gated.
 - Prove terminal encoding and rendering end to end (ConPTY, xterm.js); process-level UTF-8 alone is not proof.
 - Git branch and status data come from the Go host, not from frontend parsing.
+- Git worktrees are opt-in per session ([`27-git-worktrees`](docs/v2/27-git-worktrees.md)). Only a worktree TauShell created (the YAML `worktree` block) may be removed, never the main checkout or one shared with another session; uncommitted or unpushed work blocks removal unless forced. A plain clone never inherits the block.
 - Prompt queues are per-session. Send only on confirmed idle, never into a permission prompt, an unknown state or an unsent draft. Prompt text persists locally across restarts (never send state) and is cleared on Start fresh, a different conversation, or delete; a restored queue stays paused until the user presses Send.
 - Skill imports use TauShell-managed snapshots and adapter-specific injection; preserve personal skill folders and capability gates. Treat downloaded skills as executable agent instructions, not trusted data.
 - Usage totals survive resume, Start fresh and deletion. Distinguish recorded cost, list-price estimates and unpriced usage; never show missing prices as zero cost.
@@ -85,6 +86,7 @@ Read only what the task needs:
 | Harness adapters, new harness | [`05-plugin-system`](docs/v2/05-plugin-system.md), [`23-adding-a-harness`](docs/v2/23-adding-a-harness.md), [`24-claude-code-verification-plan`](docs/v2/24-claude-code-verification-plan.md) |
 | Attention cues, alerts | [`08-attention-detection`](docs/v2/08-attention-detection.md), [`22-local-attention-notifications`](docs/v2/22-local-attention-notifications.md) |
 | UI, theme, workspaces | [`25-ui-design-system`](docs/v2/25-ui-design-system.md), [`19-workspaces`](docs/v2/19-workspaces.md) |
+| Git worktrees | [`27-git-worktrees`](docs/v2/27-git-worktrees.md) |
 | Security-sensitive work (files drawer, bridge, phone server) | [`11-security-model`](docs/v2/11-security-model.md) |
 | Phone, API, protocol (only when in scope) | [`06-mobile-ui`](docs/v2/06-mobile-ui.md), [`13-api-specification`](docs/v2/13-api-specification.md), [`14-websocket-protocol`](docs/v2/14-websocket-protocol.md), [`07-notification-engine`](docs/v2/07-notification-engine.md) |
 | Contributing, status, known gaps | [`17-contributor-guide`](docs/v2/17-contributor-guide.md), [`21-engineering-handoff`](docs/v2/21-engineering-handoff.md), [`26-architecture-audit-handoff`](docs/v2/26-architecture-audit-handoff.md) |

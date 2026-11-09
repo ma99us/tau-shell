@@ -18,7 +18,8 @@ against the current code.
   effort. Dependencies set the delivery order, not the rank.
 - **Start gate:** begin V3 only after remaining Phase 1 verification is closed
   ([cross-cutting, section 1](02-cross-cutting.md#1-start-gate)).
-- **Git:** light only (branch, dirty, ahead/behind). No worktrees, no diff review.
+- **Git:** light only (branch, dirty, ahead/behind), no diff review. Opt-in per-session worktrees
+  were built in Phase 1 (see [git worktrees](../v2/27-git-worktrees.md)); parallel fan-out stays rejected.
 - **Remote and mobile:** in scope. MVP is push plus quick reply and action buttons over the
   local Wi-Fi/LAN only, through a TauShell-managed ntfy sidecar (Android first). Internet
   relay, VPN and iOS are later.

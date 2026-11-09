@@ -12,7 +12,10 @@ A workspace groups sessions.
 What the code does, with frontend unit tests (`frontend/test/workspaces.test.ts`):
 
 - The host maps each session to its Git repository root, or its working folder
-  outside a repository (`App.GetWorkspaces`, `internal/workspaces`). Missing
+  outside a repository (`App.GetWorkspaces`, `internal/workspaces`). A linked
+  worktree (a `.git` file pointing into `<main>/.git/worktrees/`) joins its main
+  repository's group; a submodule stays its own group. See
+  [git worktrees](27-git-worktrees.md). Missing
   folders have their own group; sessions without a mapping fall into "Sessions".
 - Groups keep the shared session order: a group sits where its first session
   appears, and grouping is only a view over the flat order.

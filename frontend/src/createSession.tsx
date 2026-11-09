@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { app, LaunchPreview, Session, WSLStatus } from "./bridge";
+import { app, LaunchPreview, Session, WSLStatus, WorktreeEntry, WorktreePlan } from "./bridge";
 import { HarnessIcon } from "./harnessIcons";
 import { getHarnesses } from "./harnesses";
 import { defaultDistro, isWindowsMount, runtimeLabel, wslChoices, wslHarnessSupported } from "./wslRuntime";
@@ -40,6 +40,16 @@ export function CreateSession({ recentFolders, wsl, powershellUsable = true, clo
   const [yamlText, setYamlText] = useState("");
   const [yamlDirty, setYamlDirty] = useState(false);
   const [yamlError, setYamlError] = useState("");
+  // Optional git worktree: a new folder and branch next to the repository.
+  const [wtOn, setWtOn] = useState(false);
+  const [wtPlan, setWtPlan] = useState<WorktreePlan | null>(null);
+  const [wtError, setWtError] = useState("");
+  const [wtName, setWtName] = useState("");
+  const [wtBranch, setWtBranch] = useState("");
+  const [wtBase, setWtBase] = useState("");
+  const wtNameTouched = useRef(false);
+  const wtBranchTouched = useRef(false);
+  const [existing, setExisting] = useState<WorktreeEntry[]>([]);
   const chooseRuntime = (next: "" | "wsl") => {
     if (clone) return;
     setRuntime(next);
@@ -106,15 +116,54 @@ export function CreateSession({ recentFolders, wsl, powershellUsable = true, clo
     }, 300);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [yamlOpen, yamlDirty, tool, workingDir, launchArgs, runtimeName, distro]);
+  // Worktree defaults: named after the folder (new) or the original session (clone).
+  const wtSeed = clone ? clone.source.name : workingDir.split(/[\\/]+/).filter(Boolean).pop() ?? "";
+  useEffect(() => {
+    if (!wtOn || !workingDir.trim()) { setWtPlan(null); return; }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      (async () => {
+        try {
+          const plan = await app().PlanWorktree(runtimeName, inWSL ? distro : "", workingDir, wtSeed);
+          if (cancelled) return;
+          setWtPlan(plan);
+          setWtError("");
+          if (!wtNameTouched.current) setWtName(plan.name);
+          if (!wtBranchTouched.current) setWtBranch(plan.branch);
+          setWtBase((current) => (current && plan.branches.includes(current) ? current : plan.base));
+        } catch (err) {
+          if (!cancelled) { setWtPlan(null); setWtError(err instanceof Error ? err.message : String(err)); }
+        }
+      })();
+    }, 300);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [wtOn, workingDir, runtimeName, distro, wtSeed]);
+  // Existing worktrees of the chosen repository can be adopted as the session folder.
+  useEffect(() => {
+    if (clone || !workingDir.trim()) { setExisting([]); return; }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      app().ListWorktrees(runtimeName, inWSL ? distro : "", workingDir)
+        .then((list) => { if (!cancelled) setExisting(list.filter((entry) => !entry.main && !entry.prunable)); })
+        .catch(() => { if (!cancelled) setExisting([]); });
+    }, 400);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [workingDir, runtimeName, distro]);
+  const wtPath = wtPlan ? wtPlan.path.replace(/[^\\/]+$/, wtName) : "";
+  const wtOptions = { name: wtName.trim(), branch: wtBranch.trim(), base: wtBase };
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setFormError("");
     setSaving(true);
     try {
       const session = clone
-        ? await app().DuplicateSession(clone.source.id, tool, parseLaunchArgs(launchArgs))
+        ? wtOn
+          ? await app().CloneSessionInWorktree(clone.source.id, tool, parseLaunchArgs(launchArgs), wtOptions)
+          : await app().DuplicateSession(clone.source.id, tool, parseLaunchArgs(launchArgs))
         : yamlOpen
         ? await app().CreateSessionFromYAML(yamlText)
+        : wtOn
+        ? await app().CreateSessionInWorktree(runtimeName, inWSL ? distro : "", "", tool, workingDir, parseLaunchArgs(launchArgs), wtOptions)
         : await app().CreateSessionIn(runtimeName, inWSL ? distro : "", "", tool, workingDir, parseLaunchArgs(launchArgs));
       onCreated(session);
     } catch (err) { fail(err); } finally { setSaving(false); }
@@ -133,6 +182,25 @@ export function CreateSession({ recentFolders, wsl, powershellUsable = true, clo
       {clone
         ? <label>Project folder <span className="optional">(inherited from the original, cannot be changed)</span><div className="folder-row"><input readOnly value={workingDir} /></div></label>
         : <label>Project folder<div className="folder-row"><input autoFocus required list="recent-project-folders" value={workingDir} onChange={(event) => { setWorkingDir(event.target.value); setFormError(""); }} placeholder={inWSL ? "Linux path, for example /home/you/project" : "Choose a local project folder"} /><datalist id="recent-project-folders">{recentFolders.map((folder) => <option key={folder} value={folder} />)}</datalist><button type="button" className="secondary-button" onClick={() => void chooseDirectory()}>Browse</button></div>{inWSL && isWindowsMount(workingDir) && <span className="tool-warning">Projects under /mnt/c live on the Windows disk and are slower inside WSL; prefer a folder in the distro.</span>}</label>}
+      {existing.length > 0 && !wtOn && <label>Use an existing worktree <span className="optional">(optional)</span>
+        <select value="" onChange={(event) => { if (event.target.value) { setWorkingDir(event.target.value); setFormError(""); } }}>
+          <option value="">Keep the folder above</option>
+          {existing.map((entry) => <option key={entry.path} value={entry.path}>{entry.branch || "detached"} - {entry.path}</option>)}
+        </select></label>}
+      <div className="harness-field">
+        <label className="check-option" title="Create a separate folder and branch for this session, so it cannot disturb your main checkout"><input type="checkbox" checked={wtOn} disabled={yamlOpen} onChange={(event) => setWtOn(event.target.checked)} />{clone ? "Clone into a new git worktree" : "Work in a new git worktree"}</label>
+        {yamlOpen && <p className="form-note">Not available while editing the session YAML.</p>}
+        {wtOn && <>
+          {wtError && <p className="tool-warning">{wtError}</p>}
+          {wtPlan && <>
+            <label>Worktree name<input value={wtName} onChange={(event) => { wtNameTouched.current = true; setWtName(event.target.value); if (!wtBranchTouched.current) setWtBranch("taushell/" + event.target.value); }} /></label>
+            <label>New branch<input value={wtBranch} onChange={(event) => { wtBranchTouched.current = true; setWtBranch(event.target.value); }} /></label>
+            {wtPlan.branches.length > 0 && <label>Start from<select value={wtBase} onChange={(event) => setWtBase(event.target.value)}>{wtPlan.branches.map((branch) => <option key={branch} value={branch}>{branch}</option>)}</select></label>}
+            <p className="form-note">Folder: {wtPath}</p>
+            {wtPlan.dirty && <p className="tool-warning">The main checkout has uncommitted changes. They are not carried into the worktree.</p>}
+          </>}
+        </>}
+      </div>
       <div className="harness-field"><span className="harness-label" id="harness-label">AI harness</span>
         <div className="harness-picker" role="radiogroup" aria-labelledby="harness-label">
           {getHarnesses().filter((item) => item.trusted && (!inWSL || wslHarnessSupported(item.id))).map(({ id, name }) =>
@@ -158,7 +226,7 @@ export function CreateSession({ recentFolders, wsl, powershellUsable = true, clo
         </>}
       </div>}
       {formError && <p className="tool-warning" role="alert">{formError}</p>}
-      <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button" disabled={saving}>{saving ? (clone ? "Cloning..." : "Creating...") : (clone ? "Clone and start" : "Start new AI session")}</button></div>
+      <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button" disabled={saving || (wtOn && (!wtPlan || !wtName.trim() || !wtBranch.trim()))}>{saving ? (clone ? "Cloning..." : "Creating...") : (clone ? "Clone and start" : "Start new AI session")}</button></div>
     </form>
   </div></div>;
 }

@@ -8,3 +8,10 @@ test("git chip shows dirty and ahead/behind only when known", () => {
   assert.equal(gitLabel({ branch: "dev", dirty: true, ahead: -1, behind: -1 }), "dev*");
   assert.match(gitTooltip({ branch: "dev", dirty: false, ahead: -1, behind: -1 }), /No upstream/);
 });
+
+test("git chip shows the worktree name in place of the branch", () => {
+  const worktree = { name: "fix-login", path: "C:\\p.worktrees\\fix-login", mainRepo: "C:\\p", branch: "taushell/fix-login" };
+  const git = { branch: "taushell/fix-login", dirty: true, ahead: -1, behind: -1, worktree };
+  assert.equal(gitLabel(git), "fix-login*");
+  assert.match(gitTooltip(git), /taushell\/fix-login.*C:\\p\.worktrees\\fix-login.*Main repository: C:\\p/);
+});

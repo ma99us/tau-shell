@@ -21,6 +21,7 @@ import { ToastStack, useToasts } from "./toast";
 import { APP_SCOPE } from "./toasts";
 import { clearQueue, queuedTotal, restoreQueues, runQueues, setQueueForceSender, setQueueKicker, setQueuePersister, subscribeQueues } from "./promptQueue";
 import { CreateSession } from "./createSession";
+import { WorktreeDeleteChoice, WorktreeDeleteOptions, noWorktreeChoice } from "./worktreeDelete";
 import { duplicateAndLaunch } from "./sessionActions";
 import { clearPollFailure, shouldReportPollFailure } from "./polling";
 import { Workspace, WorkspaceGroup, flattenWorkspaces, groupSessions, moveGroup, readCollapsed, summarize, writeCollapsed } from "./workspaces";
@@ -148,6 +149,7 @@ function App() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [closeRequest, setCloseRequest] = useState<Session | null>(null);
   const [deleteRequest, setDeleteRequest] = useState<Session | null>(null);
+  const [worktreeChoice, setWorktreeChoice] = useState<WorktreeDeleteChoice>(noWorktreeChoice);
   const [menu, setMenu] = useState<{ x: number; y: number; session: Session } | null>(null);
   const [dialogs, setDialogs] = useState<DialogRequest[]>([]);
   const [shutdown, setShutdown] = useState<ShutdownProgress | null>(null);
@@ -463,7 +465,8 @@ function App() {
   const deleteSession = async (session: Session) => {
     setBusy(true);
     try {
-      await app().DeleteSession(session.id);
+      if (session.worktree) await app().DeleteSessionWithWorktree(session.id, worktreeChoice.removeFolder, worktreeChoice.deleteBranch, worktreeChoice.force);
+      else await app().DeleteSession(session.id);
       clearQueue(session.id);
       removeTab(session.id);
       setDeleteRequest(null);
@@ -892,9 +895,10 @@ function App() {
             </ul>
             <p>Not touched: your project folder, and the harness's own conversation history files.</p>
           </div>}
+        {!deleteRequest.runningHere && deleteRequest.worktree && <WorktreeDeleteOptions sessionId={deleteRequest.id} onChange={setWorktreeChoice} />}
         <div className="modal-actions">
           <button className="secondary-button" onClick={() => setDeleteRequest(null)}>Cancel</button>
-          <button className="danger-button" disabled={busy || deleteRequest.runningHere} onClick={() => void deleteSession(deleteRequest)}>{busy ? "Deleting..." : "Delete session"}</button>
+          <button className="danger-button" disabled={busy || deleteRequest.runningHere || (!!deleteRequest.worktree && worktreeChoice.blocked)} onClick={() => void deleteSession(deleteRequest)}>{busy ? "Deleting..." : "Delete session"}</button>
         </div>
       </div></div>}
       {stopGroup && <div className="modal-backdrop"><div className="modal confirm-modal">

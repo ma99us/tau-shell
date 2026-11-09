@@ -33,7 +33,7 @@ Status: **future planning**. Reasons are recorded so the decisions are not reope
 
 | Orca or V3 idea | Reason |
 |---|---|
-| Git worktrees per task, parallel fan-out in isolated checkouts | User chose light git only. Dispatch warns about shared folders instead. |
+| Git worktrees per task, parallel fan-out in isolated checkouts | Superseded in part: opt-in per-session worktrees now exist ([git worktrees](../v2/27-git-worktrees.md)). Parallel fan-out and dispatch to several worktrees stay rejected; dispatch warns about shared folders. |
 | Annotate AI diff and diff review | Requires git and diff UI; TauShell is not a review tool. |
 | Embedded editor | Not an IDE. The file drawer is read-only. |
 | Embedded browser, Design Mode | Not an IDE; large surface and security cost. |

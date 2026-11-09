@@ -410,7 +410,19 @@ func GitSync(ctx context.Context, dir string) (string, error) {
 		}
 	}
 	if status.Ahead < 0 {
-		return "", errors.New("changes are committed locally, but the branch has no upstream to sync with")
+		// A new branch (such as a worktree branch) has no upstream yet: publish it.
+		remotes, _ := run("remote")
+		remote, _, _ := strings.Cut(strings.TrimSpace(remotes), "\n")
+		remote = strings.TrimSpace(remote)
+		if remote == "" {
+			return "", errors.New("changes are committed locally, but the repository has no remote to push to")
+		}
+		published, _ := run("rev-list", "--count", "HEAD", "--not", "--remotes")
+		if _, err := run("push", "-u", remote, status.Branch); err != nil {
+			return "", err
+		}
+		pushed, _ := strconv.Atoi(strings.TrimSpace(published))
+		return syncSummary(status.Branch, committed, 0, pushed, ctx, dir) + " Published " + remote + "/" + status.Branch + ".", nil
 	}
 	count := func(rangeSpec string) int {
 		out, err := run("rev-list", "--count", rangeSpec)
@@ -549,6 +561,32 @@ func gitCommand(ctx context.Context, dir string, env []string, args ...string) (
 	argv = append(argv, "git", "-C", dir)
 	return exec.CommandContext(ctx, "wsl.exe", append(argv, args...)...), nil
 }
+
+// RunGit runs `git -C dir args...` natively or inside the WSL distro carried by
+// ctx and returns its untrimmed stdout. A failure carries git's own message.
+func RunGit(ctx context.Context, dir string, env []string, args ...string) (string, error) {
+	command, err := gitCommand(ctx, dir, env, args...)
+	if err != nil {
+		return "", err
+	}
+	hideWindow(command)
+	var stdout, stderr bytes.Buffer
+	command.Stdout, command.Stderr = &stdout, &stderr
+	if err := command.Run(); err != nil {
+		message := strings.TrimSpace(stderr.String())
+		if message == "" {
+			message = err.Error()
+		}
+		return stdout.String(), fmt.Errorf("git %s failed: %s", args[0], message)
+	}
+	return stdout.String(), nil
+}
+
+// WSLDistro reports the distro git commands run in, if ctx carries one.
+func WSLDistro(ctx context.Context) (string, bool) { return wslDistro(ctx) }
+
+// HideWindow keeps a console window from flashing for a helper process.
+func HideWindow(command *exec.Cmd) { hideWindow(command) }
 
 // pathExists reports whether path (as printed by git, possibly relative to
 // dir) exists on the machine git runs on.

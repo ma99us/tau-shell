@@ -32,6 +32,8 @@ const paths: Record<string, ReactNode> = {
   arrowDown: <path d="M12 5v14M6 13l6 6 6-6" />,
   play: <path d="M7 5l12 7-12 7z" />,
   stop: <rect x="6" y="6" width="12" height="12" rx="1.5" />,
+  worktree: <><circle cx="6" cy="5.5" r="2" /><circle cx="6" cy="18.5" r="2" /><circle cx="18" cy="9" r="2" /><path d="M6 7.5v9M18 11c0 3-3 3.5-8.5 5.2" /></>,
+  pullRequest: <><circle cx="6" cy="5.5" r="2" /><circle cx="6" cy="18.5" r="2" /><circle cx="18" cy="18.5" r="2" /><path d="M6 7.5v9M18 16.5V9a2 2 0 0 0-2-2h-3m2-2.5L13 7l2 2.5" /></>,
 };
 
 export type IconName = keyof typeof paths;

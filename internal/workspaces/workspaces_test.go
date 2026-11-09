@@ -33,20 +33,31 @@ func TestResolveGroupsByRepositoryRootOrFolder(t *testing.T) {
 	}
 }
 
-func TestLinkedWorktreeIsItsOwnWorkspace(t *testing.T) {
+func TestLinkedWorktreeJoinsMainWorkspace(t *testing.T) {
 	root := t.TempDir()
 	main := filepath.Join(root, "main")
 	tree := filepath.Join(root, "tree")
-	if err := os.MkdirAll(filepath.Join(main, ".git"), 0o755); err != nil {
+	sub := filepath.Join(root, "sub")
+	if err := os.MkdirAll(filepath.Join(main, ".git", "worktrees", "tree"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(tree, 0o755); err != nil {
+	for _, dir := range []string{tree, sub} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pointer := "gitdir: " + filepath.ToSlash(filepath.Join(main, ".git", "worktrees", "tree"))
+	if err := os.WriteFile(filepath.Join(tree, ".git"), []byte(pointer), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(tree, ".git"), []byte("gitdir: x"), 0o644); err != nil {
+	if Resolve(tree).Key != Resolve(main).Key {
+		t.Fatal("a linked worktree should join its main checkout's workspace")
+	}
+	submodule := "gitdir: " + filepath.ToSlash(filepath.Join(main, ".git", "modules", "x"))
+	if err := os.WriteFile(filepath.Join(sub, ".git"), []byte(submodule), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if Resolve(tree).Key == Resolve(main).Key {
-		t.Fatal("a linked worktree should not merge into the main checkout")
+	if Resolve(sub).Key == Resolve(main).Key {
+		t.Fatal("a submodule must stay its own workspace")
 	}
 }
