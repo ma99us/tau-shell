@@ -31,7 +31,7 @@ func ConversationTitle(tool session.Harness, harnessSessionID string) string {
 	case "claude-ai-title":
 		root := os.Getenv("CLAUDE_CONFIG_DIR")
 		if root == "" {
-			home, err := os.UserHomeDir()
+			home, err := HomeDir()
 			if err != nil {
 				return ""
 			}
@@ -39,7 +39,7 @@ func ConversationTitle(tool session.Harness, harnessSessionID string) string {
 		}
 		return claudeTitleIn(filepath.Join(root, "projects"), harnessSessionID)
 	case "copilot-workspace":
-		home, err := os.UserHomeDir()
+		home, err := HomeDir()
 		if err != nil {
 			return ""
 		}

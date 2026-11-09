@@ -24,7 +24,7 @@ func samePath(left, right string) bool {
 }
 
 func userHome() string {
-	home, err := os.UserHomeDir()
+	home, err := HomeDir()
 	if err != nil {
 		return ""
 	}

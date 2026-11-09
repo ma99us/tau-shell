@@ -38,7 +38,7 @@ func CurrentActivity(tool session.Harness, harnessSessionID string, now time.Tim
 	}
 	switch item.Activity {
 	case "copilot-events":
-		home, err := os.UserHomeDir()
+		home, err := HomeDir()
 		if err != nil {
 			return ""
 		}

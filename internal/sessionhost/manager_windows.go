@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime/debug"
 	"sort"
@@ -19,6 +18,7 @@ import (
 	"github.com/ma99us/tau-shell/internal/conpty"
 	"github.com/ma99us/tau-shell/internal/diagnostics"
 	"github.com/ma99us/tau-shell/internal/harness"
+	hostruntime "github.com/ma99us/tau-shell/internal/runtime"
 	"github.com/ma99us/tau-shell/internal/harness/manifest"
 	"github.com/ma99us/tau-shell/internal/session"
 	"github.com/ma99us/tau-shell/internal/usage"
@@ -514,9 +514,8 @@ func (manager *Manager) start(ctx context.Context, id string, restoring, fresh b
 	if err != nil {
 		return Snapshot{}, err
 	}
-	powershell, err := exec.LookPath("pwsh.exe")
-	if err != nil {
-		return Snapshot{}, fmt.Errorf("PowerShell 7 (pwsh.exe) is required and must be on PATH: %w", err)
+	if err := hostruntime.Default().Available(); err != nil {
+		return Snapshot{}, err
 	}
 	launchEnv, err := manager.launchEnvironment(config)
 	if err != nil {
@@ -565,7 +564,10 @@ func (manager *Manager) start(ctx context.Context, id string, restoring, fresh b
 	launchedAt := time.Now()
 	args := adapter.Argv(config.LaunchArgs, restoring, runtime.HarnessSessionID)
 	args = append(args, manager.skillArgs(ctx, adapter, config, harnessExecutable, runtime.LaunchToken)...)
-	command := harness.PowerShellInvocation(harnessExecutable, args, config.UTF8Enabled())
+	command, err := hostruntime.Default().Command(hostruntime.LaunchSpec{Executable: harnessExecutable, Args: args, UTF8: config.UTF8Enabled()})
+	if err != nil {
+		return Snapshot{}, errors.Join(err, manager.store.Finish(ctx, id, session.StatusFailed, err.Error()))
+	}
 	if columns < 2 || rows < 2 {
 		columns, rows = 80, 24
 	}
@@ -576,8 +578,8 @@ func (manager *Manager) start(ctx context.Context, id string, restoring, fresh b
 		err := errors.New("session manager is shutting down")
 		return Snapshot{}, errors.Join(err, manager.store.Finish(ctx, id, session.StatusFailed, err.Error()))
 	}
-	process, err := manager.startProcess(columns, rows, powershell, config.WorkingDir, conpty.ChildEnvironment(launchEnv),
-		"-NoLogo", "-NoProfile", "-Command", command)
+	process, err := manager.startProcess(columns, rows, command.Executable, config.WorkingDir, conpty.ChildEnvironment(launchEnv),
+		command.Args...)
 	if err != nil {
 		finishErr := manager.store.Finish(ctx, id, session.StatusFailed, err.Error())
 		return Snapshot{}, errors.Join(err, finishErr)

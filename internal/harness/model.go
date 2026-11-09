@@ -34,7 +34,7 @@ func CurrentModel(tool session.Harness, harnessSessionID string) string {
 	case "claude-jsonl":
 		root := os.Getenv("CLAUDE_CONFIG_DIR")
 		if root == "" {
-			home, err := os.UserHomeDir()
+			home, err := HomeDir()
 			if err != nil {
 				return ""
 			}
@@ -42,7 +42,7 @@ func CurrentModel(tool session.Harness, harnessSessionID string) string {
 		}
 		return claudeModelIn(filepath.Join(root, "projects"), harnessSessionID)
 	case "copilot-events":
-		home, err := os.UserHomeDir()
+		home, err := HomeDir()
 		if err != nil {
 			return ""
 		}

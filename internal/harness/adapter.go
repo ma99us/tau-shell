@@ -112,7 +112,7 @@ var discoveryReaders = map[string]discoveryReader{
 // This is an undocumented internal layout, so it fails open when the store
 // itself is absent.
 func checkCopilotResume(harnessSessionID string) error {
-	home, err := os.UserHomeDir()
+	home, err := HomeDir()
 	if err != nil {
 		return nil
 	}
@@ -137,7 +137,7 @@ func checkCopilotResumeIn(root, harnessSessionID string) error {
 func checkClaudeResume(harnessSessionID string) error {
 	root := os.Getenv("CLAUDE_CONFIG_DIR")
 	if root == "" {
-		home, err := os.UserHomeDir()
+		home, err := HomeDir()
 		if err != nil {
 			return nil
 		}

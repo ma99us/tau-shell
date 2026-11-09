@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime/debug"
 	"sort"
@@ -15,6 +14,7 @@ import (
 	"github.com/ma99us/tau-shell/internal/conpty"
 	"github.com/ma99us/tau-shell/internal/diagnostics"
 	"github.com/ma99us/tau-shell/internal/harness"
+	hostruntime "github.com/ma99us/tau-shell/internal/runtime"
 	"github.com/ma99us/tau-shell/internal/harness/manifest"
 	"github.com/ma99us/tau-shell/internal/session"
 	"github.com/ma99us/tau-shell/internal/terminal"
@@ -260,9 +260,8 @@ func runSession(id string, restoring bool) (returnErr error) {
 	if err != nil {
 		return err
 	}
-	powershell, err := exec.LookPath("pwsh.exe")
-	if err != nil {
-		return fmt.Errorf("PowerShell 7 (pwsh.exe) is required and must be on PATH: %w", err)
+	if err := hostruntime.Default().Available(); err != nil {
+		return err
 	}
 	launchEnv, err := config.LaunchEnvironment(vault.NewCredentialManager())
 	if err != nil {
@@ -309,6 +308,10 @@ func runSession(id string, restoring bool) (returnErr error) {
 	}
 	launchedAt := time.Now()
 	args := adapter.Argv(config.LaunchArgs, restoring, runtime.HarnessSessionID)
+	command, err := hostruntime.Default().Command(hostruntime.LaunchSpec{Executable: executable, Args: args, UTF8: config.UTF8Enabled()})
+	if err != nil {
+		return err
+	}
 	started, finished := false, false
 	stopDiscovery := make(chan struct{})
 	discoveryDone := make(chan string, 1)
@@ -327,12 +330,9 @@ func runSession(id string, restoring bool) (returnErr error) {
 		}
 	}()
 	runErr := terminal.Run(terminal.Options{
-		Executable: powershell,
+		Executable: command.Executable,
 		Directory:  config.WorkingDir,
-		Args: []string{
-			"-NoLogo", "-NoProfile", "-Command",
-			harness.PowerShellInvocation(executable, args, config.UTF8Enabled()),
-		},
+		Args:       command.Args,
 		Env: conpty.ChildEnvironment(launchEnv),
 		OnStart: func(processID int) error {
 			if err := store.MarkRunning(context.Background(), id, processID); err != nil {

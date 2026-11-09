@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ma99us/tau-shell/internal/harness"
 	"github.com/ma99us/tau-shell/internal/session"
 )
 
@@ -157,7 +158,7 @@ func claudeRoot() string {
 	if root := os.Getenv("CLAUDE_CONFIG_DIR"); root != "" {
 		return root
 	}
-	home, err := os.UserHomeDir()
+	home, err := harness.HomeDir()
 	if err != nil {
 		return ""
 	}
@@ -182,7 +183,7 @@ func LogFiles(tool session.Harness, harnessSessionID string) []string {
 		sub, _ := filepath.Glob(filepath.Join(projects, "*", harnessSessionID, "subagents", "*.jsonl"))
 		return append(main, sub...)
 	case "copilot-events":
-		home, err := os.UserHomeDir()
+		home, err := harness.HomeDir()
 		if err != nil {
 			return nil
 		}
