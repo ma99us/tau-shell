@@ -7,7 +7,7 @@
 
 ## What this is
 
-TauShell is a local Windows desktop session manager: a Go host (`cmd/taushell`, `internal/`) with a React/xterm.js UI (`frontend/`) in WebView2. Each session is a PowerShell 7 process hosted through ConPTY, running an AI harness (Claude Code, GitHub Copilot CLI, GSD, OpenAI Codex CLI, OpenCode). Session intent is human-edited YAML; runtime state (resume IDs, restore outcomes) lives separately in SQLite. See [`README.md`](README.md) for features and usage.
+TauShell is a local Windows desktop session manager: a Go host (`cmd/taushell`, `internal/`) with a React/xterm.js UI (`frontend/`) in WebView2. Each session is a PowerShell 7 process (default) or a WSL2 distro process (experimental, per-session `runtime: wsl`) hosted through ConPTY, running an AI harness (Claude Code, GitHub Copilot CLI, GSD, OpenAI Codex CLI, OpenCode). Session intent is human-edited YAML; runtime state (resume IDs, restore outcomes) lives separately in SQLite. See [`README.md`](README.md) for features and usage.
 
 ## Scope
 
@@ -24,7 +24,7 @@ TauShell is a local Windows desktop session manager: a Go host (`cmd/taushell`, 
 
 ## Architecture rules
 
-- Keep PowerShell first-class; do not replace it with a custom shell.
+- Keep PowerShell first-class; do not replace it with a custom shell. WSL is an additional per-session runtime behind `internal/runtime` (see [`docs/wsl/`](docs/wsl/)), never a replacement; PowerShell 7 stays the default and a required host prerequisite until the WSL plan makes it optional. WSL sessions launch with `wsl.exe --exec` (no shell), forward env through `WSLENV`, tag every launch with `TAUSHELL_LAUNCH` and clean up leftovers after exit. Do not start a stopped distro just to read state.
 - Model persistent sessions, not terminal tabs or windows.
 - Keep core session management tool-independent; harness launch/resume belongs in manifests/adapters.
 - Restoring the PowerShell process is not resuming the harness conversation. Claim a resume only when the harness confirms it; surface unsupported and failed resumes.

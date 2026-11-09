@@ -2,6 +2,7 @@ package session
 
 import (
 	"bytes"
+	"fmt"
 	"errors"
 	"os"
 	"path/filepath"
@@ -396,5 +397,38 @@ func TestConfigPresetsAreValidated(t *testing.T) {
 		if _, err := ParseConfig(base + body); err == nil {
 			t.Fatalf("%s presets were accepted", name)
 		}
+	}
+}
+
+func TestConfigRuntimeAndWSLValidation(t *testing.T) {
+	windowsDir := filepath.ToSlash(t.TempDir())
+	base := "id: wsl-session\nname: WSL\ntool: claude-code\nworking_dir: %s\n%s"
+	for _, test := range []struct {
+		name, dir, body, want string
+	}{
+		{"wsl with linux dir", "/home/u/app", "runtime: wsl\nwsl:\n  distro: Ubuntu-24.04\n", ""},
+		{"wsl with windows dir", windowsDir, "runtime: wsl\nwsl:\n  distro: Ubuntu\n", ""},
+		{"wsl needs distro", "/home/u/app", "runtime: wsl\n", "wsl.distro"},
+		{"unsafe distro", "/home/u/app", "runtime: wsl\nwsl:\n  distro: \"a b; x\"\n", "wsl.distro"},
+		{"unknown runtime", windowsDir, "runtime: docker\n", "unsupported runtime"},
+		{"distro without wsl", windowsDir, "wsl:\n  distro: Ubuntu\n", "only valid when runtime is wsl"},
+		{"linux dir needs wsl", "/home/u/app", "", "absolute path"},
+		{"default runtime", windowsDir, "", ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			config, err := ParseConfig(fmt.Sprintf(base, test.dir, test.body))
+			if test.want == "" {
+				if err != nil {
+					t.Fatal(err)
+				}
+				if config.IsWSL() != strings.Contains(test.body, "runtime: wsl") {
+					t.Fatalf("IsWSL = %v", config.IsWSL())
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("expected error containing %q, got %v", test.want, err)
+			}
+		})
 	}
 }

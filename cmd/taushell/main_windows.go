@@ -256,6 +256,9 @@ func runSession(id string, restoring bool) (returnErr error) {
 	if err := manifest.Allowed(string(config.Tool)); err != nil {
 		return err
 	}
+	if config.IsWSL() {
+		return fmt.Errorf("session %q runs in WSL; start it from the TauShell app (the CLI start command supports PowerShell sessions only)", id)
+	}
 	executable, err := adapter.FindExecutable()
 	if err != nil {
 		return err

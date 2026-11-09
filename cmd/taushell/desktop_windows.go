@@ -25,6 +25,7 @@ import (
 	"github.com/ma99us/tau-shell/internal/diagnostics"
 	"github.com/ma99us/tau-shell/internal/harness"
 	"github.com/ma99us/tau-shell/internal/quota"
+	hostruntime "github.com/ma99us/tau-shell/internal/runtime"
 	"github.com/ma99us/tau-shell/internal/session"
 	"github.com/ma99us/tau-shell/internal/sessionhost"
 	"github.com/ma99us/tau-shell/internal/skills"
@@ -237,6 +238,14 @@ func (application *App) GetSessions() (snapshots []sessionhost.Snapshot, err err
 		diagnostics.Debug("sessions listed", "count", len(snapshots))
 	}()
 	return application.manager.List(context.Background())
+}
+
+// GetWSLStatus reports WSL's version, distros and readiness. It never starts a
+// distro and never installs anything.
+func (application *App) GetWSLStatus() hostruntime.Readiness {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	return hostruntime.Detect(ctx, nil, nil)
 }
 
 func (application *App) GetSystemStatus() SystemStatus {

@@ -80,6 +80,8 @@ type managedSession struct {
 	quitAsked   bool
 	hasResumeID bool
 	resumeNote  string
+	// cleanup stops processes a forced exit left behind (WSL only); nil otherwise.
+	cleanup func() (int, error)
 }
 
 type sessionProcess interface {
@@ -510,13 +512,11 @@ func (manager *Manager) start(ctx context.Context, id string, restoring, fresh b
 	if err := manifest.Allowed(string(config.Tool)); err != nil {
 		return Snapshot{}, err
 	}
-	harnessExecutable, err := adapter.FindExecutable()
+	target, err := resolveLaunchTarget(ctx, config, adapter)
 	if err != nil {
 		return Snapshot{}, err
 	}
-	if err := hostruntime.Default().Available(); err != nil {
-		return Snapshot{}, err
-	}
+	harnessExecutable := target.executable
 	launchEnv, err := manager.launchEnvironment(config)
 	if err != nil {
 		return Snapshot{}, err
@@ -529,7 +529,9 @@ func (manager *Manager) start(ctx context.Context, id string, restoring, fresh b
 		return Snapshot{}, fmt.Errorf("session %q is active in another TauShell process", id)
 	}
 	launchNote := ""
-	if restoring && runtime.HarnessSessionID != "" {
+	// The resume check reads the Windows profile, so it does not apply to a
+	// WSL session; a failed WSL resume surfaces from the harness itself.
+	if restoring && runtime.HarnessSessionID != "" && target.wsl == nil {
 		if resumeErr := adapter.CheckResume(runtime.HarnessSessionID); resumeErr != nil {
 			// Still start the session, as a new conversation, and say so.
 			launchNote = "Could not resume: " + resumeErr.Error() + ". Started a new conversation instead."
@@ -563,8 +565,14 @@ func (manager *Manager) start(ctx context.Context, id string, restoring, fresh b
 	}
 	launchedAt := time.Now()
 	args := adapter.Argv(config.LaunchArgs, restoring, runtime.HarnessSessionID)
-	args = append(args, manager.skillArgs(ctx, adapter, config, harnessExecutable, runtime.LaunchToken)...)
-	command, err := hostruntime.Default().Command(hostruntime.LaunchSpec{Executable: harnessExecutable, Args: args, UTF8: config.UTF8Enabled()})
+	if target.wsl == nil {
+		args = append(args, manager.skillArgs(ctx, adapter, config, harnessExecutable, runtime.LaunchToken)...)
+	}
+	command, err := target.runtime.Command(hostruntime.LaunchSpec{Executable: harnessExecutable, Args: args, UTF8: config.UTF8Enabled(), WorkingDir: config.WorkingDir})
+	if err != nil {
+		return Snapshot{}, errors.Join(err, manager.store.Finish(ctx, id, session.StatusFailed, err.Error()))
+	}
+	childEnv, err := target.childEnvironment(launchEnv, runtime.LaunchToken)
 	if err != nil {
 		return Snapshot{}, errors.Join(err, manager.store.Finish(ctx, id, session.StatusFailed, err.Error()))
 	}
@@ -578,7 +586,7 @@ func (manager *Manager) start(ctx context.Context, id string, restoring, fresh b
 		err := errors.New("session manager is shutting down")
 		return Snapshot{}, errors.Join(err, manager.store.Finish(ctx, id, session.StatusFailed, err.Error()))
 	}
-	process, err := manager.startProcess(columns, rows, command.Executable, config.WorkingDir, conpty.ChildEnvironment(launchEnv),
+	process, err := manager.startProcess(columns, rows, command.Executable, target.hostDirectory, childEnv,
 		command.Args...)
 	if err != nil {
 		finishErr := manager.store.Finish(ctx, id, session.StatusFailed, err.Error())
@@ -597,6 +605,7 @@ func (manager *Manager) start(ctx context.Context, id string, restoring, fresh b
 		status:      session.StatusRunning,
 		hasResumeID: runtime.HarnessSessionID != "",
 		resumeNote:  discoveryNote,
+		cleanup:     target.cleanup(runtime.LaunchToken),
 	}
 	manager.mu.Lock()
 	manager.sessions[id] = current
@@ -984,6 +993,10 @@ func (manager *Manager) supervise(current *managedSession) {
 		}
 	}
 	closeErr := current.process.Close()
+	cleanupNote, cleanupErr := runCleanup(current.cleanup)
+	if cleanupErr != nil {
+		diagnostics.Warn("WSL cleanup failed", cleanupErr, "session_id", current.config.ID)
+	}
 	if exitCode != 0 && waitErr == nil && !current.wasForced() && current.wasQuitAsked() {
 		// pwsh -Command reports the harness's own exit code; some harnesses
 		// (OpenCode) exit non-zero after a requested quit.
@@ -992,6 +1005,10 @@ func (manager *Manager) supervise(current *managedSession) {
 		exitCode = 0
 	}
 	status, detail := outcome(exitCode, current.wasForced(), waitErr, closeErr)
+	if cleanupNote != "" {
+		diagnostics.Warn(cleanupNote, nil, "session_id", current.config.ID)
+		detail = strings.TrimSpace(detail + " " + cleanupNote)
+	}
 	if err := manager.store.Finish(context.Background(), current.config.ID, status, detail); err != nil {
 		status = session.StatusFailed
 		detail = errors.Join(optionalError(detail), err).Error()

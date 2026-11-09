@@ -1,6 +1,5 @@
-// Package runtime describes where a session's harness process runs. Today the
-// only runtime is PowerShell 7 on Windows; the interface is the seam a later
-// runtime (for example WSL) plugs into. See docs/wsl/02-design.md.
+// Package runtime describes where a session's harness process runs: PowerShell
+// 7 on Windows (the default) or a WSL2 distro. See docs/wsl/02-design.md.
 package runtime
 
 import (
@@ -9,18 +8,32 @@ import (
 	"os/exec"
 
 	"github.com/ma99us/tau-shell/internal/harness"
+	"github.com/ma99us/tau-shell/internal/session"
 )
 
 // Kind names a runtime.
 type Kind string
 
-const PowerShell Kind = "powershell"
+const (
+	PowerShell Kind = "powershell"
+	KindWSL    Kind = "wsl"
+)
+
+// For returns the runtime a session's config selects.
+func For(config session.Config) (Runtime, error) {
+	if config.Runtime == string(KindWSL) {
+		return NewWSL(config.WSL.Distro)
+	}
+	return Default(), nil
+}
 
 // LaunchSpec is what a runtime needs to build the process command line.
 type LaunchSpec struct {
 	Executable string
 	Args       []string
 	UTF8       bool
+	// WorkingDir is the session's working_dir as configured; a runtime maps it.
+	WorkingDir string
 }
 
 // Command is an executable and its arguments, ready for the ConPTY host.

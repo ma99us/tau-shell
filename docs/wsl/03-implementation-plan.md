@@ -55,6 +55,8 @@ Status: done as a single seam. All harness and usage readers call `harness.HomeD
 
 ## Phase 3 - WSL runtime: launch and lifetime - L
 
+Status: done for launch and lifetime (`internal/runtime/wsl.go`, `sessionhost/launch_target_windows.go`, `session.Config` `runtime`/`wsl.distro`). Live-verified on Ubuntu with Claude Code and Copilot CLI launch, env forwarding and marker cleanup. Codex and OpenCode (discovered session IDs) are rejected for WSL; GSD is unverified. Not done: resume/model/title/usage readers for the distro home (resume check is skipped, so WSL sessions always start fresh), git, files drawer and skills on Linux paths. CLI `start` rejects WSL sessions.
+
 - `wslRuntime`: availability, distro list (UTF-16 decode), user lookup, command
   build with `--exec`, environment plus `WSLENV`, path conversion, cleanup helper.
 - Config: `runtime` and `wsl.distro` with validation; YAML schema docs; round trip; reject unsafe values.
@@ -65,6 +67,8 @@ Status: done as a single seam. All harness and usage readers call `harness.HomeD
   extended with runtime selection).
 
 ## Phase 3.5 - WSL as a Tool: detection and inventory - M
+
+Status: done as a separate readiness model, not a `tools.Specs()` entry (winget install of WSL needs UAC and a reboot; adding it would change the Tools panel and golden spec). `runtime.Detect` (`readiness.go`) is exposed through the `GetWSLStatus` bridge method; the Tools panel card is Phase 4.
 
 - `tools.WSL` spec, UTF-16 probe reader, structured version and distro-list
   parsers (never match localized prose), readiness checks, distro inventory

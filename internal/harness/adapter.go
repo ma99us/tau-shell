@@ -173,6 +173,16 @@ func (adapter cliAdapter) ID() session.Harness {
 	return session.Harness(adapter.manifest.ID)
 }
 
+// ExecutableName returns the bare command name a harness manifest declares,
+// for runtimes that resolve it themselves (for example inside WSL).
+func ExecutableName(id session.Harness) (string, error) {
+	item, ok := manifest.Get(string(id))
+	if !ok {
+		return "", fmt.Errorf("unknown harness %q", id)
+	}
+	return item.Executable, nil
+}
+
 func (adapter cliAdapter) FindExecutable() (string, error) {
 	path, err := exec.LookPath(adapter.manifest.Executable)
 	if err != nil {

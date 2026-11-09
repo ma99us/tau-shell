@@ -91,6 +91,11 @@ type Config struct {
 	PowerShell struct {
 		UTF8 *bool `yaml:"utf8"`
 	} `yaml:"powershell,omitempty"`
+	// Runtime is where the harness runs: "powershell" (default) or "wsl".
+	Runtime string `yaml:"runtime,omitempty"`
+	WSL     struct {
+		Distro string `yaml:"distro,omitempty"`
+	} `yaml:"wsl,omitempty"`
 	// Presets are session-level prompt presets merged over the global
 	// prompts.yaml entries by name.
 	Presets []presets.Preset `yaml:"presets,omitempty"`
@@ -215,8 +220,16 @@ func (config Config) Validate() error {
 		}
 		return fmt.Errorf("unsupported tool %q (supported: %s)", config.Tool, strings.Join(names, ", "))
 	}
-	if config.WorkingDir == "" || !filepath.IsAbs(config.WorkingDir) {
+	if config.WorkingDir == "" || !(filepath.IsAbs(config.WorkingDir) || (config.IsWSL() && strings.HasPrefix(config.WorkingDir, "/"))) {
 		return fmt.Errorf("working_dir must be an absolute path")
+	}
+	if err := config.validateRuntime(); err != nil {
+		return err
+	}
+	if config.IsWSL() && strings.HasPrefix(config.WorkingDir, "/") {
+		// A Linux path cannot be checked without starting the distro; the
+		// launch fails visibly if it does not exist.
+		return config.validateRest()
 	}
 	info, err := os.Stat(config.WorkingDir)
 	if err != nil {
@@ -225,6 +238,37 @@ func (config Config) Validate() error {
 	if !info.IsDir() {
 		return fmt.Errorf("working_dir %q is not a directory", config.WorkingDir)
 	}
+	return config.validateRest()
+}
+
+// IsWSL reports whether the harness runs inside a WSL distro.
+func (config Config) IsWSL() bool { return config.Runtime == "wsl" }
+
+var wslDistroPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
+
+// ValidateWSLDistro accepts a distro name safe to pass as one wsl.exe argument.
+func ValidateWSLDistro(distro string) error {
+	if !wslDistroPattern.MatchString(distro) {
+		return fmt.Errorf("wsl.distro %q must be 1 to 64 letters, digits, dots, dashes or underscores", distro)
+	}
+	return nil
+}
+
+func (config Config) validateRuntime() error {
+	switch config.Runtime {
+	case "", "powershell":
+		if config.WSL.Distro != "" {
+			return errors.New("wsl.distro is only valid when runtime is wsl")
+		}
+	case "wsl":
+		return ValidateWSLDistro(config.WSL.Distro)
+	default:
+		return fmt.Errorf("unsupported runtime %q (supported: powershell, wsl)", config.Runtime)
+	}
+	return nil
+}
+
+func (config Config) validateRest() error {
 	for name := range config.Environment {
 		if !environmentPattern.MatchString(name) {
 			return fmt.Errorf("invalid environment variable name %q", name)
