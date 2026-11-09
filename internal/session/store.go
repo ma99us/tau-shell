@@ -88,6 +88,12 @@ func OpenStore(path string) (*Store, error) {
 		CREATE TABLE IF NOT EXISTS app_settings (
 			key TEXT PRIMARY KEY,
 			value TEXT NOT NULL
+		);
+		CREATE TABLE IF NOT EXISTS prompt_queue (
+			session_id TEXT NOT NULL,
+			position INTEGER NOT NULL,
+			text TEXT NOT NULL,
+			PRIMARY KEY (session_id, position)
 		)
 	`); err != nil {
 		_ = db.Close()
@@ -199,6 +205,9 @@ func (store *Store) delete(ctx context.Context, sessionID string, journal bool, 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM session_order WHERE session_id = ?`, sessionID); err != nil {
 		return fmt.Errorf("delete display order for %q: %w", sessionID, err)
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM prompt_queue WHERE session_id = ?`, sessionID); err != nil {
+		return fmt.Errorf("delete queued prompts for %q: %w", sessionID, err)
+	}
 	if journal {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO session_deletions (session_id, created_at) VALUES (?, ?)`, sessionID, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
 			return fmt.Errorf("record deletion for %q: %w", sessionID, err)
@@ -267,6 +276,49 @@ func (store *Store) SetSetting(ctx context.Context, key, value string) error {
 	defer store.mu.Unlock()
 	if _, err := store.db.ExecContext(ctx, `INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value); err != nil {
 		return fmt.Errorf("save setting %q: %w", key, err)
+	}
+	return nil
+}
+
+// PromptQueues returns the saved queued prompts of every session, in send order.
+func (store *Store) PromptQueues(ctx context.Context) (map[string][]string, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	rows, err := store.db.QueryContext(ctx, `SELECT session_id, text FROM prompt_queue ORDER BY session_id, position`)
+	if err != nil {
+		return nil, fmt.Errorf("read queued prompts: %w", err)
+	}
+	defer rows.Close()
+	queues := map[string][]string{}
+	for rows.Next() {
+		var id, text string
+		if err := rows.Scan(&id, &text); err != nil {
+			return nil, fmt.Errorf("read queued prompts: %w", err)
+		}
+		queues[id] = append(queues[id], text)
+	}
+	return queues, rows.Err()
+}
+
+// SetPromptQueue replaces one session's saved queued prompts. An empty list removes them.
+func (store *Store) SetPromptQueue(ctx context.Context, sessionID string, prompts []string) error {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	tx, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("save queued prompts: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM prompt_queue WHERE session_id = ?`, sessionID); err != nil {
+		return fmt.Errorf("save queued prompts: %w", err)
+	}
+	for position, text := range prompts {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO prompt_queue (session_id, position, text) VALUES (?, ?, ?)`, sessionID, position, text); err != nil {
+			return fmt.Errorf("save queued prompts: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("save queued prompts: %w", err)
 	}
 	return nil
 }

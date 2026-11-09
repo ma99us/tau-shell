@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -135,6 +136,106 @@ func TestGitSyncCommitsAndPushes(t *testing.T) {
 	status, _ := GitStatus(context.Background(), work)
 	if status.Dirty || status.Ahead != 0 || status.Behind != 0 {
 		t.Fatalf("workspace not clean after sync: %+v", status)
+	}
+}
+
+func TestGitFetchMakesIncomingCommitsVisible(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	root := t.TempDir()
+	git := func(dir string, args ...string) {
+		t.Helper()
+		command := exec.Command("git", append([]string{"-C", dir, "-c", "user.name=t", "-c", "user.email=t@t"}, args...)...)
+		if output, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, output)
+		}
+	}
+	remote, first, second := filepath.Join(root, "remote.git"), filepath.Join(root, "first"), filepath.Join(root, "second")
+	git(root, "init", "--bare", remote)
+	git(root, "clone", remote, first)
+	if err := os.WriteFile(filepath.Join(first, "a.txt"), []byte("one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(first, "add", "-A")
+	git(first, "commit", "-m", "init")
+	git(first, "push", "-u", "origin", "HEAD")
+	git(root, "clone", remote, second)
+	if err := os.WriteFile(filepath.Join(second, "b.txt"), []byte("two\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(second, "add", "-A")
+	git(second, "commit", "-m", "incoming")
+	git(second, "push")
+	if status, _ := GitStatus(context.Background(), first); status.Behind != 0 {
+		t.Fatalf("behind before fetch = %d, want 0", status.Behind)
+	}
+	if !GitFetch(context.Background(), first) {
+		t.Fatal("expected a fetch to run")
+	}
+	if status, _ := GitStatus(context.Background(), first); status.Behind != 1 {
+		t.Fatalf("behind after fetch = %d, want 1", status.Behind)
+	}
+	if GitFetch(context.Background(), first) {
+		t.Fatal("a second fetch inside the throttle window should be skipped")
+	}
+	if GitFetch(context.Background(), t.TempDir()) {
+		t.Fatal("a non-repository must not fetch")
+	}
+}
+
+func TestParseGitChanges(t *testing.T) {
+	output := " M src/a.go\x00A  src/new.go\x00?? src/dir/u.txt\x00 D src/gone.go\x00R  src/b.go\x00src/old.go\x00UU src/c.go\x00MM src/both.go\x00 M other/x.go\x00"
+	got := ParseGitChanges(output, "src/")
+	want := []GitChange{
+		{"a.go", "M", false}, {"new.go", "A", true}, {"dir/u.txt", "U", false}, {"gone.go", "D", false},
+		{"b.go", "R", true}, {"c.go", "!", false}, {"both.go", "M", false}, {"other/x.go", "M", false},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %+v\nwant %+v", got, want)
+	}
+}
+
+func TestGitChangesInSubdirectory(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	root := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		if output, err := exec.Command("git", append([]string{"-C", root, "-c", "user.name=t", "-c", "user.email=t@t"}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, output)
+		}
+	}
+	sub := filepath.Join(root, "app")
+	if err := os.MkdirAll(filepath.Join(sub, "pkg"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "tracked.txt"), []byte("1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run("init")
+	run("add", "-A")
+	run("commit", "-m", "init")
+	if err := os.WriteFile(filepath.Join(sub, "tracked.txt"), []byte("2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "pkg", "new.txt"), []byte("n\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "outside.txt"), []byte("o\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	changes, ok := GitChanges(context.Background(), sub)
+	if !ok {
+		t.Fatal("expected a repository")
+	}
+	want := []GitChange{{"tracked.txt", "M", false}, {"pkg/new.txt", "U", false}}
+	if !reflect.DeepEqual(changes, want) {
+		t.Fatalf("got %+v, want %+v", changes, want)
+	}
+	if _, ok := GitChanges(context.Background(), t.TempDir()); ok {
+		t.Fatal("a non-repository must not report changes")
 	}
 }
 

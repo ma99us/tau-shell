@@ -114,12 +114,38 @@ func (application *App) ProvideScreen(request string, rows []string) error {
 }
 
 // SetQueuedPrompts tells the app how many prompts are waiting in the window's queues,
-// so that closing can warn that they are discarded.
+// so that closing can mention them.
 func (application *App) SetQueuedPrompts(count int) {
 	if count < 0 {
 		count = 0
 	}
 	atomic.StoreInt32(&application.queuedPrompts, int32(count))
+}
+
+const (
+	maxSavedPrompts     = 200
+	maxSavedPromptBytes = 512 * 1024
+)
+
+// LoadPromptQueues returns the queued prompts saved by the last run, per session.
+func (application *App) LoadPromptQueues() (map[string][]string, error) {
+	return application.manager.PromptQueues(context.Background())
+}
+
+// SavePromptQueue saves a session's queued prompts so they survive a restart. The text is
+// stored locally and never logged.
+func (application *App) SavePromptQueue(sessionID string, prompts []string) error {
+	if len(prompts) > maxSavedPrompts {
+		return fmt.Errorf("at most %d prompts can be queued", maxSavedPrompts)
+	}
+	total := 0
+	for _, prompt := range prompts {
+		total += len(prompt)
+	}
+	if total > maxSavedPromptBytes {
+		return errors.New("the queued prompts are too large to save")
+	}
+	return application.manager.SetPromptQueue(context.Background(), sessionID, prompts)
 }
 
 // RecordQueueSend notes that the queue typed a prompt into a session. It records the

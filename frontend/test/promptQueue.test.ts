@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { clearQueue, enqueuePrompt, getQueue, graceMs, queueDecision, queuedTotal, resumeQueue, runQueues, type QueueHooks, type QueueSession, type SessionQueue } from "../src/promptQueue.ts";
+import { clearQueue, enqueuePrompt, getQueue, graceMs, queueDecision, queuedTotal, resumeQueue, restoreQueues, runQueues, sendNextNow, setQueueForceSender, type QueueHooks, type QueueSession, type SessionQueue } from "../src/promptQueue.ts";
 import type { HarnessSignal } from "../src/attention.ts";
 import { setHarnesses, type HarnessInfo } from "../src/harnesses.ts";
 
@@ -79,4 +79,24 @@ test("a refused send leaves the item waiting", () => {
   runQueues([session], hooks, 1000);
   assert.equal(getQueue("q3").items.length, 1);
   clearQueue("q3");
+});
+
+test("restored prompts stay paused until Send, which sends the next one and lets the queue continue", () => {
+  const id = "restored-session";
+  const session: QueueSession = { id, tool: "claude-code", runningHere: true };
+  const typed: string[] = [];
+  setQueueForceSender((_target, text) => { typed.push(text); return ""; });
+  restoreQueues({ [id]: ["one", "two"] });
+  assert.equal(getQueue(id).items.length, 2);
+  assert.notEqual(getQueue(id).paused, "");
+  const idle: QueueHooks = { signalOf: () => "idle", draftOf: () => "", send: () => "", sent: () => {} };
+  runQueues([session], idle, 100000);
+  assert.equal(getQueue(id).items.length, 2, "a restored queue must not drain by itself");
+  assert.equal(sendNextNow(session, 100000), "");
+  assert.deepEqual(typed, ["one"]);
+  assert.equal(getQueue(id).paused, "");
+  assert.equal(getQueue(id).items.length, 1);
+  clearQueue(id);
+  assert.equal(sendNextNow(session, 100000), "");
+  setQueueForceSender(undefined);
 });

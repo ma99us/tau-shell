@@ -474,6 +474,10 @@ textarea:focus-visible,
   color: var(--accent-text-1);
 }
 
+.tab-item.active .tab {
+  font-weight: 700;
+}
+
 .tab-item.active {
   border-color: var(--accent-text-1);
   background: var(--accent-bg-2);
@@ -495,6 +499,21 @@ textarea:focus-visible,
 .tab-item .tab-label {
   border: 0;
   background: transparent;
+}
+
+/* A hidden bold copy reserves the bold width, so selecting a tab never resizes it. */
+.tab-name {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.tab-name::after {
+  height: 0;
+  overflow: hidden;
+  content: attr(data-text);
+  font-weight: 700;
+  visibility: hidden;
 }
 
 .tab-close {
@@ -1814,10 +1833,48 @@ h3 {
   font-size: var(--fs-12);
 }
 
+.queue-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+}
+
+.queue-send {
+  padding: 3px 12px;
+}
+
+.queue-send:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .queue-link {
   padding: 4px 9px;
   text-align: left;
   text-decoration: underline;
+}
+
+.queue-remove {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.queue-remove:hover {
+  color: var(--text-3);
+}
+
+.queue-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 9px;
+}
+
+.queue-edit-actions {
+  display: flex;
+  gap: 6px;
 }
 
 .queue-presets {
@@ -1877,6 +1934,58 @@ h3 {
 .file-row.selected {
   background: var(--bg-control-hover);
 }
+
+.file-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.file-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-6);
+  font-family: inherit;
+  font-size: var(--fs-12);
+  font-weight: 700;
+}
+
+.file-tab:hover {
+  color: var(--text-2);
+}
+
+.file-tab.active {
+  border-bottom-color: var(--status-ok);
+  color: var(--text-1);
+}
+
+.file-tab-count {
+  padding: 0 6px;
+  border-radius: var(--radius-9);
+  background: var(--bg-control-hover);
+  color: var(--text-3);
+  font-size: var(--fs-10);
+}
+
+.git-code {
+  flex: 0 0 auto;
+  min-width: 16px;
+  padding: 0 8px 0 4px;
+  font-size: var(--fs-11);
+  font-weight: 700;
+  text-align: center;
+}
+
+.git-code[data-code="M"] { color: var(--status-warn); }
+.git-code[data-code="A"],
+.git-code[data-code="U"] { color: var(--status-ok); }
+.git-code[data-code="D"] { color: var(--danger-text-4); }
+.git-code[data-code="R"] { color: var(--file-blue); }
+.git-code[data-code="!"] { color: var(--status-failed); }
 
 .file-row {
   display: flex;
@@ -2004,8 +2113,20 @@ h3 {
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  overflow: auto;
+  overflow: hidden;
   border-top: 1px solid var(--border-hover);
+}
+
+.file-view-head {
+  flex: none;
+}
+
+.file-view-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: auto;
 }
 
 .file-warning {
@@ -2758,7 +2879,7 @@ h3 {
 .terminal-view[data-colored] .terminal-body::after {
   content: "";
   position: absolute;
-  inset: 0 0 2px 0;
+  inset: 0 0 1px 0;
   border-left: 1px solid var(--session-color);
   border-bottom: 3px solid var(--session-color);
   pointer-events: none;

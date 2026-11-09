@@ -90,6 +90,7 @@ export type HarnessWidgets = {
 };
 
 export type GitStatus = { branch: string; dirty: boolean; ahead: number; behind: number };
+export type GitChange = { path: string; code: string; staged: boolean };
 export type ProjectEntry = { name: string; path: string; dir: boolean; size: number };
 export type ProjectListing = { entries: ProjectEntry[]; truncated: boolean };
 export type AppUpdate = { tag: string; url: string; notes: string; canInstall: boolean; reason: string };
@@ -250,6 +251,8 @@ type WailsApp = {
   ReportSessionState(id: string, state: string, source: string, hasDraft: boolean, question: boolean): Promise<void>;
   ProvideScreen(request: string, rows: string[]): Promise<void>;
   SetQueuedPrompts(count: number): Promise<void>;
+  LoadPromptQueues(): Promise<Record<string, string[]>>;
+  SavePromptQueue(sessionId: string, prompts: string[]): Promise<void>;
   RecordQueueSend(session: string, outcome: string): Promise<void>;
   OpenSettingsFile(): Promise<void>;
   OpenToolConfig(toolId: string): Promise<void>;
@@ -259,6 +262,8 @@ type WailsApp = {
   GetGitBranch(sessionId: string): Promise<string>;
   GetGitStatus(sessionId: string): Promise<GitStatus | null>;
   SyncGit(sessionId: string): Promise<string>;
+  FetchGit(sessionId: string): Promise<boolean>;
+  ListGitChanges(sessionId: string): Promise<GitChange[] | null>;
   GetHarnessActivity(sessionId: string): Promise<string>;
   ListProjectDir(sessionId: string, rel: string, showAll: boolean): Promise<ProjectListing>;
   ReadProjectFile(sessionId: string, rel: string): Promise<ProjectFile>;

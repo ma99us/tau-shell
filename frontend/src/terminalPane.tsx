@@ -6,7 +6,7 @@ import { gitParts, gitTooltip } from "./gitChip";
 import { parseOsc52 } from "./osc52";
 import { Icon } from "./icons";
 import { theme } from "./theme/theme";
-import { composeInjection, controlSendPlan, planSend, promptKind, readDraft, readHarnessSignal } from "./attention";
+import { combineSignal, composeInjection, controlSendPlan, freshLogState, planSend, promptKind, readDraft, readHarnessSignal } from "./attention";
 import { SessionUsage, formatTokens, formatUSD, hasUsage, usageTooltip } from "./usage";
 import { HarnessToolbar, InterruptButton, sendNotice } from "./harnessActions";
 import type { QueueHooks } from "./promptQueue";
@@ -63,6 +63,8 @@ function notifyTerminalReady(id: string, terminal: Terminal) {
   waiters.forEach((resolve) => resolve(terminal));
 }
 
+const isEmptyClipboardError = (error: unknown) => /operation completed successfully/i.test(error instanceof Error ? error.message : String(error));
+
 // Windows Terminal convention: Ctrl+C copies only when text is selected (otherwise it is ^C
 // for the harness); Ctrl+V and Ctrl+Shift+C/V always paste/copy. Uses the native clipboard
 // because WebView2's navigator.clipboard needs a permission prompt.
@@ -84,7 +86,8 @@ function handleClipboardKey(event: globalThis.KeyboardEvent, terminal: Terminal,
       void window.runtime.ClipboardSetText(text).then(() => terminal.clearSelection()).catch((error) => onError(error));
     }
   } else {
-    void window.runtime.ClipboardGetText().then((text) => { if (text) terminal.paste(text); }).catch((error) => onError(error));
+    // An image-only clipboard has no text: Wails then reports Windows error 0, which is not a failure.
+    void window.runtime.ClipboardGetText().then((text) => { if (text) terminal.paste(text); }).catch((error) => { if (!isEmptyClipboardError(error)) onError(error); });
   }
   return false;
 }
@@ -121,11 +124,16 @@ export function insertAtPrompt(session: Session, text: string): string {
   return "";
 }
 
+// Screen cue merged with the harness's own log answer, the same signal attention uses.
+function liveSignal(id: string, tool: string, terminal: Parameters<typeof readHarnessSignal>[1]) {
+  return combineSignal(readHarnessSignal(tool, terminal, terminalTitles.get(id) ?? ""), freshLogState(id, Date.now()));
+}
+
 // Types text that arrived over the control channel. Returns why it was refused, or "" when typed.
 export function controlSend(session: Session, text: string, submit: boolean, allowBusySubmit = false): string {
   const terminal = terminalInstances.get(session.id);
   if (!terminal || !session.runningHere) return "the session has no open terminal";
-  const signal = readHarnessSignal(session.tool, terminal, terminalTitles.get(session.id) ?? "");
+  const signal = liveSignal(session.id, session.tool, terminal);
   const plan = controlSendPlan(signal, submit, readDraft(terminal), signal === "input" && promptKind(session.tool, terminal) === "question", allowBusySubmit);
   if (!plan.allowed) return plan.reason;
   const injected = composeInjection(readDraft(terminal), text, submit);
@@ -138,7 +146,7 @@ export function controlSend(session: Session, text: string, submit: boolean, all
 // How the prompt queue reads and drives the live terminals. controlSend re-checks the screen
 // itself, so a send is refused when the harness changed state since the scheduler looked.
 export const queueHooks: QueueHooks = {
-  signalOf: (session) => readHarnessSignal(session.tool, terminalInstances.get(session.id), terminalTitles.get(session.id) ?? ""),
+  signalOf: (session) => liveSignal(session.id, session.tool, terminalInstances.get(session.id)),
   draftOf: (session) => { const terminal = terminalInstances.get(session.id); return terminal ? readDraft(terminal) : ""; },
   send: (session, text) => controlSend(session as Session, text, true),
   sent: (session) => { app().RecordQueueSend(session.id, "sent").catch((error) => console.error("TauShell could not record a queued send.", error)); },
@@ -242,6 +250,19 @@ export function TerminalPane({ session, visible, busy, harness, onSend, onNotice
     };
     void load();
     const timer = window.setInterval(load, 5000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [sessionId, visible]);
+  // Fetch from the remote now and every 5 minutes so the incoming-commits arrow can appear.
+  useEffect(() => {
+    if (!sessionId || !visible) return;
+    let cancelled = false;
+    const fetchRemote = async () => {
+      try {
+        if (await app().FetchGit(sessionId) && !cancelled) setGit(await app().GetGitStatus(sessionId));
+      } catch { /* offline or no remote: keep the last known counts */ }
+    };
+    void fetchRemote();
+    const timer = window.setInterval(fetchRemote, 5 * 60 * 1000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [sessionId, visible]);
   useEffect(() => {

@@ -10,6 +10,7 @@ docs\.todo
 /cmd/taushell/conpty.dll
 /cmd/taushell/OpenConsole.exe
 /taushell.exe
+/taushell-test.exe
 /cmd/taushell/__debug_bin*.exe
 /__debug_bin*.exe
 /cmd/taushell/rsrc_windows_amd64.syso

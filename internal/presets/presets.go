@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -221,6 +222,119 @@ func GitStatus(ctx context.Context, dir string) (status RepoStatus, ok bool) {
 	}
 	return ParseGitStatus(string(output)), true
 }
+
+// GitChange is one changed path under a repository directory. Code is a single
+// VS Code style letter: M modified, A added, D deleted, R renamed or copied,
+// U untracked, ! conflicted.
+type GitChange struct {
+	Path   string `json:"path"`
+	Code   string `json:"code"`
+	Staged bool   `json:"staged"`
+}
+
+// GitChanges lists the changed files at or below dir, with paths relative to
+// dir. ok is false when dir is not a git working tree or git did not answer in time.
+func GitChanges(ctx context.Context, dir string) (changes []GitChange, ok bool) {
+	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+	run := func(args ...string) ([]byte, error) {
+		command := exec.CommandContext(ctx, "git", append([]string{"-C", dir, "--no-optional-locks"}, args...)...)
+		hideWindow(command)
+		return command.Output()
+	}
+	prefixOutput, err := run("rev-parse", "--show-prefix")
+	if err != nil {
+		return nil, false
+	}
+	output, err := run("status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ".")
+	if err != nil {
+		return nil, false
+	}
+	return ParseGitChanges(string(output), strings.TrimSpace(string(prefixOutput))), true
+}
+
+// ParseGitChanges reads `git status --porcelain=v1 -z` output. prefix is the
+// working directory's path inside the repository (`git rev-parse --show-prefix`)
+// and is removed from every path.
+func ParseGitChanges(output, prefix string) []GitChange {
+	changes := []GitChange{}
+	fields := strings.Split(output, "\x00")
+	for index := 0; index < len(fields); index++ {
+		entry := fields[index]
+		if len(entry) < 4 {
+			continue
+		}
+		x, y, path := entry[0], entry[1], entry[3:]
+		if x == 'R' || x == 'C' || y == 'R' || y == 'C' {
+			index++ // the original name follows as its own field
+		}
+		code, staged := changeCode(x, y)
+		if code == "" {
+			continue
+		}
+		changes = append(changes, GitChange{Path: strings.TrimPrefix(path, prefix), Code: code, Staged: staged})
+	}
+	return changes
+}
+
+func changeCode(x, y byte) (code string, staged bool) {
+	switch {
+	case x == '?' && y == '?':
+		return "U", false
+	case x == '!' && y == '!':
+		return "", false
+	case x == 'U' || y == 'U' || (x == 'A' && y == 'A') || (x == 'D' && y == 'D'):
+		return "!", false
+	}
+	letter, isStaged := y, false
+	if letter == ' ' {
+		letter, isStaged = x, true
+	}
+	switch letter {
+	case 'M', 'T':
+		return "M", isStaged
+	case 'A':
+		return "A", isStaged
+	case 'D':
+		return "D", isStaged
+	case 'R', 'C':
+		return "R", isStaged
+	}
+	return "", false
+}
+
+// GitFetch refreshes the remote-tracking refs of dir's repository so the
+// behind count is current. It is best effort: it never prompts for credentials,
+// skips repositories without an upstream, and is throttled per directory so
+// several tabs on one repository do not fetch repeatedly. It returns whether a
+// fetch ran and succeeded.
+func GitFetch(ctx context.Context, dir string) bool {
+	if status, ok := GitStatus(ctx, dir); !ok || status.Ahead < 0 {
+		return false
+	}
+	fetchMutex.Lock()
+	if last, seen := lastFetch[dir]; seen && time.Since(last) < minFetchGap {
+		fetchMutex.Unlock()
+		return false
+	}
+	lastFetch[dir] = time.Now()
+	fetchMutex.Unlock()
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	command := exec.CommandContext(ctx, "git", "-C", dir, "--no-optional-locks", "fetch", "--quiet", "--no-tags", "--no-recurse-submodules")
+	command.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GCM_INTERACTIVE=never")
+	if os.Getenv("GIT_SSH_COMMAND") == "" {
+		command.Env = append(command.Env, "GIT_SSH_COMMAND=ssh -o BatchMode=yes")
+	}
+	hideWindow(command)
+	return command.Run() == nil
+}
+
+var (
+	fetchMutex  sync.Mutex
+	lastFetch   = map[string]time.Time{}
+	minFetchGap = 60 * time.Second
+)
 
 // GitSync makes the repository clean and shared: it stages every change that
 // .gitignore does not exclude, commits it, rebases onto the upstream and

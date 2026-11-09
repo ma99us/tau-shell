@@ -414,6 +414,16 @@ func (manager *Manager) SetAutoResumeAll(ctx context.Context, enabled bool) erro
 	return manager.store.SetSetting(ctx, autoResumeAllSetting, strconv.FormatBool(enabled))
 }
 
+// PromptQueues returns the saved queued prompts per session.
+func (manager *Manager) PromptQueues(ctx context.Context) (map[string][]string, error) {
+	return manager.store.PromptQueues(ctx)
+}
+
+// SetPromptQueue saves one session's queued prompts.
+func (manager *Manager) SetPromptQueue(ctx context.Context, id string, prompts []string) error {
+	return manager.store.SetPromptQueue(ctx, id, prompts)
+}
+
 // UpdateDisplay persists a new name, color or auto_resume value for a session
 // and applies it to the running session, if any, without touching its process.
 func (manager *Manager) UpdateDisplay(id, field, value string) error {

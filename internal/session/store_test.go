@@ -578,3 +578,42 @@ func TestOpenStoreRecordsAndEnforcesSchemaVersion(t *testing.T) {
 		t.Fatalf("OpenStore on newer schema = %v, want ErrNewerSchema", err)
 	}
 }
+
+func TestStorePersistsPromptQueuesAndDeletesThemWithTheSession(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "state.db")
+	store, err := OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetPromptQueue(ctx, "a", []string{"first", "second\nline"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetPromptQueue(ctx, "b", []string{"other"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetPromptQueue(ctx, "b", nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store, err = OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	queues, err := store.PromptQueues(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(queues) != 1 || len(queues["a"]) != 2 || queues["a"][0] != "first" || queues["a"][1] != "second\nline" {
+		t.Fatalf("queues = %#v, want only a in order", queues)
+	}
+	if err := store.Delete(ctx, "a"); err != nil {
+		t.Fatal(err)
+	}
+	if queues, _ = store.PromptQueues(ctx); len(queues) != 0 {
+		t.Fatalf("queues after delete = %#v, want none", queues)
+	}
+}

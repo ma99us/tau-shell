@@ -80,6 +80,32 @@ func (application *App) GetGitStatus(sessionID string) (*presets.RepoStatus, err
 	return &status, nil
 }
 
+// ListGitChanges returns the changed files under the session's working
+// directory (modified, added, deleted, renamed, untracked, conflicted), or nil
+// when the folder is not a repository.
+func (application *App) ListGitChanges(sessionID string) ([]presets.GitChange, error) {
+	config, err := session.FindConfig(application.configDirectory, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	changes, ok := presets.GitChanges(context.Background(), config.WorkingDir)
+	if !ok {
+		return nil, nil
+	}
+	return changes, nil
+}
+
+// FetchGit refreshes the remote-tracking refs for the session repository (no
+// merge, no prompts) and reports whether a fetch ran. Failures such as being
+// offline are not errors: the badge simply keeps the last known counts.
+func (application *App) FetchGit(sessionID string) bool {
+	config, err := session.FindConfig(application.configDirectory, sessionID)
+	if err != nil {
+		return false
+	}
+	return presets.GitFetch(context.Background(), config.WorkingDir)
+}
+
 // SyncGit commits all pending changes, rebases onto upstream and pushes. It
 // returns a short summary of what happened.
 func (application *App) SyncGit(sessionID string) (summary string, err error) {

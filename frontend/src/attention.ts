@@ -208,6 +208,12 @@ export function controlSendPlan(signal: HarnessSignal, submit: boolean, draft: s
 }
 
 export const logActivityTtlMs = 5000;
+// Latest harness-log busy/idle answer per session; main.tsx refreshes it, the queue and sends read it.
+export const logActivityCache = new Map<string, { state: string; at: number }>();
+export function freshLogState(id: string, now: number): string | undefined {
+  const log = logActivityCache.get(id);
+  return log && now - log.at <= logActivityTtlMs ? log.state : undefined;
+}
 
 // The harness's own log is the most generic busy/idle source, so it beats screen
 // text for working/idle; a visible prompt on screen (input) still wins because the

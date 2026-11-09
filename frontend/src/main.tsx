@@ -5,7 +5,7 @@ import { app, DialogRequest, InstallResult, Session, SessionEvent, ShutdownProgr
 import { HomePanelId, PanelFeedbackState } from "./homePanel";
 import "./theme/tokens.css";
 import "./style.css";
-import { Activity, AttentionKind, answerPlan, attentionEdge, combineSignal, hasCueSignal, logActivityTtlMs, nextActivity, promptKind, readDraft, readHarnessSignal, readScreen, reportedState } from "./attention";
+import { Activity, AttentionKind, answerPlan, attentionEdge, combineSignal, freshLogState, hasCueSignal, logActivityCache, nextActivity, promptKind, readDraft, readHarnessSignal, readScreen, reportedState } from "./attention";
 import { moveId } from "./order";
 import { CommandPalette, PaletteItem } from "./harnessActions";
 import { GearIcon, HomeIcon } from "./harnessIcons";
@@ -17,7 +17,7 @@ import { NotesDialog } from "./sessionNotesView";
 import { sessionColorStyle, SessionMenu, statusLabel, StateIcon } from "./sessionVisuals";
 import { Home, SkillsActions, toolUsable, Setup } from "./home";
 import { terminalInstances, lastInputAt, terminalTitles, echoWindowMs, fitInstances, waitForTerminal, sendToSession, controlSend, interruptSession, queueHooks, TerminalPane } from "./terminalPane";
-import { queuedTotal, runQueues, subscribeQueues } from "./promptQueue";
+import { clearQueue, queuedTotal, restoreQueues, runQueues, setQueueForceSender, setQueueKicker, setQueuePersister, subscribeQueues } from "./promptQueue";
 import { CreateSession } from "./createSession";
 import { duplicateAndLaunch } from "./sessionActions";
 import { clearPollFailure, shouldReportPollFailure } from "./polling";
@@ -78,7 +78,6 @@ function App() {
   const selectedRef = useRef("");
   selectedRef.current = selected;
   const outputAt = useRef(new Map<string, number>());
-  const logActivity = useRef(new Map<string, { state: string; at: number }>());
   const logPolling = useRef(new Set<string>());
   const sessionsRef = useRef<Session[]>([]);
   sessionsRef.current = sessions;
@@ -96,13 +95,13 @@ function App() {
         const id = session.id;
         const at = outputAt.current.get(id);
         const screenSignal = readHarnessSignal(session.tool, terminalInstances.get(id), terminalTitles.get(id) ?? "");
-        const log = logActivity.current.get(id);
-        const signal = combineSignal(screenSignal, log && now - log.at <= logActivityTtlMs ? log.state : undefined);
+        const log = logActivityCache.get(id);
+        const signal = combineSignal(screenSignal, freshLogState(id, now));
         if (!logPolling.current.has(id) && now - (log?.at ?? 0) >= 1000) {
           logPolling.current.add(id);
           app().GetHarnessActivity(id)
-            .then((state) => logActivity.current.set(id, { state, at: Date.now() }))
-            .catch(() => logActivity.current.set(id, { state: "", at: Date.now() }))
+            .then((state) => logActivityCache.set(id, { state, at: Date.now() }))
+            .catch(() => logActivityCache.set(id, { state: "", at: Date.now() }))
             .finally(() => logPolling.current.delete(id));
         }
         if (signal === undefined && at === undefined) return;
@@ -306,10 +305,19 @@ function App() {
     runtime.EventsOnMultiple("shutdown-progress", (progress: ShutdownProgress) => setShutdown(progress.phase === "done" ? null : progress), -1);
     app().DialogHostReady().then((pending) => pending.forEach(add)).catch((err) => showError("ui.dialog-host", err));
     // Prompt queues: one scheduler pass a second, and the queued count for the close warning.
-    const queueTimer = window.setInterval(() => runQueues(sessionsRef.current, queueHooks, Date.now()), 1000);
+    const runPass = () => runQueues(sessionsRef.current, queueHooks, Date.now());
+    const queueTimer = window.setInterval(runPass, 1000);
+    setQueueKicker(runPass);
+    setQueueForceSender((target, text) => {
+      const refused = controlSend(target as Session, text, true, true);
+      if (!refused) queueHooks.sent(target);
+      return refused;
+    });
+    setQueuePersister((id, texts) => { app().SavePromptQueue(id, texts).catch((err) => console.error("TauShell could not save the prompt queue.", err)); });
+    app().LoadPromptQueues().then(restoreQueues).catch((err) => console.error("TauShell could not load the saved prompt queues.", err));
     const reportQueued = () => app().SetQueuedPrompts(queuedTotal()).catch((err) => console.error("TauShell could not report the prompt queue size.", err));
     const unsubscribeQueues = subscribeQueues(reportQueued);
-    return () => { window.clearInterval(queueTimer); unsubscribeQueues(); runtime.EventsOff("dialog-request"); runtime.EventsOff("focus-session"); runtime.EventsOff("settings-error"); runtime.EventsOff("control-send"); runtime.EventsOff("control-answer"); runtime.EventsOff("control-screen"); runtime.EventsOff("control-launch"); runtime.EventsOff("shutdown-progress"); };
+    return () => { window.clearInterval(queueTimer); setQueueKicker(undefined); unsubscribeQueues(); runtime.EventsOff("dialog-request"); runtime.EventsOff("focus-session"); runtime.EventsOff("settings-error"); runtime.EventsOff("control-send"); runtime.EventsOff("control-answer"); runtime.EventsOff("control-screen"); runtime.EventsOff("control-launch"); runtime.EventsOff("shutdown-progress"); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -401,6 +409,8 @@ function App() {
           ? await app().StartFresh(session.id, terminal.cols, terminal.rows)
           : await app().StartSession(session.id, terminal.cols, terminal.rows);
       openTab(started);
+      // A queue was written for the previous conversation, so it is dropped when a different one starts.
+      if (mode === "fresh" || mode === "conversation") clearQueue(session.id);
       // A resize sent while the harness is still initializing can be lost, so repeat it once it is up.
       for (const delay of [500, 2000]) {
         window.setTimeout(() => {
@@ -448,6 +458,7 @@ function App() {
     setBusy(true);
     try {
       await app().DeleteSession(session.id);
+      clearQueue(session.id);
       removeTab(session.id);
       setDeleteRequest(null);
       await refresh();
@@ -808,7 +819,7 @@ function App() {
                     tabIndex={selected === tab.id ? 0 : -1}
                     onKeyDown={handleTabKeyDown}
                     onClick={() => activateTab(tab.id)}
-                  >{sessions.find((current) => current.id === tab.id) && <StateIcon session={sessions.find((current) => current.id === tab.id)!} activity={activity[tab.id]} />}{tab.name}</button>
+                  >{sessions.find((current) => current.id === tab.id) && <StateIcon session={sessions.find((current) => current.id === tab.id)!} activity={activity[tab.id]} />}<span className="tab-name" data-text={tab.name}>{tab.name}</span></button>
                   <button className="tab-close" aria-label={`Close ${tab.name}`} onClick={() => closeTab(tab.id)}>x</button>
                 </div>
               ))}

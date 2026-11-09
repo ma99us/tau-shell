@@ -99,6 +99,14 @@ func (manager *closeTestManager) SetAutoResumeAll(context.Context, bool) error {
 	return errors.New("unexpected SetAutoResumeAll call")
 }
 
+func (manager *closeTestManager) PromptQueues(context.Context) (map[string][]string, error) {
+	return nil, errors.New("unexpected PromptQueues call")
+}
+
+func (manager *closeTestManager) SetPromptQueue(context.Context, string, []string) error {
+	return errors.New("unexpected SetPromptQueue call")
+}
+
 func (manager *closeTestManager) SetOrder(context.Context, []string) error {
 	return errors.New("unexpected SetOrder call")
 }

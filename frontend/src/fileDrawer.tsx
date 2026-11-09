@@ -1,6 +1,7 @@
 import { Fragment, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { highlightCode, languageFor, languageForFence } from "./highlight";
-import { app, ProjectEntry, ProjectFile, Session } from "./bridge";
+import { app, GitChange, ProjectEntry, ProjectFile, Session } from "./bridge";
+import { buildChangeTree, ChangeNode, changeLabel, countChanges } from "./gitChanges";
 import { Block, Inline, parseMarkdown } from "./markdown";
 import { Icon } from "./icons";
 import { fileIconFor } from "./fileTypes";
@@ -44,6 +45,9 @@ export function FileDrawer({ session, onClose, onError, onInsert }: { session: S
   const [tree, setTree] = useState<Record<string, ProjectEntry[]>>({});
   const [open, setOpen] = useState<string[]>([]);
   const [file, setFile] = useState<ProjectFile | null>(null);
+  const [tab, setTab] = useState<"files" | "git">("files");
+  const [changes, setChanges] = useState<GitChange[] | null | undefined>(undefined);
+  const [collapsed, setCollapsed] = useState<string[]>([]);
   const [note, setNote] = useState("");
   const treeRef = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; entry: ProjectEntry } | null>(null);
@@ -72,7 +76,16 @@ export function FileDrawer({ session, onClose, onError, onInsert }: { session: S
       .then((listing) => setTree((current) => ({ ...current, [dir]: listing.entries ?? [] })))
       .catch((error) => onErrorRef.current(error));
   }, [session.id]);
-  useEffect(() => { setTree({}); setOpen([]); setFile(null); load(""); }, [session.id, load]);
+  useEffect(() => { setTree({}); setOpen([]); setFile(null); setChanges(undefined); setCollapsed([]); load(""); }, [session.id, load]);
+  // The Git tab lists changed files; git status is cheap, so it refreshes while the tab is open.
+  // The count on the tab label needs the list too, so the first load also runs from the Files tab.
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = () => app().ListGitChanges(session.id).then((list) => { if (!cancelled) setChanges(list); }).catch((error) => { if (!cancelled && tab === "git") onErrorRef.current(error); });
+    void refresh();
+    const timer = window.setInterval(refresh, tab === "git" ? 4000 : 15000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [session.id, tab]);
   const toggle = (entry: ProjectEntry) => {
     if (open.includes(entry.path)) { setOpen(open.filter((path) => path !== entry.path)); return; }
     setOpen([...open, entry.path]);
@@ -97,12 +110,40 @@ export function FileDrawer({ session, onClose, onError, onInsert }: { session: S
       {entry.dir && expanded && rows(entry.path, depth + 1)}
     </Fragment>;
   });
+  const changeRows = (nodes: ChangeNode[], depth: number): ReactNode => nodes.map((node) => {
+    const expanded = !collapsed.includes(node.path);
+    const entry: ProjectEntry = { name: node.name, path: node.path, dir: node.dir, size: 0 };
+    const kind = fileIconFor(node.name);
+    const openChange = () => {
+      if (node.code !== "D") { void view(entry); return; }
+      setFile({ path: node.path, text: "", truncated: false, unsupported: "the file was deleted" });
+    };
+    return <Fragment key={node.path}>
+      <div className={`file-row ${!node.dir && file?.path === node.path ? "selected" : ""}`} style={{ paddingLeft: 8 + depth * 14 }}
+        onContextMenu={(event) => { if (node.dir) return; event.preventDefault(); setMenu({ x: Math.min(event.clientX, window.innerWidth - 210), y: Math.min(event.clientY, window.innerHeight - 120), entry }); }}>
+        <button className="file-name" title={node.dir ? node.path : `${node.path} - ${changeLabel(node)}`} onClick={() => node.dir ? setCollapsed(expanded ? [...collapsed, node.path] : collapsed.filter((path) => path !== node.path)) : openChange()}>
+          <span className="file-ico" style={{ color: node.dir ? "var(--file-folder)" : kind.color }}><Icon name={node.dir ? (expanded ? "folderOpen" : "folder") : kind.icon} size={15} /></span><span className="file-label">{node.name}</span>
+        </button>
+        {!node.dir && <span className="git-code" data-code={node.code} title={changeLabel(node)}>{node.code}</span>}
+      </div>
+      {node.dir && expanded && changeRows(node.children, depth + 1)}
+    </Fragment>;
+  });
+  const changeTree = useMemo(() => buildChangeTree(changes ?? []), [changes]);
+  const changeCount = useMemo(() => countChanges(changeTree), [changeTree]);
+  const gitBody = changes === undefined ? <div className="toolbar-popover-note">Loading...</div>
+    : changes === null ? <div className="toolbar-popover-note">This folder is not a git repository.</div>
+    : changes.length === 0 ? <div className="toolbar-popover-note">No changes. The workspace is clean.</div>
+    : changeRows(changeTree, 0);
   return <aside className="file-drawer" aria-label="Project files">
     <div className="file-drawer-head">
-      <strong>Files</strong>
+      <div className="file-tabs" role="tablist">
+        <button role="tab" aria-selected={tab === "files"} className={`file-tab ${tab === "files" ? "active" : ""}`} onClick={() => setTab("files")}>Files</button>
+        <button role="tab" aria-selected={tab === "git"} className={`file-tab ${tab === "git" ? "active" : ""}`} onClick={() => setTab("git")} title="Changed files in this workspace">Git{changeCount > 0 && <span className="file-tab-count">{changeCount}</span>}</button>
+      </div>
       <button className="file-act" onClick={onClose} aria-label="Close the file drawer">x</button>
     </div>
-    <div className="file-tree" ref={treeRef}>{tree[""] ? (tree[""].length ? rows("", 0) : <div className="toolbar-popover-note">Empty folder.</div>) : <div className="toolbar-popover-note">Loading...</div>}</div>
+    <div className="file-tree" ref={treeRef}>{tab === "git" ? gitBody : tree[""] ? (tree[""].length ? rows("", 0) : <div className="toolbar-popover-note">Empty folder.</div>) : <div className="toolbar-popover-note">Loading...</div>}</div>
     {note && <div className="toolbar-popover-note">{note}</div>}
     {menu && <div className="file-menu" role="menu" style={{ left: menu.x, top: menu.y }} onPointerDown={(event) => event.stopPropagation()}>
       <button role="menuitem" onClick={() => { onInsert(menu.entry.path); setMenu(null); }}><Icon name="commands" size={14} />Insert path in prompt</button>
@@ -118,8 +159,10 @@ export function FileDrawer({ session, onClose, onError, onInsert }: { session: S
         <button className="file-act" onClick={() => app().RevealProjectFile(session.id, file.path).catch(onError)} title="Open location in File Explorer" aria-label="Open the location in File Explorer"><Icon name="reveal" size={14} /></button>
         <button className="file-act" onClick={() => app().OpenProjectFile(session.id, file.path).catch(onError)} title="Open in the default application" aria-label="Open the file in its default application"><Icon name="external" size={14} /></button>
         <button className="file-act" onClick={() => setFile(null)} aria-label="Close the file">x</button></div>
+      <div className="file-view-body">
       {file.truncated && <div className="toolbar-popover-note">Only the first part of this file is shown.</div>}
       {file.unsupported ? <div className="file-warning" role="alert">Warning: this file cannot be previewed ({file.unsupported.replace(/\.$/, "")}). You can still use the buttons above.</div> : file.imageUrl ? <div className="file-image"><img src={file.imageUrl} alt={file.path} /></div> : isMarkdown(file.path) ? <div className="md">{parseMarkdown(file.text).map(renderBlock)}</div> : <CodeView language={languageFor(file.path)} text={file.text} />}
+      </div>
     </div>}
   </aside>;
 }

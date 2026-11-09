@@ -41,7 +41,7 @@ TauShell -> ConPTY -> PowerShell 7 -> AI harness
   has saved prompts and a prompt queue. Add tasks while an agent works.
   TauShell sends one prompt at a time when a supported harness is confirmed
   idle. It does not answer permission prompts or replace unsent text.
-  Closing TauShell discards queued prompts.
+  Queued prompts are saved locally and survive restarts; after a restart the queue stays paused until you press Send in the queue popup.
 - **Reusable skills from ai-cookbook.** Start with a bundled
   [ai-cookbook](https://github.com/mgerdov-igt/ai-cookbook) skill library,
   fetch newer snapshots, and enable the skills you want from Home. Supported
@@ -58,8 +58,13 @@ TauShell -> ConPTY -> PowerShell 7 -> AI harness
   selection, compaction, confirmed conversation clearing and interruption.
   Ctrl+Shift+P opens the command palette; Ctrl+1..9 and Ctrl+Tab switch tabs.
 - **Project context and one-click Git sync.** See the working folder, branch,
-  uncommitted/unpushed markers and last recorded model. **Sync changes**
-  stages and commits pending changes, pulls with rebase, then pushes.
+  uncommitted/unpushed markers and last recorded model. While a session is
+  visible, TauShell runs a quiet `git fetch` (never prompting, at most once a
+  minute per repository, every 5 minutes) so incoming commits show as a down
+  arrow. **Sync changes**
+  stages and commits pending changes, pulls with rebase, then pushes. The
+  file drawer has a **Git** tab listing only the changed files as a folder
+  tree, with a status letter (M, A, D, R, U, !) on each row.
 - **Know which agent needs you.** State indicators, taskbar flash and Windows
   toasts flag input requests and completed turns. Session colors tint tabs,
   sidebar rows, the top bar and terminal edge to reduce wrong-session mistakes.

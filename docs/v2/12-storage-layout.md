@@ -16,6 +16,10 @@ Configuration is human-edited YAML; mutable runtime/session state is stored sepa
 └─ state.db              (runtime state, order, usage ledger and deletion journal)
 ```
 
+## Queued prompts
+
+`state.db` table `prompt_queue` (session, position, text) keeps each session's queued prompts across restarts. Only the prompt text is saved, locally and never logged (it can hold anything typed into the queue; at most 200 prompts and 512 KB per session). After a restart the queue is restored paused: nothing is typed until the user presses Send (or Resume queue). Start fresh, resuming a different conversation, Clear queue and deleting the session remove the saved prompts.
+
 ## Token and cost usage
 
 `state.db` also holds `app_settings` (UI preferences such as the global

@@ -112,6 +112,8 @@ type desktopSessionManager interface {
 	UpdateTags(id string, tags []string) error
 	AutoResumeAll(ctx context.Context) (bool, error)
 	SetAutoResumeAll(ctx context.Context, enabled bool) error
+	PromptQueues(context.Context) (map[string][]string, error)
+	SetPromptQueue(ctx context.Context, id string, prompts []string) error
 	SetOrder(context.Context, []string) error
 	PlaceAfter(ctx context.Context, id, afterID string) error
 	PlaceLast(ctx context.Context, id string) error
@@ -868,7 +870,7 @@ func (application *App) confirmShutdown(ctx context.Context) bool {
 	queued := int(atomic.LoadInt32(&application.queuedPrompts))
 	message := fmt.Sprintf("%d session(s) are running in TauShell. Closing will interrupt them. Stop the sessions and close TauShell?", len(active))
 	if queued > 0 {
-		message = fmt.Sprintf("%d session(s) are running in TauShell and %d queued prompt(s) are waiting. Closing will interrupt the sessions and discard the queue (queued prompts are not saved). Stop the sessions and close TauShell?", len(active), queued)
+		message = fmt.Sprintf("%d session(s) are running in TauShell and %d queued prompt(s) are waiting. Closing will interrupt the sessions; the queued prompts are saved and wait for Send after restart. Stop the sessions and close TauShell?", len(active), queued)
 	}
 	choice, err := application.messageDialog(ctx, runtime.MessageDialogOptions{
 		Type:          runtime.QuestionDialog,

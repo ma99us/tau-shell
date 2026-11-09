@@ -34,7 +34,7 @@ TauShell is a local Windows desktop session manager: a Go host (`cmd/taushell`, 
 - Keep managed session/resume arguments under adapter control; user harness arguments are discrete argv values, not shell strings. Harness-dependent widgets are capability-gated.
 - Prove terminal encoding and rendering end to end (ConPTY, xterm.js); process-level UTF-8 alone is not proof.
 - Git branch and status data come from the Go host, not from frontend parsing.
-- Prompt queues are per-session and memory-only. Send only on confirmed idle, never into a permission prompt, an unknown state or an unsent draft; do not persist them across conversations or app restarts.
+- Prompt queues are per-session. Send only on confirmed idle, never into a permission prompt, an unknown state or an unsent draft. Prompt text persists locally across restarts (never send state) and is cleared on Start fresh, a different conversation, or delete; a restored queue stays paused until the user presses Send.
 - Skill imports use TauShell-managed snapshots and adapter-specific injection; preserve personal skill folders and capability gates. Treat downloaded skills as executable agent instructions, not trusted data.
 - Usage totals survive resume, Start fresh and deletion. Distinguish recorded cost, list-price estimates and unpriced usage; never show missing prices as zero cost.
 - Phone requests must retain explicit pairing approval, pinned TLS, authentication, revocation and the live terminal send/answer guards. Never expose the server on all interfaces or log terminal/prompt contents.
