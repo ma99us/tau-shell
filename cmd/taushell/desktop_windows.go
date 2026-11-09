@@ -109,6 +109,7 @@ type desktopSessionManager interface {
 	Stop(context.Context, string) error
 	Delete(context.Context, string) error
 	UpdateDisplay(id, field, value string) error
+	UpdateTags(id string, tags []string) error
 	AutoResumeAll(ctx context.Context) (bool, error)
 	SetAutoResumeAll(ctx context.Context, enabled bool) error
 	SetOrder(context.Context, []string) error
@@ -506,6 +507,55 @@ func (application *App) SetSessionColor(id, color string) (err error) {
 		}
 	}()
 	return application.manager.UpdateDisplay(id, "color", color)
+}
+
+// SetSessionNotes stores free-text notes, or clears them when notes is empty.
+func (application *App) SetSessionNotes(id, notes string) (err error) {
+	defer func() {
+		if err != nil {
+			diagnostics.Error("set session notes failed", err, "session_id", id)
+		}
+	}()
+	return application.manager.UpdateDisplay(id, "notes", notes)
+}
+
+// SetSessionLink stores one http(s) URL (a Jira issue or pull request), or clears it when link is empty.
+func (application *App) SetSessionLink(id, link string) (err error) {
+	defer func() {
+		if err != nil {
+			diagnostics.Error("set session link failed", err, "session_id", id)
+		}
+	}()
+	return application.manager.UpdateDisplay(id, "link", link)
+}
+
+// SetSessionTags replaces the session's tags.
+func (application *App) SetSessionTags(id string, tags []string) (err error) {
+	defer func() {
+		if err != nil {
+			diagnostics.Error("set session tags failed", err, "session_id", id)
+		}
+	}()
+	return application.manager.UpdateTags(id, tags)
+}
+
+// OpenSessionLink opens an http(s) URL in the default browser, but only one
+// that appears in that session's own notes or tags, so a WebView caller cannot
+// open arbitrary addresses.
+func (application *App) OpenSessionLink(id, target string) error {
+	config, err := session.FindConfig(application.configDirectory, id)
+	if err != nil {
+		return err
+	}
+	if !config.HasLink(target) {
+		return errors.New("that link is not in the session's notes or tags")
+	}
+	if application.openURL != nil {
+		application.openURL(application.ctx, target)
+		return nil
+	}
+	runtime.BrowserOpenURL(application.ctx, target)
+	return nil
 }
 
 // SetSessionAutoResume turns the per-session "resume on startup" flag on or off.

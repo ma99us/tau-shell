@@ -6,6 +6,9 @@ Phase 1 uses one human-edited YAML file per TauShell session, stored under `~/.t
 id: backend-agent
 name: Backend Agent
 color: "#4f8cff"   # optional #rrggbb tab/sidebar tint
+link: https://github.com/o/r/pull/12   # optional http(s) Jira issue or PR link (max 500 chars)
+notes: "Review before Friday"   # optional free text (max 500 chars); URLs become links
+tags: ["review", "VTA-123"]   # optional, up to 8; no whitespace, so a URL is a valid tag
 auto_resume: true   # optional; resume this session when TauShell starts (Home tile checkbox)
 tool: claude-code
 working_dir: D:/Projects/App

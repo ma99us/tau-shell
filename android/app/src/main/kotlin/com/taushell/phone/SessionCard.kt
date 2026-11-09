@@ -58,6 +58,7 @@ class SessionCard(
     private val subtitle = context.text("", 12f, Theme.text10)
     private val stateDot = context.dot(Theme.text10)
     private val stateText = context.text("", 12f, Theme.text10, true)
+    private val noteBlock = NoteBlock(context, tappableNotes = false, maxNoteLines = 2)
     private val bar = View(context)
 
     init {
@@ -68,6 +69,7 @@ class SessionCard(
         val titles = linear(context).apply {
             addView(name)
             addView(subtitle)
+            addView(noteBlock)
         }
         val state = context.row(stateDot, stateText, gap = 6).apply {
             background = context.shape(Theme.bgControl, 20, Theme.border)
@@ -96,5 +98,6 @@ class SessionCard(
         stateDot.pulse(next.running && next.activity.confirmed && next.activity.state == "working")
         bar.setBackgroundColor(color)
         styleIcon(context, icon, next)
+        noteBlock.bind(next)
     }
 }

@@ -133,13 +133,12 @@
 
   /* Session tag colors; the hex is saved in the session YAML, so changing it recolors only new picks */
   --tag-red: #e5534b;
-  --tag-orange: #d9822b;
-  --tag-yellow: #c9a227;
+  --tag-orange: #e8892b;
   --tag-green: #4c9f58;
   --tag-teal: #2fa4a4;
   --tag-blue: #4f8cff;
   --tag-purple: #9b73e6;
-  --tag-pink: #d65a9b;
+  --tag-pink: #d94fb5;
   --tag-fallback: #f4f6fa;
   --tag-text-on-light: #101318;
   --tag-text-on-dark: #fff;

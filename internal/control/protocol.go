@@ -152,6 +152,10 @@ type SessionInfo struct {
 	RunningHere bool            `json:"runningHere"`
 	WorkingDir  string          `json:"workingDir"`
 	Color       string          `json:"color,omitempty"`
+	Notes       string          `json:"notes,omitempty"`
+	Link        string          `json:"link,omitempty"`
+	LinkLabel   string          `json:"linkLabel,omitempty"`
+	Tags        []string        `json:"tags,omitempty"`
 	LastError   string          `json:"lastError,omitempty"`
 	TotalUSD    float64         `json:"totalUsd"`
 	Unpriced    bool            `json:"unpriced"`

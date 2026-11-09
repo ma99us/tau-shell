@@ -52,6 +52,10 @@ type Snapshot struct {
 	ID          string                `json:"id"`
 	Name        string                `json:"name"`
 	Color       string                `json:"color,omitempty"`
+	Notes       string                `json:"notes,omitempty"`
+	Link        string                `json:"link,omitempty"`
+	LinkLabel   string                `json:"linkLabel,omitempty"`
+	Tags        []string              `json:"tags,omitempty"`
 	AutoResume  bool                  `json:"autoResume"`
 	Tool        session.Harness       `json:"tool"`
 	WorkingDir  string                `json:"workingDir"`
@@ -261,6 +265,10 @@ func (manager *Manager) List(ctx context.Context) ([]Snapshot, error) {
 			ID:          config.ID,
 			Name:        config.Name,
 			Color:       config.Color,
+			Notes:       config.Notes,
+			Link:        config.Link,
+			LinkLabel:   session.LinkLabel(config.Link),
+			Tags:        config.Tags,
 			AutoResume:  config.AutoResume,
 			Tool:        config.Tool,
 			WorkingDir:  config.WorkingDir,
@@ -417,7 +425,24 @@ func (manager *Manager) UpdateDisplay(id, field, value string) error {
 		current.mu.Lock()
 		current.config.Name = config.Name
 		current.config.Color = config.Color
+		current.config.Notes = config.Notes
+		current.config.Link = config.Link
+		current.config.Tags = config.Tags
 		current.config.AutoResume = config.AutoResume
+		current.mu.Unlock()
+	}
+	return nil
+}
+
+// UpdateTags replaces a session's tags and applies them to the running session.
+func (manager *Manager) UpdateTags(id string, tags []string) error {
+	config, err := session.UpdateConfigTags(manager.configDirectory, id, tags)
+	if err != nil {
+		return err
+	}
+	if current := manager.get(id); current != nil {
+		current.mu.Lock()
+		current.config.Tags = config.Tags
 		current.mu.Unlock()
 	}
 	return nil
@@ -1023,6 +1048,10 @@ func (current *managedSession) snapshot() Snapshot {
 		ID:          current.config.ID,
 		Name:        current.config.Name,
 		Color:       current.config.Color,
+		Notes:       current.config.Notes,
+		Link:        current.config.Link,
+		LinkLabel:   session.LinkLabel(current.config.Link),
+		Tags:        current.config.Tags,
 		AutoResume:  current.config.AutoResume,
 		Tool:        current.config.Tool,
 		WorkingDir:  current.config.WorkingDir,

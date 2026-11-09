@@ -29,6 +29,10 @@ export type Session = {
   id: string;
   name: string;
   color?: string;
+  notes?: string;
+  link?: string;
+  linkLabel?: string;
+  tags?: string[];
   tool: HarnessId;
   workingDir: string;
   status: string;
@@ -234,6 +238,10 @@ type WailsApp = {
   DeleteSession(id: string): Promise<void>;
   RenameSession(id: string, name: string): Promise<void>;
   SetSessionColor(id: string, color: string): Promise<void>;
+  SetSessionNotes(id: string, notes: string): Promise<void>;
+  SetSessionLink(id: string, link: string): Promise<void>;
+  SetSessionTags(id: string, tags: string[]): Promise<void>;
+  OpenSessionLink(id: string, url: string): Promise<void>;
   SetSessionAutoResume(id: string, enabled: boolean): Promise<void>;
   GetAutoResumeAll(): Promise<boolean>;
   SetAutoResumeAll(enabled: boolean): Promise<void>;

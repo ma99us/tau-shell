@@ -13,6 +13,7 @@ import { Workspace, ungrouped } from "./workspaces";
 import { claudeBudgetKey, groupedKey, readClaudeBudget, readGrouped, writeStored } from "./storage";
 import { ClaudeQuota, claudeQuotaView, formatDollars, parseBudgetInput } from "./claudeQuota";
 import { UpdateDialog } from "./updateDialog";
+import { SessionNotes } from "./sessionNotesView";
 import { GroupControls, GroupHeader } from "./workspaceView";
 import { HomePanel, HomePanelId, PanelFeedback, PanelFeedbackState } from "./homePanel";
 export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAll, onAutoResumeAll, onAutoResume, status, busy, tools, skills, onNew, onRefresh, onHome, onLaunch, onDelete, onDuplicate, onError, panelFeedback = {}, onDismissPanelFeedback, onPanelFeedback, dragProps, dropClass, dragId }: {
@@ -183,6 +184,7 @@ export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAl
           <div className="card-top"><ProjectIcon session={session} /><span className={`state-pill ${session.runningHere ? "running" : ""} ${!session.runningHere && session.status === "failed" ? "status-warn-text" : ""}`}>{session.runningHere ? "Running" : statusLabel(session.status)}</span><button className="delete-button" aria-label={`Delete ${session.name}`} title="Delete session" onClick={() => onDelete(session)}>x</button></div>
           <div className="card-title"><h3>{session.name}</h3>{hasUsage(summary?.sessions?.[session.id]) && <span className="card-usage" title="Estimate from harness logs; never reset">{usageText(summary!.sessions![session.id])}</span>}</div><p className="path">{session.workingDir}</p><p className="session-meta">{session.tool}</p>
           {session.lastError && <p className="card-error">{session.lastError}</p>}
+          <SessionNotes session={session} onOpen={(url) => app().OpenSessionLink(session.id, url).catch((error) => onError("ui.open-session-link", error))} />
           <div className="card-sizer" aria-hidden="true"><span className="tile-button">Start fresh</span><span className="tile-button">Resume</span><span className="tile-button">Clone</span><span className="check-option"><input type="checkbox" tabIndex={-1} />Auto resume</span></div>
           <div className="card-actions">
             {session.runningHere ? <button className="tile-button" onClick={() => onLaunch(session, "start")}>Open</button> :

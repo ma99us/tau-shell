@@ -120,6 +120,21 @@ class ParseTest {
     }
 
     @Test
+    fun readsNotesTagsAndLink() {
+        val json = """{"ok":true,"data":[{"id":"s1","name":"API","notes":"see https://example.com/x","tags":["review","VTA-123"],
+            "link":"https://github.com/o/r/pull/12","linkLabel":"PR #12","activity":{"state":"idle"}},
+            {"id":"s2","name":"Plain","activity":{"state":"idle"}}]}"""
+        val items = (Parse.sessions(json) as Result.Ok).value
+        assertEquals("see https://example.com/x", items[0].notes)
+        assertEquals(listOf("review", "VTA-123"), items[0].tags)
+        assertEquals("PR #12", items[0].linkLabel)
+        assertEquals("https://github.com/o/r/pull/12", items[0].link)
+        assertEquals("", items[1].notes)
+        assertEquals(emptyList<String>(), items[1].tags)
+        assertEquals("", items[1].link)
+    }
+
+    @Test
     fun marksAnUnconfirmedReading() {
         val item = (Parse.sessions("""{"ok":true,"data":[{"id":"s","name":"x","runningHere":true,"activity":{"state":"idle","confirmed":false}}]}""") as Result.Ok).value[0]
         assertEquals("Idle?", Labels.state(item))

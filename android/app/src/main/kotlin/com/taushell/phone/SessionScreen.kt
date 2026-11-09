@@ -32,6 +32,7 @@ class SessionScreen(
     private val icon = TextView(context)
     private val name = context.text("", 16f, Theme.text1, true)
     private val subtitle = context.text("", 12f, Theme.text10)
+    private val noteBlock = NoteBlock(context, tappableNotes = true, maxNoteLines = 3)
     private val mute: ImageButton = context.iconButton(R.drawable.ic_volume, "Mute session") {
         mute.isEnabled = false
         actions.setMuted(item.id, !actions.muted(item.id)) { outcome ->
@@ -99,7 +100,7 @@ class SessionScreen(
         orientation = VERTICAL
 
         val back = context.button("<", false) { onBack() }.apply { minWidth = context.dp(44); minimumWidth = context.dp(44); setPadding(0, 0, 0, 0); textSize = 20f }
-        val titles = linear(context).apply { addView(name); addView(subtitle) }
+        val titles = linear(context).apply { addView(name); addView(subtitle); addView(noteBlock) }
         val top = LinearLayout(context).apply {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(context.dp(10), context.dp(8), context.dp(10), context.dp(8))
@@ -180,6 +181,7 @@ class SessionScreen(
         totalSpent.visibility = if (next.totalUsd?.isFinite() == true) View.VISIBLE else View.GONE
         subtitle.text = listOf(Labels.tool(next.tool), Labels.folder(next.workingDir)).filter { it.isNotBlank() }.joinToString("  ·  ")
         styleIcon(context, icon, next)
+        noteBlock.bind(next)
         renderMute()
         render()
         if (first || next.running) fetchScreen()

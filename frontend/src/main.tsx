@@ -13,6 +13,7 @@ import { hasActivityReader, isHarness, setHarnesses } from "./harnesses";
 import appIcon from "./assets/appicon.png";
 import { errorDetails, reportFrontendFailure, isStoppedSessionError } from "./errors";
 import { AppDialog, ShutdownPopup, RenameDialog } from "./dialogs";
+import { NotesDialog } from "./sessionNotesView";
 import { sessionColorStyle, SessionMenu, statusLabel, StateIcon } from "./sessionVisuals";
 import { Home, SkillsActions, toolUsable, Setup } from "./home";
 import { terminalInstances, lastInputAt, terminalTitles, echoWindowMs, fitInstances, waitForTerminal, sendToSession, controlSend, interruptSession, queueHooks, TerminalPane } from "./terminalPane";
@@ -148,6 +149,7 @@ function App() {
   const [dialogs, setDialogs] = useState<DialogRequest[]>([]);
   const [shutdown, setShutdown] = useState<ShutdownProgress | null>(null);
   const [renameRequest, setRenameRequest] = useState<Session | null>(null);
+  const [notesRequest, setNotesRequest] = useState<Session | null>(null);
   const [error, setError] = useState("");
   const [homeFeedback, setHomeFeedback] = useState<Partial<Record<HomePanelId, PanelFeedbackState>>>({});
   const [notice, setNotice] = useState<{ sessionId: string; message: string; isError: boolean } | null>(null);
@@ -844,9 +846,12 @@ function App() {
       {menu && <SessionMenu x={menu.x} y={menu.y} session={menu.session} onClose={() => setMenu(null)}
         onDuplicate={() => { const target = menu.session; setMenu(null); void duplicateSession(target); }}
         onRename={() => { setRenameRequest(menu.session); setMenu(null); }}
+        onNotes={() => { setNotesRequest(menu.session); setMenu(null); }}
         onColor={(color) => { const id = menu.session.id; setMenu(null); void updateSession("ui.set-session-color", () => app().SetSessionColor(id, color)); }} />}
       {renameRequest && <RenameDialog session={renameRequest} onClose={() => setRenameRequest(null)}
         onRename={(name) => { const id = renameRequest.id; setRenameRequest(null); void updateSession("ui.rename-session", () => app().RenameSession(id, name)); }} />}
+      {notesRequest && <NotesDialog session={notesRequest} onClose={() => setNotesRequest(null)}
+        onSave={({ link, notes, tags }) => { const id = notesRequest.id; setNotesRequest(null); void updateSession("ui.set-session-notes", async () => { await app().SetSessionLink(id, link); await app().SetSessionNotes(id, notes); await app().SetSessionTags(id, tags); }); }} />}
       {deleteRequest && <div className="modal-backdrop"><div className="modal confirm-modal">
         <div className="modal-heading"><div><p className="eyebrow">DELETE SESSION</p><h2>Delete {deleteRequest.name}?</h2></div></div>
         {deleteRequest.runningHere ?

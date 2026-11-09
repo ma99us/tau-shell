@@ -944,6 +944,68 @@ h3 {
   line-height: 1.4;
 }
 
+.session-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.session-notes p {
+  margin: 0;
+}
+
+.session-link {
+  font-size: var(--fs-12);
+  font-weight: 700;
+}
+
+.note-text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  color: var(--text-5);
+  font-size: var(--fs-11);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.note-link {
+  color: var(--accent-text-4);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.tag-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.tag-chip {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 2px 8px;
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius-20);
+  color: var(--text-5);
+  font-size: var(--fs-10);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notes-modal textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+.notes-hint {
+  margin: 4px 0 10px;
+  font-size: var(--fs-11);
+}
+
 /* Invisible copy of the widest toolbar: gives every tile the same minimal width. */
 .card-sizer {
   display: flex;
@@ -2675,8 +2737,14 @@ h3 {
   color: inherit;
 }
 
-.terminal-view[data-colored] .terminal-body {
-  box-shadow: inset 3px 0 0 var(--session-color);
+.terminal-view[data-colored] .terminal-body::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 2px 0;
+  border-left: 1px solid var(--session-color);
+  border-bottom: 3px solid var(--session-color);
+  pointer-events: none;
+  z-index: 5;
 }
 
 .terminal-view[data-colored] .side-rail {

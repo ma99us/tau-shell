@@ -87,6 +87,10 @@ func (manager *closeTestManager) UpdateDisplay(string, string, string) error {
 	return errors.New("unexpected UpdateDisplay call")
 }
 
+func (manager *closeTestManager) UpdateTags(string, []string) error {
+	return errors.New("unexpected UpdateTags call")
+}
+
 func (manager *closeTestManager) AutoResumeAll(context.Context) (bool, error) {
 	return false, errors.New("unexpected AutoResumeAll call")
 }

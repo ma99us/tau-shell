@@ -27,6 +27,10 @@ data class SessionItem(
     val lastError: String,
     val totalUsd: Double? = null,
     val unpriced: Boolean = false,
+    val notes: String = "",
+    val tags: List<String> = emptyList(),
+    val link: String = "",
+    val linkLabel: String = "",
 )
 
 data class PairResult(val deviceId: String, val token: String, val fingerprint: String, val expires: String)
@@ -79,6 +83,10 @@ object Parse {
                     null
                 },
                 unpriced = item.optBoolean("unpriced"),
+                notes = item.optString("notes"),
+                tags = item.optJSONArray("tags")?.let { array -> (0 until array.length()).map { array.optString(it) }.filter { it.isNotBlank() } } ?: emptyList(),
+                link = item.optString("link"),
+                linkLabel = item.optString("linkLabel"),
             )
         })
     }

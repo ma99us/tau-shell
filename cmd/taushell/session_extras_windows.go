@@ -72,6 +72,7 @@ func (application *App) DuplicateSession(id, toolName string, launchArgs []strin
 			copied.Environment[key] = value
 		}
 	}
+	copied.Tags = append([]string(nil), source.Tags...)
 	copied.Presets = append(copied.Presets[:0:0], source.Presets...)
 	if source.Secrets != nil {
 		copied.Secrets = make(map[string]string, len(source.Secrets))
@@ -94,6 +95,10 @@ func (application *App) DuplicateSession(id, toolName string, launchArgs []strin
 		return sessionhost.Snapshot{}, err
 	}
 	snapshot.Color = copied.Color
+	snapshot.Notes = copied.Notes
+	snapshot.Link = copied.Link
+	snapshot.LinkLabel = session.LinkLabel(copied.Link)
+	snapshot.Tags = copied.Tags
 	if err := application.manager.PlaceAfter(context.Background(), snapshot.ID, id); err != nil {
 		return sessionhost.Snapshot{}, err
 	}

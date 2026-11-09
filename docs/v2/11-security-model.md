@@ -109,6 +109,11 @@ validates the origin of calls into bound methods. Keep both controls enabled:
 origin validation protects the bridge, while the navigation guard keeps
 untrusted pages out of the desktop surface.
 
+Session notes, tags and the Jira/PR link are plain YAML intent, never sent to
+the harness. `OpenSessionLink` opens only an http(s) URL that the host itself
+extracts from that session's own link, notes or tags; the renderer cannot ask
+for an arbitrary URL.
+
 WebView local storage contains presentation metadata (open tab IDs and
 selection) and up to five recently created session working-directory paths.
 It must not contain credentials, environment values, or other secret data.

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -55,12 +56,26 @@ var (
 	ErrConfigChanged   = errors.New("session config changed outside TauShell; reload and retry")
 )
 
-const maxNameLength = 80
+const (
+	maxNameLength  = 80
+	MaxNotesLength = 500
+	MaxTags        = 8
+	MaxTagLength   = 120
+	MaxLinkLength  = 500
+)
 
 type Config struct {
 	ID    string `yaml:"id"`
 	Name  string `yaml:"name"`
 	Color string `yaml:"color,omitempty"`
+	// Notes is free text shown on the Home tile and the phone. http(s) URLs in
+	// it become links. Tags are short labels without whitespace; a URL is a
+	// valid tag. Neither is ever sent to the harness.
+	Notes string   `yaml:"notes,omitempty"`
+	Tags  []string `yaml:"tags,omitempty"`
+	// Link is one http(s) URL, typically the Jira issue or pull request the
+	// session works on. It is shown on the Home tile and the phone.
+	Link string `yaml:"link,omitempty"`
 	// AutoResume resumes this session when TauShell starts, if it has a saved
 	// harness conversation. The Home tile checkbox edits it.
 	AutoResume bool `yaml:"auto_resume,omitempty"`
@@ -180,6 +195,15 @@ func (config Config) Validate() error {
 	if config.Color != "" && !colorPattern.MatchString(config.Color) {
 		return fmt.Errorf("color %q must be a #rrggbb hex value", config.Color)
 	}
+	if err := ValidateNotes(config.Notes); err != nil {
+		return err
+	}
+	if err := ValidateTags(config.Tags); err != nil {
+		return err
+	}
+	if err := ValidateLink(config.Link); err != nil {
+		return err
+	}
 	if !config.UTF8Enabled() {
 		return fmt.Errorf("powershell.utf8 cannot be disabled in the Windows 10 Phase 1 runtime")
 	}
@@ -224,6 +248,128 @@ func (config Config) Validate() error {
 		return err
 	}
 	return nil
+}
+
+// ValidateNotes accepts free text with newlines but no other control characters.
+func ValidateNotes(notes string) error {
+	if len([]rune(notes)) > MaxNotesLength {
+		return fmt.Errorf("notes must be at most %d characters", MaxNotesLength)
+	}
+	if strings.IndexFunc(notes, func(r rune) bool { return unicode.IsControl(r) && r != '\n' }) >= 0 {
+		return errors.New("notes must not contain control characters")
+	}
+	return nil
+}
+
+// NormalizeTags trims, drops empty entries and removes case-insensitive duplicates.
+func NormalizeTags(tags []string) []string {
+	seen := make(map[string]struct{}, len(tags))
+	var result []string
+	for _, tag := range tags {
+		tag = strings.TrimSpace(tag)
+		key := strings.ToLower(tag)
+		if _, duplicate := seen[key]; tag == "" || duplicate {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, tag)
+	}
+	return result
+}
+
+// ValidateTags requires short tags without whitespace or control characters,
+// so a URL is a valid tag.
+func ValidateTags(tags []string) error {
+	if len(tags) > MaxTags {
+		return fmt.Errorf("at most %d tags are allowed", MaxTags)
+	}
+	for _, tag := range tags {
+		if tag == "" || len([]rune(tag)) > MaxTagLength {
+			return fmt.Errorf("tags must be 1 to %d characters", MaxTagLength)
+		}
+		if strings.IndexFunc(tag, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) >= 0 {
+			return fmt.Errorf("tag %q must not contain spaces or control characters", tag)
+		}
+	}
+	return nil
+}
+
+// ValidateLink accepts an empty value or one http(s) URL without whitespace.
+func ValidateLink(link string) error {
+	if link == "" {
+		return nil
+	}
+	if len([]rune(link)) > MaxLinkLength {
+		return fmt.Errorf("link must be at most %d characters", MaxLinkLength)
+	}
+	if strings.IndexFunc(link, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) >= 0 {
+		return errors.New("link must not contain spaces or control characters")
+	}
+	parsed, err := url.Parse(link)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return errors.New("link must be an http or https URL")
+	}
+	return nil
+}
+
+var (
+	pullPath      = regexp.MustCompile(`/(?:pull|pull-requests)/(\d+)(?:/|$)`)
+	issuePath     = regexp.MustCompile(`/issues/(\d+)(?:/|$)`)
+	mergePath     = regexp.MustCompile(`/merge_requests/(\d+)(?:/|$)`)
+	jiraPath      = regexp.MustCompile(`/browse/([A-Za-z][A-Za-z0-9_]*-\d+)(?:/|$)`)
+	jiraBoardPath = regexp.MustCompile(`(?:^|[?&])selectedIssue=([A-Za-z][A-Za-z0-9_]*-\d+)`)
+)
+
+// LinkLabel is a short name for a link: "PR #12", "Issue #7", "MR !3", a Jira
+// key such as "VTA-123", or the host for any other address.
+func LinkLabel(link string) string {
+	parsed, err := url.Parse(link)
+	if err != nil || parsed.Host == "" {
+		return ""
+	}
+	switch {
+	case mergePath.MatchString(parsed.Path):
+		return "MR !" + mergePath.FindStringSubmatch(parsed.Path)[1]
+	case pullPath.MatchString(parsed.Path):
+		return "PR #" + pullPath.FindStringSubmatch(parsed.Path)[1]
+	case jiraPath.MatchString(parsed.Path):
+		return strings.ToUpper(jiraPath.FindStringSubmatch(parsed.Path)[1])
+	case jiraBoardPath.MatchString(parsed.RawQuery):
+		return strings.ToUpper(jiraBoardPath.FindStringSubmatch(parsed.RawQuery)[1])
+	case issuePath.MatchString(parsed.Path):
+		return "Issue #" + issuePath.FindStringSubmatch(parsed.Path)[1]
+	}
+	return parsed.Hostname()
+}
+
+var linkPattern = regexp.MustCompile("https?://[^\\s<>\"'`]+")
+
+// LinkURLs returns the http(s) URLs in text in order, without trailing
+// punctuation. The frontend uses the same rule to build links.
+func LinkURLs(text string) []string {
+	var urls []string
+	for _, match := range linkPattern.FindAllString(text, -1) {
+		match = strings.TrimRight(match, ".,;:!?)]}")
+		if parsed, err := url.Parse(match); err == nil && parsed.Host != "" {
+			urls = append(urls, match)
+		}
+	}
+	return urls
+}
+
+// HasLink reports whether target is one of the URLs in the session's notes or tags.
+func (config Config) HasLink(target string) bool {
+	if config.Link != "" && config.Link == target {
+		return true
+	}
+	for _, source := range append([]string{config.Notes}, config.Tags...) {
+		for _, candidate := range LinkURLs(source) {
+			if candidate == target {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // LockConfig serializes a session's configuration read and runtime reservation
@@ -298,11 +444,11 @@ func SaveConfig(directory string, config Config) (string, error) {
 	return path, nil
 }
 
-// UpdateConfigField rewrites one top-level field ("name", "color" or
-// "auto_resume") of an existing session YAML, preserving other keys and
+// UpdateConfigField rewrites one top-level field ("name", "color", "notes",
+// "link" or "auto_resume") of an existing session YAML, preserving other keys and
 // comments. TauShell writers are serialized across processes; an external edit
-// observed before replacement returns ErrConfigChanged. An empty color or
-// auto_resume removes the key. The ID and filename never change.
+// observed before replacement returns ErrConfigChanged. An empty color, notes,
+// link or auto_resume removes the key. The ID and filename never change.
 func UpdateConfigField(directory, id, key, value string) (Config, error) {
 	if !idPattern.MatchString(id) {
 		return Config{}, fmt.Errorf("invalid session id %q", id)
@@ -320,6 +466,16 @@ func UpdateConfigField(directory, id, key, value string) (Config, error) {
 			return Config{}, errors.New("name must not contain control characters")
 		}
 	case "color":
+	case "notes":
+		value = strings.TrimSpace(strings.ReplaceAll(value, "\r\n", "\n"))
+		if err := ValidateNotes(value); err != nil {
+			return Config{}, err
+		}
+	case "link":
+		value = strings.TrimSpace(value)
+		if err := ValidateLink(value); err != nil {
+			return Config{}, err
+		}
 	case "auto_resume":
 		if value != "" && value != "true" {
 			return Config{}, fmt.Errorf("auto_resume must be true or empty")
@@ -327,6 +483,24 @@ func UpdateConfigField(directory, id, key, value string) (Config, error) {
 	default:
 		return Config{}, fmt.Errorf("unsupported session field %q", key)
 	}
+	return updateConfigDocument(directory, id, func(mapping *yaml.Node) { setMappingString(mapping, key, value) })
+}
+
+// UpdateConfigTags replaces the session's tags, or removes the key when none
+// remain. It follows the same locking and comment-preserving rules as
+// UpdateConfigField.
+func UpdateConfigTags(directory, id string, tags []string) (Config, error) {
+	if !idPattern.MatchString(id) {
+		return Config{}, fmt.Errorf("invalid session id %q", id)
+	}
+	tags = NormalizeTags(tags)
+	if err := ValidateTags(tags); err != nil {
+		return Config{}, err
+	}
+	return updateConfigDocument(directory, id, func(mapping *yaml.Node) { setMappingSequence(mapping, "tags", tags) })
+}
+
+func updateConfigDocument(directory, id string, mutate func(*yaml.Node)) (Config, error) {
 	path := filepath.Join(directory, id+".yaml")
 	unlock, err := lockConfigPath(path)
 	if err != nil {
@@ -344,7 +518,7 @@ func UpdateConfigField(directory, id, key, value string) (Config, error) {
 	if len(document.Content) != 1 || document.Content[0].Kind != yaml.MappingNode {
 		return Config{}, fmt.Errorf("session config %q must be a YAML mapping", path)
 	}
-	setMappingString(document.Content[0], key, value)
+	mutate(document.Content[0])
 	var encoded bytes.Buffer
 	encoder := yaml.NewEncoder(&encoded)
 	encoder.SetIndent(2)
@@ -399,6 +573,26 @@ func setMappingString(mapping *yaml.Node, key, value string) {
 	mapping.Content = append(mapping.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}, stringNode(key, value))
 }
 
+func setMappingSequence(mapping *yaml.Node, key string, values []string) {
+	if len(values) == 0 {
+		setMappingString(mapping, key, "")
+		return
+	}
+	sequence := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Style: yaml.FlowStyle}
+	for _, value := range values {
+		sequence.Content = append(sequence.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value, Style: yaml.DoubleQuotedStyle})
+	}
+	for index := 0; index+1 < len(mapping.Content); index += 2 {
+		if mapping.Content[index].Value == key {
+			previous := mapping.Content[index+1]
+			sequence.HeadComment, sequence.LineComment, sequence.FootComment = previous.HeadComment, previous.LineComment, previous.FootComment
+			mapping.Content[index+1] = sequence
+			return
+		}
+	}
+	mapping.Content = append(mapping.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}, sequence)
+}
+
 func preserveRemovedMappingComments(mapping *yaml.Node, keyIndex int) {
 	key, value := mapping.Content[keyIndex], mapping.Content[keyIndex+1]
 	var comments []string
@@ -438,6 +632,9 @@ func stringNode(key, value string) *yaml.Node {
 	node := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value}
 	if key == "color" {
 		node.Style = yaml.DoubleQuotedStyle
+	}
+	if key == "notes" && strings.Contains(value, "\n") {
+		node.Style = yaml.LiteralStyle
 	}
 	if key == "auto_resume" {
 		node.Tag = "!!bool"

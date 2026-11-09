@@ -3,7 +3,7 @@
 // theme/tokens.css, so the token file stays the single source of truth.
 // See docs/v2/25-ui-design-system.md.
 
-const swatchNames = ["Red", "Orange", "Yellow", "Green", "Teal", "Blue", "Purple", "Pink"] as const;
+const swatchNames = ["Red", "Orange", "Green", "Teal", "Blue", "Purple", "Pink"] as const;
 
 // Resolved at call time; tokens are available once the stylesheet has loaded.
 export function token(name: string): string {
