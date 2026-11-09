@@ -17,17 +17,18 @@ chosen per session. Subsystems ask the runtime instead of assuming Windows.
 
 ```go
 type Runtime interface {
-    Kind() string                                   // "powershell" | "wsl"
-    Available(ctx context.Context) error            // pwsh on PATH / distro exists and starts
-    Command(spec LaunchSpec) (exe string, args []string, env []string, err error)
-    HomeDir(ctx context.Context) (string, error)    // where harness state lives, readable from Windows
-    FindTool(ctx context.Context, name string) (string, error)
-    Run(ctx context.Context, dir, name string, args ...string) ([]byte, error) // git, --version, --help
-    ToNativePath(windowsPath string) (string, error) // path as the harness sees it
-    ToWindowsPath(nativePath string) (string, error) // path TauShell can open
-    Cleanup(ctx context.Context, launch LaunchInfo) error // extra cleanup after the job object
+    Kind() Kind                                // powershell | wsl
+    Available() error                          // pwsh on PATH / distro exists and starts
+    Command(spec LaunchSpec) (Command, error) // host executable and arguments
+    HomeDir() (string, error)                  // harness state dir, readable from Windows
 }
 ```
+
+The original sketch also had `FindTool`, `Run`, `ToNativePath`, `ToWindowsPath` and
+`Cleanup`. They were not needed on the interface: tool probes and git run through
+`presets.WithWSL` and the readers take a per-session home, path mapping lives in
+`internal/runtime` helpers, and process cleanup is a marker-based step in the
+launch code (`wsl.go`, `sessionhost/launch_target_windows.go`).
 
 - `powershellRuntime` wraps today's behavior unchanged (`pwsh.exe -NoLogo
   -NoProfile -Command`, `PowerShellInvocation`).

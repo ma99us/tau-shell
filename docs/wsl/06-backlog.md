@@ -65,6 +65,7 @@ Harness-specific risks to check first:
 - CLI `start` and `restore` reject WSL sessions.
 - Install and update flows, update-available detection, first-run without pwsh and the WSL UI were never run for real or checked in a real window.
 - Multiple distros and users, `/mnt/c` repositories, credential helpers, corporate TLS CA in the distro are unverified.
+
 ## 3. How to close an item
 
 1. Run the check on a disposable or approved distro; never print credentials.

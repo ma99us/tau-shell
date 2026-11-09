@@ -8,7 +8,7 @@ V3 grows TauShell from a session manager into a calmer way to supervise many loc
 agents: control them from scripts and phones, know reliably when they need you, and
 dispatch work to them, while staying PowerShell-first, local-first and not an IDE.
 
-Inputs: the original [V3 ideas summary](V3_Ideas_Summary%20(out%20of%20scope%20future).md),
+Inputs: the original [V3 ideas summary](V3_Ideas_Summary%20%28out%20of%20scope%20future%29.md),
 the [stablyai/orca](https://github.com/stablyai/orca) project, and a check of every idea
 against the current code.
 

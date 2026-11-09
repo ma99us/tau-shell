@@ -104,7 +104,7 @@ Skill library presets (from `tau-shell.yaml`) accept an extra `skill: <name>`
 field and appear only while that skill is available and enabled. Layering is
 library < global < session, by name.
 
-The isolated [`spikes/session-config/`](../../spikes/session-config/) prototype records the earlier validation of strict YAML parsing and the separate runtime-state boundary.
+The isolated local prototype (ignored `spikes/session-config/` folder) records the earlier validation of strict YAML parsing and the separate runtime-state boundary.
 
 ## Harness manifests (`~/.tau_shell/harnesses/*.yaml`)
 

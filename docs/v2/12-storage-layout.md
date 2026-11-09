@@ -70,7 +70,7 @@ separate from YAML and harness runtime metadata. See the
 [system architecture](01-system-architecture.md); the
 [V1 UI design](../v1/08-UI-Design.md) is historical context.
 
-The isolated [`spikes/session-config/`](../../spikes/session-config/) prototype verified strict YAML parsing, runtime UUID persistence across database reopen, and that runtime-state operations leave the original YAML file unchanged. The application now implements this separation; the schema and driver remain subject to Phase 1 validation.
+The isolated local prototype (ignored `spikes/session-config/` folder) verified strict YAML parsing, runtime UUID persistence across database reopen, and that runtime-state operations leave the original YAML file unchanged. The application now implements this separation; the schema and driver remain subject to Phase 1 validation.
 
 ## WSL sessions
 

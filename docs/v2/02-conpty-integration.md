@@ -35,7 +35,9 @@ distro's `/proc/*/environ` to end leftover Linux processes. `wsl.exe`'s own
 output is UTF-16LE and is decoded for status commands; the terminal stream is
 UTF-8. Live-checked with Claude Code and Copilot CLI only; resize, Unicode,
 bracketed paste and clipboard images in a real TauShell window are open (see the
-[WSL backlog](../wsl/06-backlog.md)). 
+[WSL backlog](../wsl/06-backlog.md)). Design, status and backlog: [`docs/wsl/`](../wsl/).
+
+## Deferred alternative: launch the harness directly
 
 This is a research spike for a later phase, not a Phase 1 change. The supported
 architecture remains `TauShell -> ConPTY -> PowerShell 7 -> AI harness`;
@@ -98,7 +100,7 @@ unsupported cases. See the [deferred backlog item](20-mvp-backlog.md#deferred-al
 
 ## Spike findings
 
-The executable proof of concept is in [`spikes/conpty/`](../../spikes/conpty/). The Windows application host is implemented under `internal/conpty/` and `internal/terminal/`; it uses Go with `golang.org/x/sys/windows` and `golang.org/x/term`.
+The executable proof of concept was a local prototype in the ignored `spikes/conpty/` folder (findings are summarized here). The Windows application host is implemented under `internal/conpty/` and `internal/terminal/`; it uses Go with `golang.org/x/sys/windows` and `golang.org/x/term`.
 
 Verified on Windows 10 build 19045 with PowerShell 7.6.6:
 

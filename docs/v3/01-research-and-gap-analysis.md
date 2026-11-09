@@ -6,7 +6,7 @@ Status: **future planning**. Nothing here is a current requirement.
 
 ### 1.1 TauShell V3 ideas summary
 
-[`V3_Ideas_Summary (out of scope future).md`](V3_Ideas_Summary%20(out%20of%20scope%20future).md)
+[`V3_Ideas_Summary (out of scope future).md`](V3_Ideas_Summary%20%28out%20of%20scope%20future%29.md)
 describes TauShell growing from a session manager into a local "AI workspace orchestrator".
 Its themes:
 

@@ -3,7 +3,12 @@
 **Updated:** 2026-11-07
 **Project state:** Phase 1 desktop migration in progress; not release-ready.
 
-This is the implementation handoff for the next engineering session. The
+This is the implementation handoff for the next engineering session. Lasting
+constraints are in "Product boundaries", "Gotchas and settled boundaries" and
+"Do not overstate current readiness"; "Verified on the current Windows 10
+development machine" and "Recommended next actions" are dated snapshots, so
+recheck them against the tree. Prefer the numbered docs and AGENTS.md as default
+context. The
 active product and engineering requirements are in `docs/v2/`; earlier desktop
 interaction decisions and the original feasibility gate are recorded historically in
 `docs/v1/08-UI-Design.md` and `docs/v1/09-UI-Implementation-Plan.md`.
@@ -20,12 +25,8 @@ runtime picker and badge, frozen clone runtime, optional PowerShell 7, WSL and
 distro install/update actions, and update-available detection. Live-verified on
 one machine (WSL 2.6.2, Ubuntu) with Claude Code and Copilot CLI only.
 
-Open: Phase 6 hardening (distro stopped mid-session, `wsl --shutdown`, sleep,
-locale, smoke-test coverage), Codex/OpenCode/GSD support in WSL, CLI
-`start`/`restore` for WSL, real runs of the install/update flows and the UI,
-multiple distros or users, `/mnt/c` repositories, credential helpers and
-corporate TLS in the distro. The authoritative list is
-[`docs/wsl/06-backlog.md`](../wsl/06-backlog.md).
+Open gaps are tracked only in [`docs/wsl/06-backlog.md`](../wsl/06-backlog.md)
+(section 2a is the short list); do not restate them here.
 
 ## Product boundaries
 
@@ -346,7 +347,7 @@ without WebView2 will not be performed (user decision; the existing prompt is
 accepted as working). Also open: completing an actual OAuth login flow for
 Claude Code (deliberately not attempted, to avoid live browser-based
 authentication during automated testing). The visible window alone is still not evidence that terminal
-behavior, harness restore, or application security has passed in general —
+behavior, harness restore, or application security has passed in general -
 rely on the specific verified findings below, not on the window simply
 rendering.
 
@@ -393,7 +394,7 @@ Known gaps and risks:
     (built as `copilot.exe`, isolated profile, production WebView2/ConPTY
     host) with bundled `conpty.dll`/`OpenConsole.exe` present no longer
     reproduces any of the above gaps: the diagnostic log recorded
-    `terminal mouse tracking mode changed` → `vt200` immediately after
+    `terminal mouse tracking mode changed` -> `vt200` immediately after
     startup, a `mousedown` pointer event, and a matching `mouse-sgr` forwarded
     marker on the very first hosted click; the fixture's own event log shows
     the startup device-status and cursor-position replies each arriving as a
@@ -401,7 +402,7 @@ Known gaps and risks:
     manual re-query (`d`/`c` keys) after that produced another correctly-sized
     input chunk and matching report in the fixture log (the Go-side
     diagnostic marker is logged only once per category per session by
-    design, so it does not re-fire on the second query — this is not a gap).
+    design, so it does not re-fire on the second query - this is not a gap).
     Do not force mouse tracking unconditionally regardless; that still
     changes normal selection and input behavior. Mouse support only needed an
     explicit design decision while inbox ConPTY was in use; bundled ConPTY
@@ -460,8 +461,8 @@ Known gaps and risks:
   live winget install run was not exercised (only the declined-confirmation
   and concurrent-install-rejection paths were).
 - Session creation saves validated YAML. Generated harness-specific launch
-  templates (Claude Code →
-  `--dangerously-skip-permissions`, Copilot CLI → `--yolo`) and a live
+  templates (Claude Code ->
+  `--dangerously-skip-permissions`, Copilot CLI -> `--yolo`) and a live
   effective-argv preview (resolved executable, full argv including the
   managed `--session-id` placeholder, and unsupported-option warnings probed
   against the harness's own `--help` output) are implemented via
@@ -524,7 +525,7 @@ Known gaps and risks:
   - **Claude Code:** restoring a session that had never progressed past its
     first-run onboarding (no completed login) re-launched the wizard from the
     same theme-selection step, which is the harness's own expected behavior
-    for a session with no real conversation state to resume — not a TauShell
+    for a session with no real conversation state to resume - not a TauShell
     defect.
   - **GitHub Copilot CLI:** restoring a session that had been cleanly exited
     via `/exit` before any real prompt was sent invoked `copilot --resume=<id>`

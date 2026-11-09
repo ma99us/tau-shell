@@ -72,7 +72,7 @@ also require confirmation and are re-detected afterwards.
   mapping, install helpers and the update check. Harness state readers take a
   per-session home (`harness.*In`), git runs inside the distro, and the files
   drawer reads the distro over `\\wsl.localhost`. Never start a stopped distro
-  just to read state. 
+  just to read state. Design, status and backlog: [`docs/wsl/`](../wsl/).
 - **Embedded terminal:** VT screen interpretation and display; not a chat
   transcript renderer or agent-message parser.
 

@@ -14,6 +14,13 @@
   [terminal rendering](v2/15-terminal-rendering.md): current desktop UI and
   terminal guidance.
 
+- [WSL runtime (experimental)](wsl/README.md): current design, per-phase status and
+  the verification backlog; [`06-backlog.md`](wsl/06-backlog.md) is authoritative
+  for what is unverified or missing. Not future-only, unlike V3.
+
+- [Decision records](adr/0001-per-session-runtime.md): ADR 0001 (per-session runtime,
+  proposed). Add new ADRs as `docs/adr/NNNN-title.md` with an explicit status.
+
 ## Recipes and verification
 
 - [Adding a harness](v2/23-adding-a-harness.md): implementation recipe.

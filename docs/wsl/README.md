@@ -29,8 +29,8 @@ TauShell be, and how should it be built?
   runtime badge, Tools panel WSL row with confirmed install/update, optional
   PowerShell 7.
 - Verified live only for Claude Code and Copilot CLI on WSL 2.6.2 / Ubuntu.
-- Open: Phase 6 hardening, Codex/GSD/OpenCode, CLI `start`/`restore`, real runs of
-  install/update flows and the UI. See [`06-backlog.md`](06-backlog.md).
+- Open gaps: only in [`06-backlog.md`](06-backlog.md) (section 2a is the short list).
+- Decision record: [ADR 0001](../adr/0001-per-session-runtime.md) (proposed).
 
 ## Summary (original investigation)
 

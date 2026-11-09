@@ -15,6 +15,12 @@ locations and conclusions below describe the audit snapshot, not a guarantee
 about a later checkout. Follow the user's current instructions on what to
 implement.
 
+**Reading guide:** the "A1-A9 implementation update" sections and the "A1-A9"
+finding sections are a record of completed or snapshot work, not current
+requirements. The lasting parts are "Starting context and safeguards",
+"Priority and dependencies" and "Validation baseline and next-pass checklist".
+Not default agent context.
+
 ## A1 implementation update
 
 **Updated:** 2026-11-01. The store now assigns a fresh launch token whenever a
