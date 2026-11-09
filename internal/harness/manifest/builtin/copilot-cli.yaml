@@ -46,6 +46,12 @@ cues:
     rows: 2
     ignore_case: true
     pattern: '\benter to select\b.*\besc to cancel\b'
+  - state: input
+    source: last-rows
+    rows: 2
+    ignore_case: true
+    # The ask_user form footer, observed on Copilot CLI 1.0.107: "up/down select / enter accept / tab next / ctrl+d decline / esc cancel".
+    pattern: '\benter accept\b.*\besc cancel\b'
   - state: working
     source: last-rows
     rows: 2

@@ -13,6 +13,13 @@
         "ignoreCase": true
       },
       {
+        "state": "input",
+        "source": "last-rows",
+        "rows": 2,
+        "pattern": "\\benter accept\\b.*\\besc cancel\\b",
+        "ignoreCase": true
+      },
+      {
         "state": "working",
         "source": "last-rows",
         "rows": 2,
@@ -34,7 +41,7 @@
     },
     "builtin": true,
     "path": "builtin/copilot-cli.yaml",
-    "hash": "678844c88aee8a2d404c7e08515fb17dbc9a25ac83d1361544151590897c9e71"
+    "hash": "9114f1616b1319efffa7969aa3250991937a0024b4dc7a02b636c88204a34c0b"
   },
   {
     "id": "claude-code",

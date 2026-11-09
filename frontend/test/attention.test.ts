@@ -91,6 +91,8 @@ test("Copilot cues come from the last two rows only", () => {
   assert.equal(readHarnessSignal("copilot-cli", fakeTerminal(["", "Working (3s) esc to cancel", "x"]), ""), "working");
   assert.equal(readHarnessSignal("copilot-cli", fakeTerminal(["", "x", "? help"]), ""), "idle");
   assert.equal(readHarnessSignal("copilot-cli", fakeTerminal(["", "navigate · enter to select · esc to cancel", "? help"]), ""), "input");
+  // The ask_user form uses a different footer than the selection prompt.
+  assert.equal(readHarnessSignal("copilot-cli", fakeTerminal(["", "↑/↓ select · enter accept · tab next · ctrl+d decline · esc cancel", ""]), ""), "input");
 });
 
 test("Claude cues come from the title, with the confirm footer meaning input", () => {
