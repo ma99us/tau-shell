@@ -1,7 +1,7 @@
 # TauShell
 
 TauShell is a Windows desktop app that keeps your AI coding sessions alive. Each
-session is a real PowerShell 7 terminal running a tool such as Claude Code,
+session is a real terminal (PowerShell 7, or optionally a WSL2 distro) running a tool such as Claude Code,
 GitHub Copilot CLI, GSD, Codex or OpenCode. Close the app, come back later, and
 restore the same sessions; where the tool supports it, the conversation resumes
 too.
@@ -17,7 +17,8 @@ sideloading: allow installing from your file manager, or `adb install -r`, then 
 from Home > Phone on the PC. Check both downloads against `SHA256SUMS.txt`.
 
 **Requirements:** Windows 10 or later, the Microsoft Edge WebView2 Runtime, and
-PowerShell 7. If PowerShell 7 is missing, TauShell offers a confirmed install;
+PowerShell 7 or a ready WSL2 distro (WSL sessions are experimental). If both are
+missing, TauShell offers confirmed installs;
 if WebView2 is missing, TauShell directs you to Microsoft's official runtime
 installer. Nothing is installed without your confirmation.
 
@@ -53,7 +54,7 @@ page.
 1. On **Home**, create a session: pick a project folder and a tool. Missing
    tools can be installed from the same screen.
 2. Click **Start**. The session opens in its own tab as a normal PowerShell
-   terminal running the tool.
+   terminal (or WSL terminal) running the tool.
 3. Work as usual. Use the toolbar for saved **Prompts**, **Commands**,
    **Model**, **Compact** and **Interrupt**. Ctrl+Shift+P opens the command
    palette; Ctrl+1..9 switches tabs.
@@ -68,7 +69,7 @@ page.
 - Your sessions, settings and usage data live in `%USERPROFILE%\.tau_shell`.
   Deleting the app folder never removes them.
 - Command line: `taushell list`, `taushell start <id>`, `taushell restore <id>`.
-- Restoring a session brings back its PowerShell process; the AI conversation is
+- Restoring a session brings back its PowerShell or WSL process; the AI conversation is
   resumed only when the tool supports it, and TauShell tells you when it cannot.
 - Updates: Home shows a link when a newer release exists. It opens the notes and
   an **Update and restart** button. Nothing is downloaded or installed without

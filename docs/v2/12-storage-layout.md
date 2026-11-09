@@ -71,3 +71,9 @@ separate from YAML and harness runtime metadata. See the
 [V1 UI design](../v1/08-UI-Design.md) is historical context.
 
 The isolated [`spikes/session-config/`](../../spikes/session-config/) prototype verified strict YAML parsing, runtime UUID persistence across database reopen, and that runtime-state operations leave the original YAML file unchanged. The application now implements this separation; the schema and driver remain subject to Phase 1 validation.
+
+## WSL sessions
+
+YAML adds `runtime: wsl` and `wsl.distro` (see the [YAML schema](18-yaml-schema.md)).
+The distro home and Linux working directory are learned at launch and are not
+written to YAML; no new SQLite tables were added. Design, status and backlog: [`docs/wsl/`](../wsl/).

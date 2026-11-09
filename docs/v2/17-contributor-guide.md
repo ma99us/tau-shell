@@ -1,7 +1,8 @@
 # Contributor Guide
 
 Stack: Go host (Wails/WebView2), React + xterm.js frontend, SQLite runtime
-state, human-edited YAML session definitions, PowerShell 7 over ConPTY.
+state, human-edited YAML session definitions, PowerShell 7 (or an experimental
+WSL2 distro, see [`docs/wsl/`](../wsl/)) over ConPTY.
 Windows only. The status of the work is in
 [`21-engineering-handoff.md`](21-engineering-handoff.md).
 
@@ -9,7 +10,10 @@ Windows only. The status of the work is in
 
 - Go 1.26+ (this machine: `C:\Program Files\Go\bin`, not on PATH by default).
 - Node.js + npm.
-- WebView2 Evergreen runtime and PowerShell 7.
+- WebView2 Evergreen runtime and PowerShell 7 (optional for WSL-only use).
+- Optional, for WSL work: WSL2 with a distro. Live WSL checks need a distro with
+  the harness installed and signed in; none run in CI. Use disposable
+  directories and sessions.
 - Optional: `scripts/fetch-conpty.ps1` places `conpty.dll` + `OpenConsole.exe`
   next to the executable (bundled ConPTY); otherwise inbox ConPTY is used.
 
@@ -25,7 +29,7 @@ go build -tags production -ldflags "-H windowsgui" -o taushell.exe ./cmd/taushel
 - Build the frontend first: Go embeds `cmd/taushell/frontend/dist`.
 - The `production` tag is required, otherwise Wails builds a diagnostic stub.
 - `taushell` opens the desktop app; `taushell list|start <id>|restore <id>`
-  work without it.
+  work without it (`start` and `restore` reject WSL sessions).
 - To include the app icon, run `python build\windows\gen_icon.py` before
   `go build` (requires Pillow). This generates
   `cmd/taushell/rsrc_windows_amd64.syso`, which Go links automatically

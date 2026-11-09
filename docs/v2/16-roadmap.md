@@ -11,6 +11,11 @@
 - Session creation from a selected harness and working folder, with editable
   YAML and harness-specific argument defaults.
 - Tabbed workspace with an embedded terminal per PowerShell 7/ConPTY session.
+- Implemented, experimental: a per-session WSL2 runtime (`runtime: wsl`) so
+  engineers can work without PowerShell 7. Verified live for Claude Code and
+  Copilot CLI only; remaining hardening and gaps are in the
+  [WSL plan](../wsl/03-implementation-plan.md) (Phase 6) and
+  [backlog](../wsl/06-backlog.md).
 - Explicit start/restore, concurrent background sessions, truthful statuses,
   and confirmed shutdown.
 - Keep `list`, `start`, and `restore` CLI commands for scripting/recovery.

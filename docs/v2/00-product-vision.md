@@ -8,7 +8,7 @@ Core pillars:
 - Agent Attention Detection
 - Mobile Notifications
 - Remote Interaction
-- PowerShell-first Experience
+- PowerShell-first Experience (WSL2 is an experimental, optional per-session runtime; see [`docs/wsl/`](../wsl/))
 - Tool Plugin Ecosystem
 - Secure Environment Injection
 - Workspace Management

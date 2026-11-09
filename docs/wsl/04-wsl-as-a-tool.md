@@ -1,5 +1,7 @@
 # 04 - WSL as a managed Tool
 
+Status: built as a separate readiness model with a Tools panel row, confirmed install/update and update detection (see [03-implementation-plan.md](03-implementation-plan.md) Phase 4). Unverified flows are in [06-backlog.md](06-backlog.md).
+
 Addendum to the design. WSL is modeled as one of the Tools (like PowerShell 7,
 Node.js and Git), so it appears in the Tools panel with detection, version
 tracking, installation help and a summary of the current installation.

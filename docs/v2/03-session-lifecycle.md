@@ -11,7 +11,7 @@ session and never starts a process by itself.
 | --- | --- |
 | `never-started` | No harness conversation has been created for this session. |
 | `starting` | TauShell has persisted the launch intent and is creating PowerShell/ConPTY and starting the harness. |
-| `running` | The TauShell-managed PowerShell process is alive. This does not claim that the harness is generating a response. |
+| `running` | The TauShell-managed PowerShell (or `wsl.exe`) process is alive. This does not claim that the harness is generating a response. |
 | `stopped` | The managed process exited normally or was deliberately stopped. |
 | `failed` | Launch, terminal transport, restore, or shutdown failed, or startup recovery found an abandoned process record. The error remains visible for recovery. |
 
@@ -26,7 +26,10 @@ from terminal text or whether a tab is selected.
    the saved harness session ID.
 3. Persist `starting` and a harness session ID before invoking the adapter.
 4. Launch PowerShell 7 through ConPTY in the configured working directory,
-   applying the session-scoped environment and UTF-8 setup.
+   applying the session-scoped environment and UTF-8 setup. A session with
+   `runtime: wsl` instead launches `wsl.exe --exec` in its distro and Linux
+   working directory, forwards the environment through `WSLENV`, and cleans up
+   leftover Linux processes after exit.
 5. Pass configured harness arguments as discrete argv values, followed by the
    adapter-managed session identity and mode-specific arguments.
 6. Report process launch and harness restore outcomes separately. A new
@@ -38,7 +41,7 @@ exists. **Restore** explicitly asks the adapter to resume the saved ID.
 saved ID before launching a new conversation. Failed launch or restore remains
 visible and must not be reported as successful recovery.
 
-Restore starts a new PowerShell/ConPTY process. It does not recreate the prior
+Restore starts a new PowerShell (or WSL) ConPTY process. It does not recreate the prior
 PowerShell process, its environment mutations, or its terminal buffer.
 Startup auto-resume is opt-in: TauShell restores sessions whose `auto_resume`
 flag is true, or all eligible sessions when the global `auto_resume_all`

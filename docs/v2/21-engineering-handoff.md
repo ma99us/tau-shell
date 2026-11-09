@@ -12,9 +12,26 @@ For the open architecture-cleanup findings, priorities, safeguards, and
 regression-test plans, see the
 [architecture audit handoff](26-architecture-audit-handoff.md).
 
+## WSL runtime status
+
+Built (Phases 1-5): the `internal/runtime` seam, WSL launch and process cleanup,
+per-session home readers, git inside the distro, files drawer over UNC, skills,
+runtime picker and badge, frozen clone runtime, optional PowerShell 7, WSL and
+distro install/update actions, and update-available detection. Live-verified on
+one machine (WSL 2.6.2, Ubuntu) with Claude Code and Copilot CLI only.
+
+Open: Phase 6 hardening (distro stopped mid-session, `wsl --shutdown`, sleep,
+locale, smoke-test coverage), Codex/OpenCode/GSD support in WSL, CLI
+`start`/`restore` for WSL, real runs of the install/update flows and the UI,
+multiple distros or users, `/mnt/c` repositories, credential helpers and
+corporate TLS in the distro. The authoritative list is
+[`docs/wsl/06-backlog.md`](../wsl/06-backlog.md).
+
 ## Product boundaries
 
-- Phase 1 is a local Windows desktop app using PowerShell 7 through ConPTY.
+- Phase 1 is a local Windows desktop app using PowerShell 7 through ConPTY. An
+  experimental per-session WSL2 runtime also exists (`internal/runtime`); see
+  "WSL runtime status" below and [`docs/wsl/`](../wsl/).
 - Session intent lives in human-editable YAML; runtime and harness resume state
   live separately in SQLite.
 - Claude Code, GitHub Copilot CLI, GSD, OpenAI Codex CLI and OpenCode have

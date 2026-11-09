@@ -9,7 +9,8 @@ from your Android phone on your local network.
 TauShell is a Windows desktop app for Claude Code,
 GitHub Copilot CLI, GSD, OpenAI Codex CLI and OpenCode.
 
-Each session runs in ordinary PowerShell 7 through ConPTY. TauShell preserves
+Each session runs in ordinary PowerShell 7 through ConPTY, or, experimentally,
+inside a WSL2 distro. TauShell preserves
 the harness's terminal output and resumes its conversation where supported,
 without replacing your shell or forcing you into one AI provider.
 
@@ -17,6 +18,7 @@ without replacing your shell or forcing you into one AI provider.
 
 ```text
 TauShell -> ConPTY -> PowerShell 7 -> AI harness
+TauShell -> ConPTY -> wsl.exe -> AI harness inside a WSL2 distro (experimental)
 ```
 
 ## Features
@@ -85,6 +87,26 @@ Android app. Only pair phones you trust: terminal text may contain sensitive
 provider output. [Build, install and pair](android/README.md);
 [security boundaries](docs/v2/11-security-model.md#phone-server-experimental-off-by-default).
 
+## WSL sessions (experimental)
+
+A session can run its harness inside a WSL2 distro instead of PowerShell 7, for
+engineers who do not want the PowerShell dependency. Choose **Runtime: WSL** and
+a distro when creating a session; Home cards show a runtime badge. Clone keeps
+the original session's workspace and runtime. YAML records `runtime: wsl` and
+`wsl.distro`; the working directory is a Linux path.
+
+- Verified live on one machine (WSL 2.6.2, Ubuntu) with Claude Code and GitHub
+  Copilot CLI. Codex CLI and OpenCode are not offered for WSL; GSD launches but
+  its logs are not read. The CLI `start` command rejects WSL sessions.
+- The Tools panel shows WSL and distro status, offers confirmed WSL/distro
+  install and update (never restarts Windows or elevates silently), and shows
+  "Update to X" when a newer WSL release exists.
+- Git, the Files drawer and skills work against the distro; usage, model and
+  title readers only read a running distro and never start it.
+- Not verified: the install/update flows, multiple distros or users, corporate
+  TLS inspection inside the distro, and the UI in a real window. Details:
+  [`docs/wsl/`](docs/wsl/) and its [backlog](docs/wsl/06-backlog.md).
+
 ## Install
 
 Download `TauShell-<version>-windows-x64.zip` from the
@@ -94,7 +116,8 @@ needed. Session data lives in `%USERPROFILE%\.tau_shell`. Later releases can be
 installed from Home (**Update and restart**, with rollback).
 
 Requires Windows 10 or later, the Microsoft Edge WebView2 Runtime and
-PowerShell 7; first run offers confirmed installs. Missing harnesses do not
+either PowerShell 7 or a ready WSL2 distro (see [WSL sessions](#wsl-sessions-experimental));
+first run offers confirmed installs and is skipped when WSL is ready. Missing harnesses do not
 block Home; install them from the Tools panel or their vendor pages.
 
 Releases are pre-releases and unsigned, so SmartScreen warns on first launch
@@ -140,7 +163,8 @@ taushell ctl stop <session>                        # graceful, like the Stop but
 taushell ctl read [--rows N] <session>             # visible terminal text
 ```
 
-`ctl send` is refused unless the harness state is confirmed.
+`ctl send` is refused unless the harness state is confirmed. `start` and `restore`
+reject WSL sessions; start those from the app.
 
 ## Status
 
@@ -161,6 +185,9 @@ the test paths and remaining limits.
 | GSD | Version 1.18.0 (below the tested manifest range): launch, restore and recall, activity, model and usage; alternate-model reply and reliable native skill loading remain unverified |
 | OpenCode | Version 1.19.5: launch, resume-ID discovery, stop and restore; model replies, usage, cues and interruption remain unverified |
 | OpenAI Codex CLI | Version 0.166.0: live launch, restore and recall, usage, skill, activity and interrupt checks |
+
+WSL sessions were checked live only with Claude Code and GitHub Copilot CLI on one
+machine (WSL 2.6.2, Ubuntu); see [`docs/wsl/06-backlog.md`](docs/wsl/06-backlog.md).
 
 Unicode, ANSI, cursor movement, typed input and live resize are verified through
 WebView2, xterm.js and ConPTY on Windows 10. A background attention notification
@@ -203,7 +230,8 @@ excluded, and credential-like strings in errors are redacted.
 [contributor guide](docs/v2/17-contributor-guide.md). Also see
 [adding a harness](docs/v2/23-adding-a-harness.md),
 [UI design system](docs/v2/25-ui-design-system.md) and
-[security model](docs/v2/11-security-model.md). Agents and contributors using AI
+[security model](docs/v2/11-security-model.md). The WSL runtime is documented in
+[`docs/wsl/`](docs/wsl/). Agents and contributors using AI
 tools should read [`AGENTS.md`](AGENTS.md).
 
 ## License

@@ -70,3 +70,14 @@ titles come from the harness's own files (Claude Code, Copilot CLI).
 - A clean Ctrl+C and process shutdown may improve the harness's ability to persist its session but cannot guarantee that in-progress work or uncheckpointed state is saved.
 - PowerShell restoration and AI conversation restoration are distinct outcomes.
 - Record/report failures and allow a user to retry or start a fresh harness session explicitly.
+
+## WSL sessions
+
+A WSL session restores the same way: a new `wsl.exe` ConPTY process in the same
+distro and Linux working directory, never the original process. The harness
+resume check, model, title, usage and activity readers use the distro home
+learned at launch and only read while the distro is running; a stopped distro
+is not started to read state, so final usage is ingested on the next launch. Launch
+or restore failures, including an unavailable distro, are reported, not hidden. Harnesses that
+discover their own session ID (Codex, OpenCode) are rejected for WSL, and Clone
+of a WSL session is refused for them. Design, status and backlog: [`docs/wsl/`](../wsl/).

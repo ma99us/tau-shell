@@ -29,3 +29,5 @@ rewrite provider text; glyph appearance depends on the renderer and installed
 fonts.
 
 Clipboard: Ctrl+C copies when text is selected, Ctrl+V pastes, both through the native clipboard. Harnesses that select text themselves (Claude Code, Copilot CLI) copy with the OSC 52 escape; the embedded terminal writes that text to the clipboard and refuses read requests (`frontend/src/osc52.ts`). Manually confirmed on Claude Code and Copilot CLI.
+
+WSL sessions: the stream comes from `wsl.exe` (no PowerShell `chcp 65001` bootstrap; Linux defaults to UTF-8). Rendering, resize, bracketed paste and clipboard images through `wsl.exe` in a real TauShell window are not yet verified; see [`docs/wsl/06-backlog.md`](../wsl/06-backlog.md).

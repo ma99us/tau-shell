@@ -1,8 +1,12 @@
 # TauShell for WSL - investigation and plan
 
-Status: investigation and planning only. Nothing here is implemented, and nothing
-here is a requirement for the current Phase 1 scope (see `AGENTS.md`). Like
-`docs/v3/`, treat these documents as future-only planning unless asked.
+Status: implemented as an experimental, per-session runtime (Phases 1-5 built;
+Phase 6 hardening open). 01-feasibility and 05-spike-results are the original
+investigation; 02-design and 04-wsl-as-a-tool describe the design (some detail
+differs from the build, for example WSL readiness is a separate model, not a
+`tools.Specs()` entry); 03-implementation-plan carries per-phase status; and
+06-backlog is the authoritative list of what is unverified or missing. The
+user-facing summary is in the root `README.md` and the `docs/v2` pages link here.
 
 Some engineers do not want the PowerShell 7 dependency and prefer to run their
 AI harnesses inside WSL2. This folder answers: how hard would a WSL-based
@@ -11,13 +15,24 @@ TauShell be, and how should it be built?
 | Document | Contents |
 |---|---|
 | [`01-feasibility.md`](01-feasibility.md) | Probe results from a real WSL2 machine, the PowerShell/Windows coupling inventory, and the product-shape comparison |
-| [`02-design.md`](02-design.md) | Proposed design: runtime abstraction, paths, environment, process lifetime, git, detection, skills, YAML, UI |
+| [`02-design.md`](02-design.md) | Design: runtime abstraction, paths, environment, process lifetime, git, detection, skills, YAML, UI |
 | [`03-implementation-plan.md`](03-implementation-plan.md) | Phases, effort sizes, risks, verification plan, open questions |
 | [`04-wsl-as-a-tool.md`](04-wsl-as-a-tool.md) | WSL as a managed Tool: Tools panel card, version tracking, installation assistance (adds Phases 0b and 3.5) |
 | [`05-spike-results.md`](05-spike-results.md) | Measured results from the Phase 0 spike on a real WSL2 machine, what is still unverified, and the decisions they change |
 | [`06-backlog.md`](06-backlog.md) | Verification backlog: WSL gaps per harness (Codex, GSD, OpenCode) and per platform area, with what is left to close each |
 
-## Summary
+## Current state
+
+- Built: `internal/runtime` (WSL launch with `wsl.exe --exec`, cleanup, readiness,
+  inventory, path mapping, install helpers, update check), per-session home
+  readers, git and files drawer for distros, skills, create-dialog runtime picker,
+  runtime badge, Tools panel WSL row with confirmed install/update, optional
+  PowerShell 7.
+- Verified live only for Claude Code and Copilot CLI on WSL 2.6.2 / Ubuntu.
+- Open: Phase 6 hardening, Codex/GSD/OpenCode, CLI `start`/`restore`, real runs of
+  install/update flows and the UI. See [`06-backlog.md`](06-backlog.md).
+
+## Summary (original investigation)
 
 - **Feasible, and moderate in effort.** The terminal stack (ConPTY, xterm.js),
   storage (YAML intent, SQLite runtime), attention cues, the prompt queue, the
@@ -48,7 +63,7 @@ TauShell be, and how should it be built?
   WSL as a second runtime, but the Phase 1 scope text and "Detect PowerShell 7"
   setup rule must be updated deliberately.
 
-## What was and was not verified
+## What was and was not verified (investigation time)
 
 Verified on one machine (Windows 10.0.26200, WSL 2.6.2, Ubuntu distro):
 `wsl.exe` status and listing, environment forwarding through `WSLENV`, path

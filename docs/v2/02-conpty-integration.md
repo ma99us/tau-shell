@@ -24,11 +24,23 @@ harness interface with TauShell-owned chat UI.
 - Forward keyboard input, including Ctrl+C, and propagate local terminal size changes using `ResizePseudoConsole`.
 - Attempt graceful interruption during confirmed shutdown, then force-stop the session process tree after a bounded wait. Use a Windows Job Object to prevent orphaned harness child processes.
 
-## Deferred alternative: launch the harness directly
+## WSL runtime (experimental)
+
+ConPTY hosts `wsl.exe` the same way it hosts `pwsh.exe`: a WSL session runs
+`TauShell -> ConPTY -> wsl.exe -d <distro> --cd <dir> --exec <harness> ...`.
+There is no shell and no PowerShell bootstrap; Linux defaults to UTF-8 and
+arguments stay discrete argv values. The job object owns only `wsl.exe`, so
+TauShell tags each launch with `TAUSHELL_LAUNCH` and, after exit, scans the
+distro's `/proc/*/environ` to end leftover Linux processes. `wsl.exe`'s own
+output is UTF-16LE and is decoded for status commands; the terminal stream is
+UTF-8. Live-checked with Claude Code and Copilot CLI only; resize, Unicode,
+bracketed paste and clipboard images in a real TauShell window are open (see the
+[WSL backlog](../wsl/06-backlog.md)). 
 
 This is a research spike for a later phase, not a Phase 1 change. The supported
 architecture remains `TauShell -> ConPTY -> PowerShell 7 -> AI harness`;
-PowerShell stays first-class and remains the session shell for now.
+PowerShell stays first-class and remains the default session shell; WSL
+is an additional runtime (see below), not a replacement.
 
 ConPTY itself is shell-agnostic. `internal/conpty.StartPreferred` accepts an
 executable, working directory, and argv, so a harness with a directly

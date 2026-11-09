@@ -341,3 +341,20 @@ must not contain prompts, terminal input/output, launch argument values,
 credential values, or environment values. Keep bridge failure request payloads
 suppressed, bound frontend-supplied message/stack sizes, and redact
 credential-like strings before writing error text.
+
+## WSL runtime
+
+- WSL and distro install or update run `wsl.exe` only after a native
+  confirmation, in a visible console; TauShell never restarts Windows, elevates
+  or installs silently. Distro names for install come from the online catalog and
+  are validated.
+- The update check only reads GitHub's latest microsoft/WSL release.
+- Session environment and secrets reach the distro through `WSLENV`, not argv,
+  and are visible to same-user processes inside the distro like any process
+  environment.
+- The Files drawer reads the distro over `\\wsl.localhost\<distro>`, keeping its
+  root containment and symlink checks (a symlink pointing outside the root was
+  refused in a live check).
+- Linux processes are outside the Windows job object; cleanup relies on the
+  `TAUSHELL_LAUNCH` marker in `/proc/*/environ`.
+- Phone requests keep the same send and answer guards for WSL sessions. Design, status and backlog: [`docs/wsl/`](../wsl/).

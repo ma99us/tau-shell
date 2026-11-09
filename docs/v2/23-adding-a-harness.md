@@ -189,3 +189,5 @@ dedupe records.
 
 Known limits: manifests load at startup only; user manifests cannot supply new
 log parsers, vendor marks or one-click installs.
+
+WSL: a harness whose adapter returns `DiscoversSessionID()` true (resume ID found by reading a Windows folder) is rejected for WSL sessions, and readers must take the per-session home (`harness.*In`) instead of `os.UserHomeDir()` to work inside a distro. Declare no Windows-only paths in a manifest if the harness should work in WSL. See [`docs/wsl/06-backlog.md`](../wsl/06-backlog.md) for per-harness WSL gaps.

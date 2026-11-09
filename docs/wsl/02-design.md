@@ -1,5 +1,11 @@
 # 02 - Design (recommended: per-session runtime)
 
+Status: built as designed with these differences: WSL readiness is its own model
+(`runtime.Detect`), not a `tools.Specs()` entry; YAML takes only Linux working
+directories (no `\\wsl.localhost` normalization); no path-conversion surfaces
+were needed in the UI. Current status is in
+[`03-implementation-plan.md`](03-implementation-plan.md).
+
 Goal: let a session run its harness in a WSL2 distro instead of PowerShell 7,
 without changing what the rest of TauShell does. PowerShell stays first-class and
 stays the default.

@@ -175,7 +175,7 @@ abstraction was added.
   policy, Phase 1 scope, and constraints on Git operations. Do not run the
   destructive checkout-refresh command currently shown in the contributor
   guide against this or any other dirty checkout.
-- Phase 1 remains a local Windows GUI with PowerShell 7/ConPTY, human-edited
+- Phase 1 remains a local Windows GUI with PowerShell 7/ConPTY (plus the experimental per-session WSL runtime in `internal/runtime`), human-edited
   YAML intent, separate runtime state, and harness-specific adapters. Keep
   `list`, `start`, and `restore`; do not add a second TUI, remote access,
   mobile features, or a web dashboard. Local flash/toast alerts are in scope.
@@ -183,7 +183,7 @@ abstraction was added.
   terminal contents, prompt text, or argument values. Do not rewrite provider
   output. Keep xterm instances of running sessions alive and receiving output while
   their tab is not selected.
-- Restore the PowerShell process and resume the harness conversation as
+- Restore the PowerShell (or WSL) process and resume the harness conversation as
   separate outcomes. Do not report a conversation as restored merely because
   a process started. Do not delete the user's working directory or a
   harness's own conversation data when deleting a TauShell session.

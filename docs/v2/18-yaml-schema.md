@@ -23,6 +23,12 @@ secrets:
 powershell:
   utf8: true
 
+# Optional WSL runtime (default is PowerShell). working_dir is then an absolute
+# Linux path in the distro (not checked on disk, so the distro is not started).
+# runtime: wsl
+# wsl:
+#   distro: Ubuntu
+
 # Ordered, optional arguments for the selected harness:
 launch_args:
   - --model
@@ -44,6 +50,15 @@ hand-edited, and the edited definition is validated before saving. A newly
 created session is selected and started immediately. TauShell treats saved
 YAML as the user's explicit configuration and does not add a separate launch
 confirmation for configured arguments.
+
+`runtime` is `powershell` (default, may be omitted) or `wsl`; `wsl.distro` is required
+for `wsl` (1 to 64 letters, digits, dots, dashes or underscores) and rejected
+otherwise. The runtime is chosen when a session is created
+and frozen for clones. WSL sessions support Claude Code, Copilot CLI and GSD
+(GSD launches only; its logs are not read in WSL homes); `codex` and `opencode`
+are not offered and are rejected at launch because TauShell cannot discover their
+session IDs inside the distro.
+See [`docs/wsl/`](../wsl/).
 
 Do not store secret values in YAML. The `secrets:` mapping contains names of
 values stored through Home > Secrets in the current user's Windows Credential

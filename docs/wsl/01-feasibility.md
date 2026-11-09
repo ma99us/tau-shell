@@ -1,5 +1,7 @@
 # 01 - Feasibility
 
+Status: historical investigation (before the build). Current status: [README](README.md) and [06-backlog](06-backlog.md).
+
 ## 1. Probe results
 
 Read-only probes on a development machine. Nothing was installed or changed.

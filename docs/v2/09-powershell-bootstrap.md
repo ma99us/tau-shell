@@ -5,3 +5,10 @@ Phase 1 targets Windows 10 with PowerShell 7. Bootstrap each managed shell with 
 Validate the actual encoding behavior through ConPTY, not only the PowerShell process settings. Cover Unicode input/output and common line-drawing characters; detect and clearly report compatibility problems instead of silently corrupting text. Avoid changing machine-wide settings.
 
 PSReadLine configuration, aliases, and session metadata variables should be added only when needed and must not interfere with AI harness startup or normal interactive use.
+
+## WSL sessions
+
+The bootstrap applies to PowerShell sessions only. WSL sessions run
+`wsl.exe --exec` with no shell, so there is no `chcp` or UTF-8 prologue; encoding
+is proven end to end through ConPTY and xterm.js, not assumed. PowerShell 7 is
+optional when WSL is ready. Design, status and backlog: [`docs/wsl/`](../wsl/).

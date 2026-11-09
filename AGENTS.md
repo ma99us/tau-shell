@@ -14,8 +14,9 @@ TauShell is a local Windows desktop session manager: a Go host (`cmd/taushell`, 
 - Phase 1 is the current scope. [`docs/v2/`](docs/v2/) is the active documentation; where its roadmap or backlog describes later work, this section wins.
 - Maturity: working desktop prerelease, not production-stable. Implemented does not mean every provider/version or real-window workflow is verified; retain the limits in the [engineering handoff](docs/v2/21-engineering-handoff.md).
 - In scope: the implemented, experimental LAN phone server and Android companion, off by default, plus local attention alerts. General internet remote access, web dashboards and broader phone integration remain out of scope; promoting an existing feature in the README does not widen scope.
+- The experimental WSL2 runtime (per-session `runtime: wsl`) is implemented; [`docs/wsl/`](docs/wsl/) is its design, status and verification backlog, not future-only planning. WSL support is verified live only for Claude Code and Copilot CLI; Codex and OpenCode are rejected for WSL, GSD readers skip WSL homes, and CLI `start`/`restore` reject WSL sessions. Do not claim more than the backlog says.
 - Do not treat [`docs/v1/`](docs/v1/) (historical) or [`docs/v3/`](docs/v3/) (future-only planning) as requirements unless the user asks.
-- The CLI keeps `list`, `start`, `restore` and `ctl`. There is no TUI and no TUI fallback.
+- The CLI keeps `list`, `start`, `restore` and `ctl` (`start` and `restore` reject WSL sessions). There is no TUI and no TUI fallback.
 - Target Windows 10 and later. Keep TauShell-owned UI text ASCII; never rewrite provider output.
 - Detect WebView2, PowerShell 7 (optional when WSL is ready), WSL, harnesses, versions and declared tool dependencies. Missing host prerequisites use first-run setup; missing harnesses do not block Home. Offer confirmed installs (winget, vendor links as fallback); never install or elevate silently.
 - Use installed tool versions; keep per-adapter tested ranges and capability probes; warn outside them; never silently pin, downgrade or auto-update.
@@ -80,6 +81,7 @@ Read only what the task needs:
 | Terminal rendering, clipboard, encoding | [`15-terminal-rendering`](docs/v2/15-terminal-rendering.md) |
 | Session lifecycle, restore, storage | [`03-session-lifecycle`](docs/v2/03-session-lifecycle.md), [`04-session-restoration`](docs/v2/04-session-restoration.md), [`12-storage-layout`](docs/v2/12-storage-layout.md) |
 | YAML, environment, prompt presets | [`18-yaml-schema`](docs/v2/18-yaml-schema.md), [`10-environment-management`](docs/v2/10-environment-management.md) |
+| WSL runtime, distros, WSL install | [`docs/wsl/README`](docs/wsl/README.md), [`02-design`](docs/wsl/02-design.md), [`06-backlog`](docs/wsl/06-backlog.md) |
 | Harness adapters, new harness | [`05-plugin-system`](docs/v2/05-plugin-system.md), [`23-adding-a-harness`](docs/v2/23-adding-a-harness.md), [`24-claude-code-verification-plan`](docs/v2/24-claude-code-verification-plan.md) |
 | Attention cues, alerts | [`08-attention-detection`](docs/v2/08-attention-detection.md), [`22-local-attention-notifications`](docs/v2/22-local-attention-notifications.md) |
 | UI, theme, workspaces | [`25-ui-design-system`](docs/v2/25-ui-design-system.md), [`19-workspaces`](docs/v2/19-workspaces.md) |

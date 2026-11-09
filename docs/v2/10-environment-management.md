@@ -24,3 +24,11 @@ responses). Entering a value in the UI sends it to the host in the write-only
 secret is missing the launch fails with a message naming the secret and the
 session state is not changed. Duplicating a session copies the secret names,
 never the values.
+
+## WSL sessions
+
+Session `environment:` values and resolved vault secrets cross into the distro
+through `WSLENV` entries on the `wsl.exe` process environment, never in argv or
+logs. Skill folders are passed as Linux-visible paths (for example
+`/mnt/c/...`). The default PATH inside `--exec` is minimal, so TauShell passes an
+explicit `PATH` resolved at launch. Design, status and backlog: [`docs/wsl/`](../wsl/).
