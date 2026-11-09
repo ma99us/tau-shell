@@ -66,6 +66,30 @@ wsl.exe -d <distro> --cd <linux dir> --exec <harness path> <argv...>
 - Never pass backslash paths through `wsl.exe` arguments (probe: they are
   eaten); use forward slashes or `--exec` argv.
 
+### 3.1 Path conversion rules
+
+Conversion is automatic only where TauShell itself hands a path to the harness
+or to Windows; text the user types or pastes is never rewritten.
+
+| Direction | Input | Result |
+|---|---|---|
+| To harness | `C:\a\b` | `/mnt/c/a/b` |
+| To harness | `\\wsl.localhost\<same distro>\home\u\p` | `/home/u/p` |
+| To harness | UNC path of a different distro, or any unmappable path | rejected with a message; never guessed |
+| To Windows | `/home/u/p` | `\\wsl.localhost\<distro>\home\u\p` |
+| To Windows | `/mnt/c/a/b` | `C:\a\b` |
+
+- Applies to: file-picker results, files-drawer "insert path", directory
+  arguments (for example `--add-dir`), skill directories, and reveal in Explorer.
+- Pasted images are saved inside the distro (a TauShell-owned temp folder) and the
+  Linux path is inserted, so the harness reads them without crossing `/mnt`.
+- Mapping is pure string logic for `/mnt/<drive>` and the distro UNC prefix, so
+  it needs no process launch; `wslpath` is only a fallback for custom mounts.
+- Quote paths with spaces for the target shell only when inserting into the
+  terminal; never put them in a shell string for `wsl.exe`.
+- Verify with table-driven unit tests (drive letters, case, spaces, trailing
+  slashes, other-distro UNC, non-ASCII names) before any live check.
+
 ## 4. Harness state readers
 
 `HomeDir` returns `\\wsl.localhost\<distro>\home\<user>` for WSL. The readers
