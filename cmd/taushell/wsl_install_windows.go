@@ -75,7 +75,13 @@ func (application *App) InstallWSL(action, distro string) (result WSLInstallResu
 	if runErr := hostruntime.RunInConsole(ctx, args); runErr != nil {
 		return WSLInstallResult{Outcome: "failed", Message: runErr.Error(), Status: detectWSL()}, nil
 	}
-	return finishWSLInstall(action, distro, detectWSL()), nil
+	result = finishWSLInstall(action, distro, detectWSL())
+	if action == hostruntime.ActionUpdateWSL && result.Outcome == "installed" {
+		application.updatesMu.Lock()
+		delete(application.toolUpdates, wslUpdateKey)
+		application.updatesMu.Unlock()
+	}
+	return result, nil
 }
 
 func finishWSLInstall(action, distro string, status hostruntime.Readiness) WSLInstallResult {

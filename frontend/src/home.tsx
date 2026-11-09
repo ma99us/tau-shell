@@ -390,7 +390,7 @@ function WSLRow({ actions }: { actions: ToolActions }) {
       {wsl.installed && wsl.distros.length === 0 && <span className="muted">No distribution found. Install one below, then open it once to create your Linux user.</span>}
       <div className="tool-actions">
         {!wsl.installed && <button className="secondary-button tool-action" disabled={actions.wslBusy} title="Run wsl --install --no-distro (asks first)" onClick={() => actions.onWSLChange("wsl")}>{actions.wslBusy ? "Working..." : "Install WSL"}</button>}
-        {wsl.installed && <button className="secondary-button tool-action" disabled={actions.wslBusy} title="Run wsl --update (asks first)" onClick={() => actions.onWSLChange("update")}>{actions.wslBusy ? "Working..." : "Update WSL"}</button>}
+        {wsl.installed && actions.updates.wsl && <button className="secondary-button tool-action" disabled={actions.wslBusy} title={`Run wsl --update to reach ${actions.updates.wsl} (asks first)`} onClick={() => actions.onWSLChange("update")}>{actions.wslBusy ? "Working..." : `Update to ${actions.updates.wsl}`}</button>}
         {wsl.installed && online === null && <button className="secondary-button tool-action" disabled={actions.wslBusy} title="List the distributions Microsoft offers" onClick={loadOnline}>Install a distribution...</button>}
         {wsl.installed && online !== null && (available.length > 0 ? <>
           <select aria-label="Distribution to install" value={choice} onChange={(event) => setChoice(event.target.value)}>{available.map((name) => <option key={name} value={name}>{name}</option>)}</select>

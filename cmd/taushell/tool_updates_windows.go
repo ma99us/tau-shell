@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ma99us/tau-shell/internal/diagnostics"
+	hostruntime "github.com/ma99us/tau-shell/internal/runtime"
 	"github.com/ma99us/tau-shell/internal/tools"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -83,10 +84,37 @@ func (application *App) checkToolUpdates(ctx context.Context) {
 			}
 		}
 	}
+	if latest := checkWSLUpdate(ctx); latest != "" {
+		found[wslUpdateKey] = latest
+	}
 	application.updatesMu.Lock()
 	application.toolUpdates = found
 	application.updatesMu.Unlock()
 	diagnostics.Info("tool update check finished", "updates", len(found))
+}
+
+// wslUpdateKey is the toolUpdates entry for WSL, which is not a tools.Spec and
+// is updated through InstallWSL rather than UpdateTool.
+const wslUpdateKey = "wsl"
+
+// checkWSLUpdate compares the installed WSL with Microsoft's latest stable
+// release. It is read-only and returns "" when WSL is absent, current, or the check fails.
+func checkWSLUpdate(ctx context.Context) string {
+	checkCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	status := hostruntime.Detect(checkCtx, nil, nil)
+	if !status.Installed {
+		return ""
+	}
+	latest, err := hostruntime.LatestWSLVersion(checkCtx, nil)
+	if err != nil {
+		diagnostics.Warn("WSL update check failed", err)
+		return ""
+	}
+	if hostruntime.UpdateAvailable(status.Version, latest) {
+		return latest
+	}
+	return ""
 }
 
 // GetToolUpdates returns the newest available version per tool id.
