@@ -4,7 +4,7 @@ import { UsageSummary, hasUsage, monthTooltip, usageText } from "./usage";
 import { GearIcon } from "./harnessIcons";
 import { getHarnesses, harnessIds, harnessShort, isHarness } from "./harnesses";
 import { UserHarnesses } from "./userHarnesses";
-import { ProjectIcon, statusLabel } from "./sessionVisuals";
+import { ProjectIcon, sessionColorStyle, statusLabel } from "./sessionVisuals";
 import { clearPollFailure, shouldReportPollFailure } from "./polling";
 import { ControlAudit } from "./controlAudit";
 import { PhonePane } from "./phonePane";
@@ -180,7 +180,7 @@ export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAl
       {sessions.length === 0 ? (!loaded ? <div className="loading-card" role="status"><span className="spinner" aria-hidden="true" /><span className="muted">Loading sessions...</span></div> : <div className="empty-card"><div className="empty-icon">+</div><h3>No sessions yet</h3><p>Create a session to connect a project folder to an AI harness such as Claude Code or GitHub Copilot CLI.</p>      <button className="primary-button" onClick={onNew}>New session</button></div>) :
         <>{(grouped ? workspaces : [{ group: ungrouped, sessions }]).map((workspace) => <div className="home-group" key={workspace.group.key}>
         {grouped && <GroupHeader workspace={workspace} controls={groupControls} variant="home" />}
-        {(!grouped || !groupControls.collapsed.has(workspace.group.key)) && <div className="session-grid">{workspace.sessions.map((session) => <article className={`session-card ${session.runningHere ? "running" : ""} ${dragId === session.id ? "dragging" : ""} ${dropClass(session.id)}`} key={session.id} {...dragProps(session.id)}>
+        {(!grouped || !groupControls.collapsed.has(workspace.group.key)) && <div className="session-grid">{workspace.sessions.map((session) => <article className={`session-card ${session.runningHere ? "running" : ""} ${dragId === session.id ? "dragging" : ""} ${dropClass(session.id)}`} key={session.id} style={sessionColorStyle(session.color)} data-colored={session.color ? "" : undefined} {...dragProps(session.id)}>
           <div className="card-top"><ProjectIcon session={session} /><span className={`state-pill ${session.runningHere ? "running" : ""} ${!session.runningHere && session.status === "failed" ? "status-warn-text" : ""}`}>{session.runningHere ? "Running" : statusLabel(session.status)}</span><button className="delete-button" aria-label={`Delete ${session.name}`} title="Delete session" onClick={() => onDelete(session)}>x</button></div>
           <div className="card-title"><h3>{session.name}</h3>{hasUsage(summary?.sessions?.[session.id]) && <span className="card-usage" title="Estimate from harness logs; never reset">{usageText(summary!.sessions![session.id])}</span>}</div><p className="path">{session.workingDir}</p><p className="session-meta">{session.tool}</p>
           {session.lastError && <p className="card-error">{session.lastError}</p>}

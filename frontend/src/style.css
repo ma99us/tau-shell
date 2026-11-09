@@ -919,6 +919,24 @@ h3 {
   vertical-align: 1px;
 }
 
+/* A colored running card uses its session color for the live accents instead of green. */
+.session-card.running[data-colored] {
+  border-color: color-mix(in srgb, var(--session-color) 55%, transparent);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--session-color) 14%, transparent), var(--bg-card) 55%);
+  box-shadow: inset 3px 0 0 var(--session-color), 0 0 16px color-mix(in srgb, var(--session-color) 30%, transparent);
+}
+
+.session-card.running[data-colored] .state-pill.running {
+  border-color: color-mix(in srgb, var(--session-color) 55%, transparent);
+  background: color-mix(in srgb, var(--session-color) 18%, transparent);
+  color: var(--text-1);
+}
+
+.session-card.running[data-colored] .state-pill.running::before {
+  background: var(--session-color);
+  box-shadow: 0 0 6px var(--session-color);
+}
+
 .path {
   overflow: hidden;
   margin-bottom: 0;
