@@ -48,7 +48,7 @@ func (application *App) GetPresets(sessionID string) (resolved []presets.Resolve
 		available = application.skills.Available(string(config.Tool))
 	}
 	layered := presets.Merge(presets.Merge(source, global), config.Presets)
-	return presets.Resolve(context.Background(), layered, presets.Context{
+	return presets.Resolve(gitContext(config), layered, presets.Context{
 		Tool:       string(config.Tool),
 		Session:    config.Name,
 		WorkingDir: config.WorkingDir,
@@ -63,7 +63,7 @@ func (application *App) GetGitBranch(sessionID string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return presets.GitBranch(context.Background(), config.WorkingDir), nil
+	return presets.GitBranch(gitContext(config), config.WorkingDir), nil
 }
 
 // GetGitStatus returns the session repository's branch, dirty flag and
@@ -73,7 +73,7 @@ func (application *App) GetGitStatus(sessionID string) (*presets.RepoStatus, err
 	if err != nil {
 		return nil, err
 	}
-	status, ok := presets.GitStatus(context.Background(), config.WorkingDir)
+	status, ok := presets.GitStatus(gitContext(config), config.WorkingDir)
 	if !ok {
 		return nil, nil
 	}
@@ -88,7 +88,7 @@ func (application *App) ListGitChanges(sessionID string) ([]presets.GitChange, e
 	if err != nil {
 		return nil, err
 	}
-	changes, ok := presets.GitChanges(context.Background(), config.WorkingDir)
+	changes, ok := presets.GitChanges(gitContext(config), config.WorkingDir)
 	if !ok {
 		return nil, nil
 	}
@@ -103,7 +103,7 @@ func (application *App) FetchGit(sessionID string) bool {
 	if err != nil {
 		return false
 	}
-	return presets.GitFetch(context.Background(), config.WorkingDir)
+	return presets.GitFetch(gitContext(config), config.WorkingDir)
 }
 
 // SyncGit commits all pending changes, rebases onto upstream and pushes. It
@@ -118,7 +118,7 @@ func (application *App) SyncGit(sessionID string) (summary string, err error) {
 	if err != nil {
 		return "", err
 	}
-	return presets.GitSync(context.Background(), config.WorkingDir)
+	return presets.GitSync(gitContext(config), config.WorkingDir)
 }
 
 // GetSessionModel returns the model the harness last recorded for the
@@ -238,4 +238,13 @@ func (application *App) OpenToolConfig(toolID string) (err error) {
 		content := []byte("{}\n")
 		return os.WriteFile(path, content, 0o600)
 	})
+}
+
+// gitContext makes git run inside the distro for a WSL session, whose working
+// directory is a Linux path.
+func gitContext(config session.Config) context.Context {
+	if config.IsWSL() {
+		return presets.WithWSL(context.Background(), config.WSL.Distro)
+	}
+	return context.Background()
 }

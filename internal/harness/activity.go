@@ -29,6 +29,12 @@ const (
 // no conversation yet, unreadable file). It is a hint for the window, never an
 // error.
 func CurrentActivity(tool session.Harness, harnessSessionID string, now time.Time) string {
+	return CurrentActivityIn("", tool, harnessSessionID, now)
+}
+
+// CurrentActivityIn reads activity under a session home (empty means the
+// Windows profile).
+func CurrentActivityIn(home string, tool session.Harness, harnessSessionID string, now time.Time) string {
 	if harnessSessionID == "" {
 		return ""
 	}
@@ -38,7 +44,7 @@ func CurrentActivity(tool session.Harness, harnessSessionID string, now time.Tim
 	}
 	switch item.Activity {
 	case "copilot-events":
-		home, err := HomeDir()
+		home, err := SessionHome(home)
 		if err != nil {
 			return ""
 		}
@@ -48,6 +54,9 @@ func CurrentActivity(tool session.Harness, harnessSessionID string, now time.Tim
 		}
 		return copilotActivityFromLines(lines, now)
 	case "codex-rollout":
+		if home != "" {
+			return ""
+		}
 		path := CodexRolloutFile(harnessSessionID)
 		if path == "" {
 			return ""
@@ -58,6 +67,9 @@ func CurrentActivity(tool session.Harness, harnessSessionID string, now time.Tim
 		}
 		return codexActivityFromLines(lines, now)
 	case "gsd-jsonl":
+		if home != "" {
+			return ""
+		}
 		lines, ok := readActivityTail(GSDSessionPath(harnessSessionID))
 		if !ok {
 			return ""

@@ -82,12 +82,15 @@ func (manager *Manager) Conversations(ctx context.Context, id string) ([]Convers
 	if len(list) > maxListedConversations {
 		list = list[:maxListedConversations]
 	}
+	home, readable := manager.readerHome(ctx, config)
 	result := make([]Conversation, 0, len(list))
 	for _, entry := range list {
-		entry.Title = harness.ConversationTitle(config.Tool, entry.HarnessSessionID)
-		entry.Model = harness.CurrentModel(config.Tool, entry.HarnessSessionID)
-		if err := adapter.CheckResume(entry.HarnessSessionID); err != nil {
-			entry.Unavailable = err.Error()
+		if readable {
+			entry.Title = harness.ConversationTitleIn(home, config.Tool, entry.HarnessSessionID)
+			entry.Model = harness.CurrentModelIn(home, config.Tool, entry.HarnessSessionID)
+			if err := adapter.CheckResumeIn(home, entry.HarnessSessionID); err != nil {
+				entry.Unavailable = err.Error()
+			}
 		}
 		result = append(result, *entry)
 	}
@@ -125,8 +128,10 @@ func (manager *Manager) ResumeConversation(ctx context.Context, id, harnessSessi
 	if chosen.Unavailable != "" {
 		return Snapshot{}, errors.New(chosen.Unavailable)
 	}
-	if err := adapter.CheckResume(harnessSessionID); err != nil {
-		return Snapshot{}, err
+	if home, readable := manager.readerHome(ctx, config); readable {
+		if err := adapter.CheckResumeIn(home, harnessSessionID); err != nil {
+			return Snapshot{}, err
+		}
 	}
 	if chosen.Current {
 		return manager.start(ctx, id, true, false, columns, rows)

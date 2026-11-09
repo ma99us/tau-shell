@@ -11,13 +11,23 @@ import (
 
 	"github.com/ma99us/tau-shell/internal/diagnostics"
 	"github.com/ma99us/tau-shell/internal/projectfiles"
+	hostruntime "github.com/ma99us/tau-shell/internal/runtime"
 	"github.com/ma99us/tau-shell/internal/session"
 )
 
+// projectRoot is the working directory as Windows can read it: a WSL session's
+// Linux directory becomes its \\wsl.localhost share path.
 func (application *App) projectRoot(sessionID string) (string, error) {
 	config, err := session.FindConfig(application.configDirectory, sessionID)
 	if err != nil {
 		return "", err
+	}
+	if config.IsWSL() {
+		wsl, err := hostruntime.NewWSL(config.WSL.Distro)
+		if err != nil {
+			return "", err
+		}
+		return wsl.ToWindowsPath(config.WorkingDir)
 	}
 	return config.WorkingDir, nil
 }
@@ -97,11 +107,24 @@ func (application *App) OpenProjectFile(sessionID, rel string) error {
 	return exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", path).Start()
 }
 
-// ProjectFullPath returns the absolute path of a project file, confined to the working directory.
+// ProjectFullPath returns the absolute path of a project file, confined to the
+// working directory. For a WSL session it is the Linux path the harness sees.
 func (application *App) ProjectFullPath(sessionID, rel string) (string, error) {
 	root, err := application.projectRoot(sessionID)
 	if err != nil {
 		return "", err
 	}
-	return projectfiles.Resolve(root, rel)
+	full, err := projectfiles.Resolve(root, rel)
+	if err != nil {
+		return "", err
+	}
+	config, err := session.FindConfig(application.configDirectory, sessionID)
+	if err != nil || !config.IsWSL() {
+		return full, err
+	}
+	wsl, err := hostruntime.NewWSL(config.WSL.Distro)
+	if err != nil {
+		return "", err
+	}
+	return wsl.ToNativePath(full)
 }

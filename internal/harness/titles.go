@@ -20,6 +20,12 @@ const maxTitleRunes = 120
 // conversation, or "" when the harness keeps none or its layout is not
 // recognised. Only the title is read: no conversation content is returned.
 func ConversationTitle(tool session.Harness, harnessSessionID string) string {
+	return ConversationTitleIn("", tool, harnessSessionID)
+}
+
+// ConversationTitleIn reads the title under a session home (empty means the
+// Windows profile).
+func ConversationTitleIn(home string, tool session.Harness, harnessSessionID string) string {
 	if harnessSessionID == "" {
 		return ""
 	}
@@ -29,17 +35,13 @@ func ConversationTitle(tool session.Harness, harnessSessionID string) string {
 	}
 	switch item.Title {
 	case "claude-ai-title":
-		root := os.Getenv("CLAUDE_CONFIG_DIR")
+		root := ClaudeConfigRoot(home)
 		if root == "" {
-			home, err := HomeDir()
-			if err != nil {
-				return ""
-			}
-			root = filepath.Join(home, ".claude")
+			return ""
 		}
 		return claudeTitleIn(filepath.Join(root, "projects"), harnessSessionID)
 	case "copilot-workspace":
-		home, err := HomeDir()
+		home, err := SessionHome(home)
 		if err != nil {
 			return ""
 		}

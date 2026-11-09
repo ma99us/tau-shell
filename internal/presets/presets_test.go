@@ -244,3 +244,22 @@ func TestGitSyncRejectsNonRepository(t *testing.T) {
 		t.Fatal("expected an error outside a repository")
 	}
 }
+
+func TestGitCommandRunsInsideWSLDistro(t *testing.T) {
+	ctx := WithWSL(context.Background(), "Ubuntu")
+	command, err := gitCommand(ctx, "/home/me/proj", []string{"GIT_TERMINAL_PROMPT=0"}, "status", "--short")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"wsl.exe", "-d", "Ubuntu", "--exec", "env", "GIT_TERMINAL_PROMPT=0", "git", "-C", "/home/me/proj", "status", "--short"}
+	if strings.Join(command.Args, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("args = %q, want %q", command.Args, want)
+	}
+	if _, err := gitCommand(ctx, `C:\work`, nil, "status"); err == nil {
+		t.Fatal("a Windows path must be rejected for a WSL repository")
+	}
+	native, err := gitCommand(context.Background(), `C:\work`, nil, "status")
+	if err != nil || native.Args[len(native.Args)-3] != "-C" {
+		t.Fatalf("native args = %q, %v", native.Args, err)
+	}
+}

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
+	"sync"
 	"time"
 
 	"github.com/ma99us/tau-shell/internal/conpty"
@@ -19,6 +21,8 @@ type launchTarget struct {
 	// hostDirectory is the Windows directory the host process starts in.
 	hostDirectory string
 	wsl           *hostruntime.WSL
+	// home is the distro user's home as a UNC path (WSL only).
+	home string
 }
 
 // resolveLaunchTarget picks the session's runtime and finds the harness for it.
@@ -51,7 +55,11 @@ func resolveLaunchTarget(ctx context.Context, config session.Config, adapter har
 		if err != nil {
 			return launchTarget{}, err
 		}
-		target.executable, target.hostDirectory, target.wsl = path, home, wsl
+		distroHome, err := wsl.HomeDir()
+		if err != nil {
+			return launchTarget{}, err
+		}
+		target.executable, target.hostDirectory, target.wsl, target.home = path, home, wsl, distroHome
 		return target, nil
 	}
 	executable, err := adapter.FindExecutable()
@@ -63,6 +71,22 @@ func resolveLaunchTarget(ctx context.Context, config session.Config, adapter har
 	}
 	target.executable = executable
 	return target, nil
+}
+
+// supportsSkillOption asks the harness, wherever it runs, whether its help lists
+// the skill-directory option.
+func (target launchTarget) supportsSkillOption(ctx context.Context, config session.Config, option string) bool {
+	if target.wsl == nil {
+		return harness.SupportsSkillDirectoryOption(ctx, target.executable, option)
+	}
+	help := func(ctx context.Context) *exec.Cmd {
+		command, err := target.runtime.Command(hostruntime.LaunchSpec{Executable: target.executable, Args: []string{"--help"}, WorkingDir: config.WorkingDir})
+		if err != nil {
+			return exec.CommandContext(ctx, "cmd.exe", "/c", "exit", "1")
+		}
+		return exec.CommandContext(ctx, command.Executable, command.Args...)
+	}
+	return harness.SupportsSkillDirectoryOptionVia(ctx, "wsl:"+target.wsl.Distro()+"|"+target.executable, help, option)
 }
 
 // childEnvironment builds the host process environment. For WSL it adds the
@@ -103,4 +127,50 @@ func runCleanup(cleanup func() (int, error)) (note string, err error) {
 		return fmt.Sprintf("Stopped %d leftover WSL process(es) after exit.", count), nil
 	}
 	return "", nil
+}
+
+// wslHomes remembers each distro's home, learned when a session launches, so
+// readers never have to run wsl.exe (and start a distro) just to find it.
+type wslHomes struct {
+	mu       sync.Mutex
+	byDistro map[string]string
+}
+
+func (homes *wslHomes) remember(distro, home string) {
+	homes.mu.Lock()
+	defer homes.mu.Unlock()
+	if homes.byDistro == nil {
+		homes.byDistro = map[string]string{}
+	}
+	homes.byDistro[distro] = home
+}
+
+func (homes *wslHomes) get(distro string) string {
+	homes.mu.Lock()
+	defer homes.mu.Unlock()
+	return homes.byDistro[distro]
+}
+
+// readerHome returns the home a session's state readers use. PowerShell
+// sessions use the Windows profile (empty home). A WSL session is readable
+// only once its distro home is known and the distro is already running,
+// because reading the UNC path would otherwise start the distro.
+func (manager *Manager) readerHome(ctx context.Context, config session.Config) (string, bool) {
+	if !config.IsWSL() {
+		return "", true
+	}
+	home := manager.wslHomes.get(config.WSL.Distro)
+	if home == "" {
+		return "", false
+	}
+	if current := manager.get(config.ID); current != nil && current.isRunning() {
+		return home, true
+	}
+	wsl, err := hostruntime.NewWSL(config.WSL.Distro)
+	if err != nil {
+		return "", false
+	}
+	probe, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	return home, wsl.IsRunning(probe)
 }

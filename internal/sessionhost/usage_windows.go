@@ -92,7 +92,11 @@ func (manager *Manager) ingestSession(ctx context.Context, id string, force bool
 		}
 		return
 	}
-	for _, path := range usage.LogFiles(config.Tool, runtime.HarnessSessionID) {
+	home, readable := manager.readerHome(ctx, config)
+	if !readable {
+		return
+	}
+	for _, path := range usage.LogFilesIn(home, config.Tool, runtime.HarnessSessionID) {
 		if err := manager.ledger.IngestFile(id, config.Tool, runtime.HarnessSessionID, path); err != nil {
 			diagnostics.Warn("usage ingest failed", err, "session_id", id)
 		}

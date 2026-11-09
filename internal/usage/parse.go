@@ -154,27 +154,23 @@ func parseTime(value string) time.Time {
 	return time.Now()
 }
 
-func claudeRoot() string {
-	if root := os.Getenv("CLAUDE_CONFIG_DIR"); root != "" {
-		return root
-	}
-	home, err := harness.HomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, ".claude")
-}
-
 // LogFiles lists the log files holding usage for one harness conversation:
 // the main transcript plus Claude subagent transcripts, or Copilot's events
 // log. Files that do not exist are omitted.
 func LogFiles(tool session.Harness, harnessSessionID string) []string {
+	return LogFilesIn("", tool, harnessSessionID)
+}
+
+// LogFilesIn lists log files under a session home (empty means the Windows
+// profile). Harnesses that keep state outside the home are only listed for the
+// default home.
+func LogFilesIn(home string, tool session.Harness, harnessSessionID string) []string {
 	if harnessSessionID == "" {
 		return nil
 	}
 	switch Reader(tool) {
 	case "claude-jsonl":
-		root := claudeRoot()
+		root := harness.ClaudeConfigRoot(home)
 		if root == "" {
 			return nil
 		}
@@ -183,16 +179,19 @@ func LogFiles(tool session.Harness, harnessSessionID string) []string {
 		sub, _ := filepath.Glob(filepath.Join(projects, "*", harnessSessionID, "subagents", "*.jsonl"))
 		return append(main, sub...)
 	case "copilot-events":
-		home, err := harness.HomeDir()
+		resolved, err := harness.SessionHome(home)
 		if err != nil {
 			return nil
 		}
-		path := filepath.Join(home, ".copilot", "session-state", harnessSessionID, "events.jsonl")
+		path := filepath.Join(resolved, ".copilot", "session-state", harnessSessionID, "events.jsonl")
 		if _, err := os.Stat(path); err != nil {
 			return nil
 		}
 		return []string{path}
 	default:
+		if home != "" {
+			return nil
+		}
 		return harnessLogFiles(tool, harnessSessionID)
 	}
 }

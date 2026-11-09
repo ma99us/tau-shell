@@ -4,6 +4,8 @@ Items that could not be verified in the spikes (`05-spike-results.md`). Each row
 is a task to close before a harness or flow is called supported in WSL. Status:
 `open` until someone runs the check and records the result.
 
+Not supported in WSL (rejected at launch or skipped): Codex and OpenCode (they discover their conversation ID from Windows folders), and the CLI `start` command. GSD launches but its readers (model, activity, resume) skip WSL homes.
+
 Verified so far in WSL (for reference): Copilot CLI and Claude Code, both
 signed in: launch, real conversation, resume, readers over UNC, graceful and
 forced stop with no survivors. Codex launched to its login screen only.
@@ -47,9 +49,11 @@ Harness-specific risks to check first:
 | Rendering in a real TauShell window (Unicode, wide characters, bracketed paste, resize, clipboard text and image) | open | Manual matrix in Phase 3 |
 | Ctrl+C and interrupt keys from the manifest for each harness | open (Copilot and Claude partly checked) | Per-harness live check |
 | Corporate TLS inspection in the distro (Claude reported `SELF_SIGNED_CERT_IN_CHAIN`) | open | Document CA install and `NODE_EXTRA_CA_CERTS`; test with the corporate CA |
-| Git inside the distro: Git tab, fetch, sync, `safe.directory`, credentials | open | Phase 5 check on a Linux and a `/mnt/c` repository |
-| Files drawer, path insertion and pasted-image paths over UNC | open | Phase 5 |
-| Skills injection into a WSL session | open | Phase 5 |
+| Git inside the distro: Git tab, fetch, sync, `safe.directory`, credentials | partly verified | Branch, status, changes and a full sync (commit, rebase, push to a local bare remote) ran inside Ubuntu through `wsl.exe --exec git`. Not checked: credential helpers and SSH prompts, `/mnt/c` repositories, large repositories |
+| Files drawer over UNC | partly verified | Listing and reading a Linux folder worked and a symlink pointing outside the root was refused. Not checked: very large folders, Explorer reveal, open-with. Copied full paths are Linux paths |
+| Pasted-image and file-picker path conversion | open | Phase 5 (UI) |
+| Skills injection into a WSL session | implemented, unverified | The Windows skill folder is passed as `/mnt/c/...`; the option probe runs inside the distro. Needs a live run with a skill library, and a distro with automount disabled |
+| Resume check, model, title, usage and activity readers for WSL sessions | partly verified | Claude resume check against the distro home was seen refusing a conversation-less session. Readers run only while the distro is running (they never start it); final usage of a stopped distro is ingested on the next launch. Model, title and usage on a real conversation not re-checked end to end |
 | Phone server with a WSL session | open | Confirm guards and queue behavior are unchanged |
 
 ## 3. How to close an item

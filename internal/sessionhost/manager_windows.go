@@ -99,6 +99,7 @@ type sessionProcess interface {
 type processFactory func(columns, rows int, executable, directory string, env []string, args ...string) (sessionProcess, error)
 
 type Manager struct {
+	wslHomes        wslHomes
 	configDirectory string
 	store           *session.Store
 	closeStore      func() error
@@ -152,7 +153,7 @@ func (manager *Manager) SetSkills(provider SkillProvider) {
 // skills are off, unsupported, or unavailable. Problems are logged, never
 // fatal. Skill-provider access is copied under manager.mu; probing and
 // preparation deliberately run without the global manager lock.
-func (manager *Manager) skillArgs(ctx context.Context, adapter harness.Adapter, config session.Config, executable, launchToken string) []string {
+func (manager *Manager) skillArgs(ctx context.Context, adapter harness.Adapter, config session.Config, target launchTarget, launchToken string) []string {
 	manager.mu.Lock()
 	provider := manager.skills
 	manager.mu.Unlock()
@@ -167,7 +168,7 @@ func (manager *Manager) skillArgs(ctx context.Context, adapter harness.Adapter, 
 		return nil
 	}
 	option := item.Skills.SkillDirOption()
-	if !harness.SupportsSkillDirectoryOption(ctx, executable, option) {
+	if !target.supportsSkillOption(ctx, config, option) {
 		diagnostics.Warn("harness does not support its skill-directory option; launching without TauShell skills", errors.New("unsupported flag"), "tool", config.Tool, "option", option)
 		return nil
 	}
@@ -181,6 +182,15 @@ func (manager *Manager) skillArgs(ctx context.Context, adapter harness.Adapter, 
 	}
 	if dir == "" {
 		return nil
+	}
+	if target.wsl != nil {
+		// The harness sees the Windows skill folder through the distro's drive mounts.
+		native, err := target.wsl.ToNativePath(dir)
+		if err != nil {
+			diagnostics.Warn("TauShell skills cannot be mapped into WSL; launching without them", err, "tool", config.Tool)
+			return nil
+		}
+		dir = native
 	}
 	diagnostics.Info("TauShell skills attached", "session_id", config.ID, "tool", config.Tool, "skill_dir", dir, "skills", strings.Join(names, ","))
 	return harness.SkillDirectoryArgs(option, dir)
@@ -235,7 +245,11 @@ func (manager *Manager) HarnessModel(ctx context.Context, id string) (string, er
 	if err != nil {
 		return "", err
 	}
-	return harness.CurrentModel(config.Tool, runtime.HarnessSessionID), nil
+	home, ok := manager.readerHome(ctx, config)
+	if !ok {
+		return "", nil
+	}
+	return harness.CurrentModelIn(home, config.Tool, runtime.HarnessSessionID), nil
 }
 
 // HarnessActivity reports "working" or "idle" from the harness's own log, or
@@ -249,7 +263,11 @@ func (manager *Manager) HarnessActivity(ctx context.Context, id string) (string,
 	if err != nil {
 		return "", err
 	}
-	return harness.CurrentActivity(config.Tool, runtime.HarnessSessionID, time.Now()), nil
+	home, ok := manager.readerHome(ctx, config)
+	if !ok {
+		return "", nil
+	}
+	return harness.CurrentActivityIn(home, config.Tool, runtime.HarnessSessionID, time.Now()), nil
 }
 
 func (manager *Manager) List(ctx context.Context) ([]Snapshot, error) {
@@ -278,9 +296,9 @@ func (manager *Manager) List(ctx context.Context) ([]Snapshot, error) {
 			LastError:   runtime.LastError,
 			HasResumeID: runtime.HarnessSessionID != "",
 		}
-		if snapshot.HasResumeID {
+		if home, ok := manager.readerHome(ctx, config); ok && snapshot.HasResumeID {
 			if adapter, adapterErr := harness.For(config.Tool); adapterErr == nil {
-				if resumeErr := adapter.CheckResume(runtime.HarnessSessionID); resumeErr != nil {
+				if resumeErr := adapter.CheckResumeIn(home, runtime.HarnessSessionID); resumeErr != nil {
 					snapshot.ResumeNote = resumeErr.Error()
 				}
 			}
@@ -529,10 +547,13 @@ func (manager *Manager) start(ctx context.Context, id string, restoring, fresh b
 		return Snapshot{}, fmt.Errorf("session %q is active in another TauShell process", id)
 	}
 	launchNote := ""
-	// The resume check reads the Windows profile, so it does not apply to a
-	// WSL session; a failed WSL resume surfaces from the harness itself.
-	if restoring && runtime.HarnessSessionID != "" && target.wsl == nil {
-		if resumeErr := adapter.CheckResume(runtime.HarnessSessionID); resumeErr != nil {
+	if target.home != "" {
+		manager.wslHomes.remember(config.WSL.Distro, target.home)
+	}
+	if restoring && runtime.HarnessSessionID != "" {
+		// A PowerShell session reads the Windows profile (empty home); a WSL
+		// session reads its distro home, which is running after resolveLaunchTarget.
+		if resumeErr := adapter.CheckResumeIn(target.home, runtime.HarnessSessionID); resumeErr != nil {
 			// Still start the session, as a new conversation, and say so.
 			launchNote = "Could not resume: " + resumeErr.Error() + ". Started a new conversation instead."
 			diagnostics.Warn("resume not possible, starting fresh", resumeErr, "session_id", id, "tool", config.Tool)
@@ -565,9 +586,7 @@ func (manager *Manager) start(ctx context.Context, id string, restoring, fresh b
 	}
 	launchedAt := time.Now()
 	args := adapter.Argv(config.LaunchArgs, restoring, runtime.HarnessSessionID)
-	if target.wsl == nil {
-		args = append(args, manager.skillArgs(ctx, adapter, config, harnessExecutable, runtime.LaunchToken)...)
-	}
+	args = append(args, manager.skillArgs(ctx, adapter, config, target, runtime.LaunchToken)...)
 	command, err := target.runtime.Command(hostruntime.LaunchSpec{Executable: harnessExecutable, Args: args, UTF8: config.UTF8Enabled(), WorkingDir: config.WorkingDir})
 	if err != nil {
 		return Snapshot{}, errors.Join(err, manager.store.Finish(ctx, id, session.StatusFailed, err.Error()))

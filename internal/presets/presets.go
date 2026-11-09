@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	pathpkg "path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -191,7 +192,10 @@ func contains(list []string, value string) bool {
 func GitBranch(ctx context.Context, dir string) string {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	command := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD")
+	command, err := gitCommand(ctx, dir, nil, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return ""
+	}
 	hideWindow(command)
 	output, err := command.Output()
 	if err != nil {
@@ -214,7 +218,10 @@ type RepoStatus struct {
 func GitStatus(ctx context.Context, dir string) (status RepoStatus, ok bool) {
 	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
 	defer cancel()
-	command := exec.CommandContext(ctx, "git", "-C", dir, "--no-optional-locks", "status", "--porcelain=v2", "--branch", "--untracked-files=normal")
+	command, err := gitCommand(ctx, dir, nil, "--no-optional-locks", "status", "--porcelain=v2", "--branch", "--untracked-files=normal")
+	if err != nil {
+		return RepoStatus{}, false
+	}
 	hideWindow(command)
 	output, err := command.Output()
 	if err != nil {
@@ -238,7 +245,10 @@ func GitChanges(ctx context.Context, dir string) (changes []GitChange, ok bool) 
 	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
 	run := func(args ...string) ([]byte, error) {
-		command := exec.CommandContext(ctx, "git", append([]string{"-C", dir, "--no-optional-locks"}, args...)...)
+		command, err := gitCommand(ctx, dir, nil, append([]string{"--no-optional-locks"}, args...)...)
+		if err != nil {
+			return nil, err
+		}
 		hideWindow(command)
 		return command.Output()
 	}
@@ -321,10 +331,14 @@ func GitFetch(ctx context.Context, dir string) bool {
 	fetchMutex.Unlock()
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	command := exec.CommandContext(ctx, "git", "-C", dir, "--no-optional-locks", "fetch", "--quiet", "--no-tags", "--no-recurse-submodules")
-	command.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GCM_INTERACTIVE=never")
-	if os.Getenv("GIT_SSH_COMMAND") == "" {
-		command.Env = append(command.Env, "GIT_SSH_COMMAND=ssh -o BatchMode=yes")
+	env := []string{"GIT_TERMINAL_PROMPT=0", "GCM_INTERACTIVE=never"}
+	// The Windows GIT_SSH_COMMAND says nothing about the distro's own setup.
+	if _, inWSL := wslDistro(ctx); !inWSL && os.Getenv("GIT_SSH_COMMAND") == "" {
+		env = append(env, "GIT_SSH_COMMAND=ssh -o BatchMode=yes")
+	}
+	command, err := gitCommand(ctx, dir, env, "--no-optional-locks", "fetch", "--quiet", "--no-tags", "--no-recurse-submodules")
+	if err != nil {
+		return false
 	}
 	hideWindow(command)
 	return command.Run() == nil
@@ -352,8 +366,10 @@ func GitSync(ctx context.Context, dir string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	run := func(args ...string) (string, error) {
-		command := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
-		command.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+		command, err := gitCommand(ctx, dir, []string{"GIT_TERMINAL_PROMPT=0"}, args...)
+		if err != nil {
+			return err.Error(), err
+		}
 		hideWindow(command)
 		output, err := command.CombinedOutput()
 		message := strings.TrimSpace(string(output))
@@ -373,10 +389,7 @@ func GitSync(ctx context.Context, dir string) (string, error) {
 		if err != nil {
 			continue
 		}
-		if !filepath.IsAbs(path) {
-			path = filepath.Join(dir, path)
-		}
-		if _, err := os.Stat(path); err == nil {
+		if pathExists(ctx, dir, path) {
 			return "", fmt.Errorf("a %s is in progress; finish or abort it before syncing", name)
 		}
 	}
@@ -499,4 +512,59 @@ func EnsureExample(path string) error {
 	}
 	_, writeErr := file.WriteString(exampleFile)
 	return errors.Join(writeErr, file.Close())
+}
+
+type wslKey struct{}
+
+// WithWSL makes every git command run inside the named WSL distro, with dir a
+// Linux path. The distro name must already be validated.
+func WithWSL(ctx context.Context, distro string) context.Context {
+	return context.WithValue(ctx, wslKey{}, distro)
+}
+
+func wslDistro(ctx context.Context) (string, bool) {
+	distro, ok := ctx.Value(wslKey{}).(string)
+	return distro, ok && distro != ""
+}
+
+// gitCommand builds `git -C dir args...`, run natively or inside the WSL distro
+// carried by ctx. env entries are added to the command's environment.
+func gitCommand(ctx context.Context, dir string, env []string, args ...string) (*exec.Cmd, error) {
+	distro, inWSL := wslDistro(ctx)
+	if !inWSL {
+		command := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
+		if len(env) > 0 {
+			command.Env = append(os.Environ(), env...)
+		}
+		return command, nil
+	}
+	if !strings.HasPrefix(dir, "/") {
+		return nil, fmt.Errorf("%q is not a Linux path", dir)
+	}
+	argv := []string{"-d", distro, "--exec"}
+	if len(env) > 0 {
+		argv = append(argv, "env")
+		argv = append(argv, env...)
+	}
+	argv = append(argv, "git", "-C", dir)
+	return exec.CommandContext(ctx, "wsl.exe", append(argv, args...)...), nil
+}
+
+// pathExists reports whether path (as printed by git, possibly relative to
+// dir) exists on the machine git runs on.
+func pathExists(ctx context.Context, dir, path string) bool {
+	distro, inWSL := wslDistro(ctx)
+	if !inWSL {
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(dir, path)
+		}
+		_, err := os.Stat(path)
+		return err == nil
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = pathpkg.Join(dir, path)
+	}
+	command := exec.CommandContext(ctx, "wsl.exe", "-d", distro, "--exec", "test", "-e", path)
+	hideWindow(command)
+	return command.Run() == nil
 }

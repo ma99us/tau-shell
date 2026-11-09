@@ -23,6 +23,13 @@ const (
 // layouts are undocumented internals, so every failure yields "" instead of an
 // error and nothing is ever guessed.
 func CurrentModel(tool session.Harness, harnessSessionID string) string {
+	return CurrentModelIn("", tool, harnessSessionID)
+}
+
+// CurrentModelIn reads the model under a session home (empty means the Windows
+// profile). Harnesses that keep state outside the home are only read for the
+// default home.
+func CurrentModelIn(home string, tool session.Harness, harnessSessionID string) string {
 	if harnessSessionID == "" {
 		return ""
 	}
@@ -32,30 +39,35 @@ func CurrentModel(tool session.Harness, harnessSessionID string) string {
 	}
 	switch item.Model {
 	case "claude-jsonl":
-		root := os.Getenv("CLAUDE_CONFIG_DIR")
+		root := ClaudeConfigRoot(home)
 		if root == "" {
-			home, err := HomeDir()
-			if err != nil {
-				return ""
-			}
-			root = filepath.Join(home, ".claude")
+			return ""
 		}
 		return claudeModelIn(filepath.Join(root, "projects"), harnessSessionID)
 	case "copilot-events":
-		home, err := HomeDir()
+		home, err := SessionHome(home)
 		if err != nil {
 			return ""
 		}
 		return copilotModelIn(filepath.Join(home, ".copilot", "session-state"), harnessSessionID)
 	case "gsd-jsonl":
+		if home != "" {
+			return ""
+		}
 		return lastModel(GSDSessionPath(harnessSessionID), gsdLineModel)
 	case "codex-rollout":
+		if home != "" {
+			return ""
+		}
 		path := CodexRolloutFile(harnessSessionID)
 		if path == "" {
 			return ""
 		}
 		return lastModel(path, codexLineModel)
 	case "opencode-db":
+		if home != "" {
+			return ""
+		}
 		return openCodeModel(harnessSessionID)
 	default:
 		return ""

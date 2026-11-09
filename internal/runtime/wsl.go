@@ -154,6 +154,20 @@ func (runtime *WSL) Environment(environment map[string]string, launchToken strin
 	return result, nil
 }
 
+// IsRunning reports whether the distro is already running, without starting it.
+func (runtime *WSL) IsRunning(ctx context.Context) bool {
+	output, err := runtime.run(ctx, "--list", "--running", "--quiet")
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(DecodeOutput(output), "\n") {
+		if strings.TrimSpace(line) == runtime.distro {
+			return true
+		}
+	}
+	return false
+}
+
 // HomeDir is the distro user's home as a UNC path readable from Windows.
 func (runtime *WSL) HomeDir() (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)

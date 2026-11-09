@@ -26,6 +26,9 @@ type Adapter interface {
 	// CheckResume reports why the harness cannot resume harnessSessionID, or
 	// nil when it can or when that cannot be determined.
 	CheckResume(harnessSessionID string) error
+	// CheckResumeIn is CheckResume against the harness state under home (a
+	// WSL distro home); an empty home means the Windows profile.
+	CheckResumeIn(home, harnessSessionID string) error
 	// HasSkillDirectoryRoute reports whether this adapter has a verified
 	// per-launch route for TauShell's skill directory.
 	HasSkillDirectoryRoute() bool
@@ -88,12 +91,12 @@ func For(id session.Harness) (Adapter, error) {
 }
 
 // resumeCheckers maps manifest resume_check names to their readers.
-var resumeCheckers = map[string]func(harnessSessionID string) error{
+var resumeCheckers = map[string]func(home, harnessSessionID string) error{
 	"claude-transcript":     checkClaudeResume,
 	"copilot-session-state": checkCopilotResume,
-	"gsd-session-file":      checkGSDResume,
-	"codex-rollout":         checkCodexResume,
-	"opencode-db":           checkOpenCodeResume,
+	"gsd-session-file":      func(_, id string) error { return checkGSDResume(id) },
+	"codex-rollout":         func(_, id string) error { return checkCodexResume(id) },
+	"opencode-db":           func(_, id string) error { return checkOpenCodeResume(id) },
 }
 
 type discoveryReader struct {
@@ -111,8 +114,8 @@ var discoveryReaders = map[string]discoveryReader{
 // never had a conversation turn has no events.jsonl and cannot be resumed.
 // This is an undocumented internal layout, so it fails open when the store
 // itself is absent.
-func checkCopilotResume(harnessSessionID string) error {
-	home, err := HomeDir()
+func checkCopilotResume(home, harnessSessionID string) error {
+	home, err := SessionHome(home)
 	if err != nil {
 		return nil
 	}
@@ -134,14 +137,10 @@ func checkCopilotResumeIn(root, harnessSessionID string) error {
 // never got a first prompt has no <id>.jsonl under any project folder, and
 // `claude --resume` then exits with "No conversation found". This is an
 // undocumented internal layout, so it fails open when the store is absent.
-func checkClaudeResume(harnessSessionID string) error {
-	root := os.Getenv("CLAUDE_CONFIG_DIR")
+func checkClaudeResume(home, harnessSessionID string) error {
+	root := ClaudeConfigRoot(home)
 	if root == "" {
-		home, err := HomeDir()
-		if err != nil {
-			return nil
-		}
-		root = filepath.Join(home, ".claude")
+		return nil
 	}
 	return checkClaudeResumeIn(filepath.Join(root, "projects"), harnessSessionID)
 }
@@ -158,11 +157,15 @@ func checkClaudeResumeIn(projectsRoot, harnessSessionID string) error {
 }
 
 func (adapter cliAdapter) CheckResume(harnessSessionID string) error {
+	return adapter.CheckResumeIn("", harnessSessionID)
+}
+
+func (adapter cliAdapter) CheckResumeIn(home, harnessSessionID string) error {
 	check, ok := resumeCheckers[adapter.manifest.ResumeCheck]
 	if !ok {
 		return nil
 	}
-	return check(harnessSessionID)
+	return check(home, harnessSessionID)
 }
 
 func (adapter cliAdapter) HasSkillDirectoryRoute() bool {

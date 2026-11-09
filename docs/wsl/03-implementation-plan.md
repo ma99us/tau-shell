@@ -55,7 +55,7 @@ Status: done as a single seam. All harness and usage readers call `harness.HomeD
 
 ## Phase 3 - WSL runtime: launch and lifetime - L
 
-Status: done for launch and lifetime (`internal/runtime/wsl.go`, `sessionhost/launch_target_windows.go`, `session.Config` `runtime`/`wsl.distro`). Live-verified on Ubuntu with Claude Code and Copilot CLI launch, env forwarding and marker cleanup. Codex and OpenCode (discovered session IDs) are rejected for WSL; GSD is unverified. Not done: resume/model/title/usage readers for the distro home (resume check is skipped, so WSL sessions always start fresh), git, files drawer and skills on Linux paths. CLI `start` rejects WSL sessions.
+Status: done for launch and lifetime (`internal/runtime/wsl.go`, `sessionhost/launch_target_windows.go`, `session.Config` `runtime`/`wsl.distro`). Live-verified on Ubuntu with Claude Code and Copilot CLI launch, env forwarding and marker cleanup. Codex and OpenCode (discovered session IDs) are rejected for WSL; GSD is unverified. Follow-up done: readers take a per-session home (`harness.*In`, `usage.LogFilesIn`) fed from the distro home learned at launch, only read while the distro is running; git runs inside the distro (`presets.WithWSL`); the files drawer reads the UNC share and copies Linux paths; skills pass the `/mnt/c` folder and probe inside the distro. Still not done: GSD, Codex and OpenCode readers for distro homes, and the CLI `start` (rejects WSL sessions).
 
 - `wslRuntime`: availability, distro list (UTF-16 decode), user lookup, command
   build with `--exec`, environment plus `WSLENV`, path conversion, cleanup helper.
