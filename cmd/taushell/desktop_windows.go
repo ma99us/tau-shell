@@ -301,6 +301,33 @@ func (application *App) SelectWorkingDirectory() (path string, err error) {
 	})
 }
 
+// SelectWSLWorkingDirectory lets the user pick a folder in a distro and returns
+// the Linux path the harness will see. Opening the dialog starts the distro.
+func (application *App) SelectWSLWorkingDirectory(distro string) (path string, err error) {
+	defer func() {
+		if err != nil {
+			diagnostics.Error("choose WSL project directory failed", err)
+		}
+	}()
+	wsl, err := hostruntime.NewWSL(distro)
+	if err != nil {
+		return "", err
+	}
+	start, err := wsl.ToWindowsPath("/home")
+	if err != nil {
+		return "", err
+	}
+	chosen, err := runtime.OpenDirectoryDialog(application.ctx, runtime.OpenDialogOptions{
+		Title:                      "Choose a project folder in " + distro,
+		DefaultDirectory:           start,
+		TreatPackagesAsDirectories: true,
+	})
+	if err != nil || chosen == "" {
+		return "", err
+	}
+	return wsl.ToNativePath(chosen)
+}
+
 // SessionTemplate is the editable launch_args preset for a new session.
 type SessionTemplate struct {
 	Tool       session.Harness `json:"tool"`
@@ -335,6 +362,13 @@ type LaunchPreview struct {
 }
 
 func (application *App) PreviewSessionLaunch(toolName string, launchArgs []string) (preview LaunchPreview, err error) {
+	return application.PreviewSessionLaunchIn("", "", toolName, launchArgs)
+}
+
+// PreviewSessionLaunchIn is PreviewSessionLaunch for a chosen runtime. A WSL
+// preview never starts the distro: it shows the command name looked up inside
+// it at start, and does not probe the harness help output.
+func (application *App) PreviewSessionLaunchIn(runtimeName, distro, toolName string, launchArgs []string) (preview LaunchPreview, err error) {
 	defer func() {
 		if err != nil {
 			diagnostics.Error("preview session launch failed", err, "tool", toolName)
@@ -355,6 +389,19 @@ func (application *App) PreviewSessionLaunch(toolName string, launchArgs []strin
 		return LaunchPreview{}, err
 	}
 	preview.Warnings = []string{}
+	if runtimeName == "wsl" {
+		name, nameErr := harness.ExecutableName(harnessID)
+		if nameErr != nil {
+			return LaunchPreview{}, nameErr
+		}
+		preview.Executable = name
+		preview.Arguments = adapter.Argv(cleaned, false, previewSessionIDPlaceholder)
+		preview.Warnings = append(preview.Warnings, fmt.Sprintf("Runs inside WSL distro %s; the command is looked up there when the session starts.", distro))
+		if adapter.DiscoversSessionID() {
+			preview.Warnings = append(preview.Warnings, string(harnessID)+" sessions are not supported in WSL yet.")
+		}
+		return preview, nil
+	}
 	spec, _ := tools.Lookup(tools.ID(harnessID))
 	executablePath, lookErr := adapter.FindExecutable()
 	if lookErr != nil {
@@ -393,6 +440,10 @@ func probeUnsupportedLaunchArgs(executablePath string, spec tools.Spec, launchAr
 }
 
 func (application *App) newConfig(name, toolName, workingDir string, launchArgs []string) (session.Config, error) {
+	return application.newConfigIn("", "", name, toolName, workingDir, launchArgs)
+}
+
+func (application *App) newConfigIn(runtimeName, distro, name, toolName, workingDir string, launchArgs []string) (session.Config, error) {
 	name = strings.TrimSpace(name)
 	deduced := name == ""
 	if deduced {
@@ -416,19 +467,27 @@ func (application *App) newConfig(name, toolName, workingDir string, launchArgs 
 			id = sessionIDFromName(name)
 		}
 	}
-	return session.Config{
+	config := session.Config{
 		ID:         id,
 		Name:       name,
 		Tool:       session.Harness(toolName),
 		WorkingDir: workingDir,
 		LaunchArgs: append([]string(nil), launchArgs...),
-	}, nil
+		Runtime:    runtimeName,
+	}
+	config.WSL.Distro = distro
+	return config, nil
 }
 
 // PreviewSessionYAML renders the session definition the Create dialog would
 // save, so it can be reviewed and edited before creation. It does not
 // validate: the text is validated when saved.
 func (application *App) PreviewSessionYAML(name, toolName, workingDir string, launchArgs []string) (text string, err error) {
+	return application.PreviewSessionYAMLIn("", "", name, toolName, workingDir, launchArgs)
+}
+
+// PreviewSessionYAMLIn is PreviewSessionYAML for a chosen runtime and distro.
+func (application *App) PreviewSessionYAMLIn(runtimeName, distro, name, toolName, workingDir string, launchArgs []string) (text string, err error) {
 	defer func() {
 		if err != nil {
 			diagnostics.Error("preview session yaml failed", err, "tool", toolName)
@@ -437,7 +496,7 @@ func (application *App) PreviewSessionYAML(name, toolName, workingDir string, la
 	if strings.TrimSpace(name) == "" && strings.TrimSpace(workingDir) == "" {
 		name = "new-session"
 	}
-	config, err := application.newConfig(name, toolName, workingDir, launchArgs)
+	config, err := application.newConfigIn(runtimeName, distro, name, toolName, workingDir, launchArgs)
 	if err != nil {
 		return "", err
 	}
@@ -471,6 +530,8 @@ func (application *App) saveNewConfig(config session.Config) (sessionhost.Snapsh
 		Name:       config.Name,
 		Tool:       config.Tool,
 		WorkingDir: config.WorkingDir,
+		Runtime:    config.Runtime,
+		Distro:     config.WSL.Distro,
 		Status:     session.StatusNeverStarted,
 	}, nil
 }
@@ -486,6 +547,12 @@ func (application *App) placeLast(newID string) {
 }
 
 func (application *App) CreateSession(name, toolName, workingDir string, launchArgs []string) (snapshot sessionhost.Snapshot, err error) {
+	return application.CreateSessionIn("", "", name, toolName, workingDir, launchArgs)
+}
+
+// CreateSessionIn is CreateSession for a chosen runtime: empty (PowerShell) or
+// wsl with a distro, where workingDir is a Linux path.
+func (application *App) CreateSessionIn(runtimeName, distro, name, toolName, workingDir string, launchArgs []string) (snapshot sessionhost.Snapshot, err error) {
 	defer func() {
 		if err != nil {
 			diagnostics.Error("create session failed", err, "tool", toolName)
@@ -493,7 +560,7 @@ func (application *App) CreateSession(name, toolName, workingDir string, launchA
 		}
 		diagnostics.Info("session created", "session_id", snapshot.ID, "tool", snapshot.Tool)
 	}()
-	config, err := application.newConfig(name, toolName, workingDir, launchArgs)
+	config, err := application.newConfigIn(runtimeName, distro, name, toolName, workingDir, launchArgs)
 	if err != nil {
 		return sessionhost.Snapshot{}, err
 	}

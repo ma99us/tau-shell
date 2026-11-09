@@ -1,7 +1,8 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { app, LaunchPreview, Session } from "./bridge";
+import { app, LaunchPreview, Session, WSLStatus } from "./bridge";
 import { HarnessIcon } from "./harnessIcons";
 import { getHarnesses } from "./harnesses";
+import { defaultDistro, isWindowsMount, wslChoices, wslHarnessSupported } from "./wslRuntime";
 
 function parseLaunchArgs(text: string): string[] {
   return text.split(/\r?\n/).map((arg) => arg.trim()).filter(Boolean);
@@ -20,6 +21,19 @@ export function CreateSession({ recentFolders, clone, onClose, onCreated, onErro
   const [workingDir, setWorkingDir] = useState(clone?.source.workingDir ?? "");
   const [launchArgs, setLaunchArgs] = useState(clone ? clone.launchArgs.join("\n") : "");
   const toolChosen = useRef(false);
+  // The runtime picker appears only when WSL reports distros; clones inherit the original.
+  const [wslStatus, setWslStatus] = useState<WSLStatus | null>(null);
+  const [runtime, setRuntime] = useState<"" | "wsl">("");
+  const [distro, setDistro] = useState("");
+  const distros = wslChoices(wslStatus);
+  const inWSL = !clone && runtime === "wsl";
+  const runtimeName = inWSL ? "wsl" : "";
+  useEffect(() => {
+    if (clone) return;
+    let cancelled = false;
+    app().GetWSLStatus().then((status) => { if (!cancelled) setWslStatus(status); }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
   const [templateText, setTemplateText] = useState<string | null>(null);
   const [preview, setPreview] = useState<LaunchPreview | null>(null);
   const [previewError, setPreviewError] = useState("");
@@ -30,8 +44,17 @@ export function CreateSession({ recentFolders, clone, onClose, onCreated, onErro
   const [yamlText, setYamlText] = useState("");
   const [yamlDirty, setYamlDirty] = useState(false);
   const [yamlError, setYamlError] = useState("");
+  const chooseRuntime = (next: "" | "wsl") => {
+    setRuntime(next);
+    setWorkingDir("");
+    setFormError("");
+    if (next === "wsl") {
+      setDistro((current) => current || defaultDistro(distros));
+      if (!wslHarnessSupported(tool)) { toolChosen.current = true; setTool("claude-code"); }
+    }
+  };
   const chooseDirectory = async () => {
-    try { const path = await app().SelectWorkingDirectory(); if (path) { setWorkingDir(path); setFormError(""); } } catch (err) { fail(err); }
+    try { const path = inWSL ? await app().SelectWSLWorkingDirectory(distro) : await app().SelectWorkingDirectory(); if (path) { setWorkingDir(path); setFormError(""); } } catch (err) { fail(err); }
   };
   // Prefill with the harness-specific template on first load and whenever
   // the user switches tool while the field still matches the prior
@@ -60,7 +83,7 @@ export function CreateSession({ recentFolders, clone, onClose, onCreated, onErro
     const timer = setTimeout(() => {
       (async () => {
         try {
-          const result = await app().PreviewSessionLaunch(tool, parseLaunchArgs(launchArgs));
+          const result = await app().PreviewSessionLaunchIn(runtimeName, inWSL ? distro : "", tool, parseLaunchArgs(launchArgs));
           if (!cancelled) { setPreview(result); setPreviewError(""); }
         } catch (err) {
           if (!cancelled) { setPreview(null); setPreviewError(err instanceof Error ? err.message : String(err)); }
@@ -68,7 +91,7 @@ export function CreateSession({ recentFolders, clone, onClose, onCreated, onErro
       })();
     }, 300);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [tool, launchArgs]);
+  }, [tool, launchArgs, runtimeName, distro]);
   // The YAML view follows the form until the user edits it by hand; after
   // that their text is kept until they choose "Reset from form".
   useEffect(() => {
@@ -77,7 +100,7 @@ export function CreateSession({ recentFolders, clone, onClose, onCreated, onErro
     const timer = setTimeout(() => {
       (async () => {
         try {
-          const text = await app().PreviewSessionYAML("", tool, workingDir, parseLaunchArgs(launchArgs));
+          const text = await app().PreviewSessionYAMLIn(runtimeName, inWSL ? distro : "", "", tool, workingDir, parseLaunchArgs(launchArgs));
           if (!cancelled) { setYamlText(text); setYamlError(""); }
         } catch (err) {
           if (!cancelled) setYamlError(err instanceof Error ? err.message : String(err));
@@ -85,7 +108,7 @@ export function CreateSession({ recentFolders, clone, onClose, onCreated, onErro
       })();
     }, 300);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [yamlOpen, yamlDirty, tool, workingDir, launchArgs]);
+  }, [yamlOpen, yamlDirty, tool, workingDir, launchArgs, runtimeName, distro]);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setFormError("");
@@ -95,19 +118,26 @@ export function CreateSession({ recentFolders, clone, onClose, onCreated, onErro
         ? await app().DuplicateSession(clone.source.id, tool, parseLaunchArgs(launchArgs))
         : yamlOpen
         ? await app().CreateSessionFromYAML(yamlText)
-        : await app().CreateSession("", tool, workingDir, parseLaunchArgs(launchArgs));
+        : await app().CreateSessionIn(runtimeName, inWSL ? distro : "", "", tool, workingDir, parseLaunchArgs(launchArgs));
       onCreated(session);
     } catch (err) { fail(err); } finally { setSaving(false); }
   };
   return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="modal">
     <div className="modal-heading"><h2>{clone ? `Clone ${clone.source.name}` : "Start new AI session"}</h2><button className="icon-button" onClick={onClose}>x</button></div>
     <form onSubmit={(event) => void submit(event)}>
+      {!clone && distros.length > 0 && <div className="harness-field"><span className="harness-label" id="runtime-label">Runtime</span>
+        <div className="harness-picker" role="radiogroup" aria-labelledby="runtime-label">
+          <button type="button" role="radio" aria-checked={!inWSL} className={`harness-option ${!inWSL ? "selected" : ""}`} onClick={() => chooseRuntime("")}><span className="harness-name">PowerShell</span></button>
+          <button type="button" role="radio" aria-checked={inWSL} className={`harness-option ${inWSL ? "selected" : ""}`} onClick={() => chooseRuntime("wsl")}><span className="harness-name">WSL</span></button>
+        </div>
+        {inWSL && <label>WSL distro<select value={distro} onChange={(event) => setDistro(event.target.value)}>{distros.map((item) => <option key={item.name} value={item.name}>{item.name}{item.default ? " (default)" : ""}</option>)}</select></label>}
+      </div>}
       {clone
         ? <label>Project folder <span className="optional">(inherited from the original, cannot be changed)</span><div className="folder-row"><input readOnly value={workingDir} /></div></label>
-        : <label>Project folder<div className="folder-row"><input autoFocus required list="recent-project-folders" value={workingDir} onChange={(event) => { setWorkingDir(event.target.value); setFormError(""); }} placeholder="Choose a local project folder" /><datalist id="recent-project-folders">{recentFolders.map((folder) => <option key={folder} value={folder} />)}</datalist><button type="button" className="secondary-button" onClick={() => void chooseDirectory()}>Browse</button></div></label>}
+        : <label>Project folder<div className="folder-row"><input autoFocus required list="recent-project-folders" value={workingDir} onChange={(event) => { setWorkingDir(event.target.value); setFormError(""); }} placeholder={inWSL ? "Linux path, for example /home/you/project" : "Choose a local project folder"} /><datalist id="recent-project-folders">{recentFolders.map((folder) => <option key={folder} value={folder} />)}</datalist><button type="button" className="secondary-button" onClick={() => void chooseDirectory()}>Browse</button></div>{inWSL && isWindowsMount(workingDir) && <span className="tool-warning">Projects under /mnt/c live on the Windows disk and are slower inside WSL; prefer a folder in the distro.</span>}</label>}
       <div className="harness-field"><span className="harness-label" id="harness-label">AI harness</span>
         <div className="harness-picker" role="radiogroup" aria-labelledby="harness-label">
-          {getHarnesses().filter((item) => item.trusted).map(({ id, name }) =>
+          {getHarnesses().filter((item) => item.trusted && (!inWSL || wslHarnessSupported(item.id))).map(({ id, name }) =>
             <button key={id} type="button" role="radio" aria-checked={tool === id} className={`harness-option ${tool === id ? "selected" : ""}`} onClick={() => { toolChosen.current = true; setTool(id); }}>
               <HarnessIcon tool={id} /><span className="harness-name">{name}</span>
             </button>)}

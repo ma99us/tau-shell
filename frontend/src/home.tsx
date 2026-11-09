@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { app, AppUpdate, CodexQuota, CopilotQuota, InstallResult, Session, SkillsView, SystemStatus, ToolStatus } from "./bridge";
+import { app, AppUpdate, CodexQuota, CopilotQuota, InstallResult, Session, SkillsView, SystemStatus, ToolStatus, WSLStatus } from "./bridge";
 import { UsageSummary, hasUsage, monthTooltip, usageText } from "./usage";
 import { GearIcon } from "./harnessIcons";
 import { getHarnesses, harnessIds, harnessShort, isHarness } from "./harnesses";
@@ -200,6 +200,7 @@ export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAl
         onFeedbackAction={() => openToolNoticeAction(tools, "tools")}>
         <div className="tool-list">
         {status?.tools.filter((tool) => !isHarness(tool.id)).map((tool) => <ToolRow key={tool.id} tool={tool} actions={tools} />) ?? <div className="loading-card" role="status"><span className="spinner" aria-hidden="true" /><span className="muted">Detecting tools...</span></div>}
+        <WSLRow refreshing={tools.refreshing} />
         </div>
       </HomePanel>
       <HomePanel title="AI Harnesses" feedback={toolNoticeFeedback(tools, "harnesses", panelFeedback.harnesses)} onDismissFeedback={() => dismissToolFeedback(tools, "harnesses", onDismissPanelFeedback)}
@@ -354,6 +355,32 @@ function installHint(tool: ToolStatus, status: SystemStatus | null): string {
     return `Install ${tool.name} with ${tool.install.wingetId ? "winget" : "npm"} (asks first)`;
   }
   return `winget was not found. Open the vendor setup instructions for ${tool.name}.`;
+}
+
+// WSL is optional and never installed by TauShell (it needs administrator rights and a reboot), so this row only reports readiness and gives guidance.
+function WSLRow({ refreshing }: { refreshing: boolean }) {
+  const [wsl, setWsl] = useState<WSLStatus | null>(null);
+  useEffect(() => {
+    if (refreshing) return;
+    let cancelled = false;
+    app().GetWSLStatus().then((next) => { if (!cancelled) setWsl(next); }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [refreshing]);
+  if (!wsl) return null;
+  const ready = wsl.installed && wsl.distros.length > 0;
+  const details = [wsl.version && `WSL ${wsl.version}`, wsl.kernelVersion && `kernel ${wsl.kernelVersion}`, wsl.wslgVersion && `WSLg ${wsl.wslgVersion}`].filter(Boolean).join(" | ");
+  const failed = wsl.checks.filter((check) => !check.ok);
+  const notes = [wsl.error, ...failed.map((check) => check.detail ? `${check.name}: ${check.detail}` : check.name), ...wsl.warnings].filter(Boolean);
+  return <div className="tool-row" title={notes.join("\n") || undefined}>
+    <span className={`status-dot ${ready && failed.length === 0 ? "online" : wsl.installed ? "warn" : ""}`} />
+    <div className="tool-details">
+      <div className="tool-heading"><strong>WSL (optional)</strong><span className="tool-version">{wsl.installed ? details || "Installed" : "Not installed"}</span></div>
+      {wsl.distros.length > 0 && <span className="tool-path">{wsl.distros.map((distro) => `${distro.name}${distro.default ? " (default)" : ""}: ${distro.running ? "running" : "stopped"}`).join(" | ")}</span>}
+      {notes.map((note) => <span key={note} className="tool-warning tool-support-note">{note}</span>)}
+      {!wsl.installed && <span className="muted">Optional: run harnesses inside WSL. Install it yourself with "wsl --install" in an administrator terminal (a reboot is required); TauShell never installs or elevates it.</span>}
+      {wsl.installed && wsl.distros.length === 0 && <span className="muted">No distro found. Run "wsl --install -d Ubuntu" yourself, then Refresh.</span>}
+    </div>
+  </div>;
 }
 
 function ToolRow({ tool, actions }: { tool: ToolStatus; actions: ToolActions }) {

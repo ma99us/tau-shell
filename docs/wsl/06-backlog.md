@@ -52,6 +52,9 @@ Harness-specific risks to check first:
 | Git inside the distro: Git tab, fetch, sync, `safe.directory`, credentials | partly verified | Branch, status, changes and a full sync (commit, rebase, push to a local bare remote) ran inside Ubuntu through `wsl.exe --exec git`. Not checked: credential helpers and SSH prompts, `/mnt/c` repositories, large repositories |
 | Files drawer over UNC | partly verified | Listing and reading a Linux folder worked and a symlink pointing outside the root was refused. Not checked: very large folders, Explorer reveal, open-with. Copied full paths are Linux paths |
 | Pasted-image and file-picker path conversion | open | Phase 5 (UI) |
+| First-run setup without PowerShell 7 for WSL-only users | open | Phase 4 |
+| WSL and distro install or update flows, update-available state | open | Phase 4 |
+| Session card runtime badge | open | Phase 4 |
 | Skills injection into a WSL session | implemented, unverified | The Windows skill folder is passed as `/mnt/c/...`; the option probe runs inside the distro. Needs a live run with a skill library, and a distro with automount disabled |
 | Resume check, model, title, usage and activity readers for WSL sessions | partly verified | Claude resume check against the distro home was seen refusing a conversation-less session. Readers run only while the distro is running (they never start it); final usage of a stopped distro is ingested on the next launch. Model, title and usage on a real conversation not re-checked end to end |
 | Phone server with a WSL session | open | Confirm guards and queue behavior are unchanged |

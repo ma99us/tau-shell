@@ -35,6 +35,8 @@ export type Session = {
   tags?: string[];
   tool: HarnessId;
   workingDir: string;
+  runtime?: string;
+  distro?: string;
   status: string;
   lastError?: string;
   runningHere: boolean;
@@ -135,6 +137,20 @@ export type SessionTemplate = {
   launchArgs: string[];
 };
 
+export type WSLDistro = { name: string; default: boolean; running: boolean; version: number; state: string };
+export type WSLCheck = { name: string; ok: boolean; detail?: string };
+export type WSLStatus = {
+  installed: boolean;
+  version?: string;
+  kernelVersion?: string;
+  wslgVersion?: string;
+  defaultDistro?: string;
+  distros: WSLDistro[];
+  checks: WSLCheck[];
+  warnings: string[];
+  error?: string;
+};
+
 export type LaunchPreview = {
   executable: string;
   arguments: string[];
@@ -222,11 +238,16 @@ type WailsApp = {
   LogTerminalPointerEvent(id: string, event: "pointerdown" | "mousedown"): Promise<void>;
   LogTerminalMouseTrackingMode(id: string, mode: "none" | "x10" | "vt200" | "drag" | "any"): Promise<void>;
   SelectWorkingDirectory(): Promise<string>;
+  SelectWSLWorkingDirectory(distro: string): Promise<string>;
+  GetWSLStatus(): Promise<WSLStatus>;
   GetSessionTemplate(tool: string): Promise<SessionTemplate>;
   GetHarnesses(): Promise<{ harnesses: HarnessInfo[]; errors: HarnessLoadError[] }>;
   ConfirmHarness(id: string): Promise<void>;
   PreviewSessionLaunch(tool: string, launchArgs: string[]): Promise<LaunchPreview>;
   CreateSession(name: string, tool: string, workingDir: string, launchArgs: string[]): Promise<Session>;
+  CreateSessionIn(runtime: string, distro: string, name: string, tool: string, workingDir: string, launchArgs: string[]): Promise<Session>;
+  PreviewSessionLaunchIn(runtime: string, distro: string, tool: string, launchArgs: string[]): Promise<LaunchPreview>;
+  PreviewSessionYAMLIn(runtime: string, distro: string, name: string, tool: string, workingDir: string, launchArgs: string[]): Promise<string>;
   PreviewSessionYAML(name: string, tool: string, workingDir: string, launchArgs: string[]): Promise<string>;
   CreateSessionFromYAML(text: string): Promise<Session>;
   StartSession(id: string, columns: number, rows: number): Promise<Session>;

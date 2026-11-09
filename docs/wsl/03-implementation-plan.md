@@ -91,6 +91,8 @@ Status: done as a separate readiness model, not a `tools.Specs()` entry (winget 
 - Create-session dialog: runtime and distro picker; `/mnt/c` working-directory warning.
 - Tests: frontend tests for gating and rows; Go detection tests with a fake runtime.
 
+Status: partly done. Built: Tools panel WSL row (version, kernel, WSLg, distro list and state, failed checks, warnings, guidance-only install text; no install button because WSL needs administrator rights and a reboot); create-session Runtime picker (PowerShell or WSL, shown only when WSL reports distros), distro dropdown, Linux working-directory field with a distro folder picker (SelectWSLWorkingDirectory), /mnt/<drive> warning, Codex and OpenCode hidden under WSL; launch preview and YAML preview for WSL (no distro start, no help probe); bridge methods CreateSessionIn, PreviewSessionLaunchIn, PreviewSessionYAMLIn, GetWSLStatus; session snapshots carry runtime and distro. Frontend helpers are in frontend/src/wslRuntime.ts with tests. Not done: first-run setup still requires PowerShell 7 (Continue without PowerShell 7 exists), no distro or WSL install or update flows, no update-available state, no session card runtime badge. Not verified in a real window.
+
 ## Phase 5 - Git, files drawer, paths, skills - M
 
 - Git functions through `Runtime.Run`; Git tab and sync UI unchanged.

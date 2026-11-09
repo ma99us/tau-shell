@@ -276,11 +276,11 @@ func DecodeOutput(raw []byte) string {
 
 // Distro is one installed WSL distribution.
 type Distro struct {
-	Name    string
-	Default bool
-	Running bool
-	Version int
-	State   string // as printed by wsl.exe, possibly localized
+	Name    string `json:"name"`
+	Default bool   `json:"default"`
+	Running bool   `json:"running"`
+	Version int    `json:"version"`
+	State   string `json:"state"` // as printed by wsl.exe, possibly localized
 }
 
 // Status is what `wsl --version` reports. Labels are localized, so values are

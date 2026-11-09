@@ -18,8 +18,8 @@ import (
 	"github.com/ma99us/tau-shell/internal/conpty"
 	"github.com/ma99us/tau-shell/internal/diagnostics"
 	"github.com/ma99us/tau-shell/internal/harness"
-	hostruntime "github.com/ma99us/tau-shell/internal/runtime"
 	"github.com/ma99us/tau-shell/internal/harness/manifest"
+	hostruntime "github.com/ma99us/tau-shell/internal/runtime"
 	"github.com/ma99us/tau-shell/internal/session"
 	"github.com/ma99us/tau-shell/internal/usage"
 	"github.com/ma99us/tau-shell/internal/vault"
@@ -49,16 +49,19 @@ type Event struct {
 }
 
 type Snapshot struct {
-	ID          string                `json:"id"`
-	Name        string                `json:"name"`
-	Color       string                `json:"color,omitempty"`
-	Notes       string                `json:"notes,omitempty"`
-	Link        string                `json:"link,omitempty"`
-	LinkLabel   string                `json:"linkLabel,omitempty"`
-	Tags        []string              `json:"tags,omitempty"`
-	AutoResume  bool                  `json:"autoResume"`
-	Tool        session.Harness       `json:"tool"`
-	WorkingDir  string                `json:"workingDir"`
+	ID         string          `json:"id"`
+	Name       string          `json:"name"`
+	Color      string          `json:"color,omitempty"`
+	Notes      string          `json:"notes,omitempty"`
+	Link       string          `json:"link,omitempty"`
+	LinkLabel  string          `json:"linkLabel,omitempty"`
+	Tags       []string        `json:"tags,omitempty"`
+	AutoResume bool            `json:"autoResume"`
+	Tool       session.Harness `json:"tool"`
+	WorkingDir string          `json:"workingDir"`
+	// Runtime is wsl for a session hosted in a WSL distro; empty means PowerShell.
+	Runtime     string                `json:"runtime,omitempty"`
+	Distro      string                `json:"distro,omitempty"`
 	Status      session.RuntimeStatus `json:"status"`
 	LastError   string                `json:"lastError,omitempty"`
 	RunningHere bool                  `json:"runningHere"`
@@ -292,6 +295,8 @@ func (manager *Manager) List(ctx context.Context) ([]Snapshot, error) {
 			AutoResume:  config.AutoResume,
 			Tool:        config.Tool,
 			WorkingDir:  config.WorkingDir,
+			Runtime:     config.Runtime,
+			Distro:      config.WSL.Distro,
 			Status:      runtime.Status,
 			LastError:   runtime.LastError,
 			HasResumeID: runtime.HarnessSessionID != "",
@@ -1103,6 +1108,8 @@ func (current *managedSession) snapshot() Snapshot {
 		AutoResume:  current.config.AutoResume,
 		Tool:        current.config.Tool,
 		WorkingDir:  current.config.WorkingDir,
+		Runtime:     current.config.Runtime,
+		Distro:      current.config.WSL.Distro,
 		Status:      current.status,
 		LastError:   current.detail,
 		RunningHere: current.status == session.StatusRunning,
