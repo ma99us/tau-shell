@@ -971,6 +971,29 @@ h3 {
   box-shadow: 0 0 6px var(--session-color);
 }
 
+.path-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 6px;
+  white-space: normal;
+}
+
+.path-text {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.path-place {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+}
+
 .path {
   overflow: hidden;
   margin-bottom: 0;

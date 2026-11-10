@@ -7,10 +7,10 @@ import { ProjectIcon, sessionColorStyle, StateIcon } from "./sessionVisuals";
 import { Workspace } from "./workspaces";
 import { GroupControls, GroupHeader } from "./workspaceView";
 
-type Place = { label: string; worktree: boolean };
+export type Place = { label: string; worktree: boolean };
 
 // Branch or worktree name per session, refreshed in the background; the Go host owns all git data.
-function usePlaces(ids: string[], enabled: boolean): Record<string, Place> {
+export function usePlaces(ids: string[], enabled: boolean): Record<string, Place> {
   const [places, setPlaces] = useState<Record<string, Place>>({});
   const key = ids.join("|");
   useEffect(() => {

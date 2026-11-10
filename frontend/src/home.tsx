@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { app, AppUpdate, CodexQuota, CopilotQuota, InstallResult, Session, SkillsView, SystemStatus, ToolStatus, WSLAction, WSLStatus } from "./bridge";
 import { UsageSummary, hasUsage, monthTooltip, usageText } from "./usage";
 import { GearIcon, HarnessIcon, RuntimeIcon } from "./harnessIcons";
+import { Icon } from "./icons";
+import { usePlaces } from "./sessionTree";
 import { getHarnesses, harnessIds, harnessShort, isHarness } from "./harnesses";
 import { UserHarnesses } from "./userHarnesses";
 import { ProjectIcon, sessionColorStyle, statusLabel } from "./sessionVisuals";
@@ -43,6 +45,7 @@ export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAl
   onLaunch: (session: Session, mode: "start" | "restore" | "fresh") => void | Promise<void>;
   onDelete: (session: Session) => void;
 }) {
+  const places = usePlaces(sessions.map((session) => session.id), true);
   const [freshSession, setFreshSession] = useState<Session | null>(null);
   const [grouped, setGrouped] = useState(() => readGrouped(localStorage));
   const changeGrouped = (value: boolean) => {
@@ -183,7 +186,7 @@ export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAl
         {grouped && <GroupHeader workspace={workspace} controls={groupControls} variant="home" />}
         {(!grouped || !groupControls.collapsed.has(workspace.group.key)) && <div className="session-grid">{workspace.sessions.map((session) => <article className={`session-card ${session.runningHere ? "running" : ""} ${dragId === session.id ? "dragging" : ""} ${dropClass(session.id)}`} key={session.id} style={sessionColorStyle(session.color)} data-colored={session.color ? "" : undefined} {...dragProps(session.id)}>
           <div className="card-top"><ProjectIcon session={session} /><span className={`state-pill ${session.runningHere ? "running" : ""} ${!session.runningHere && session.status === "failed" ? "status-warn-text" : ""}`}>{session.runningHere ? "Running" : statusLabel(session.status)}</span><button className="delete-button" aria-label={`Delete ${session.name}`} title="Delete session" onClick={() => onDelete(session)}>x</button></div>
-          <div className="card-title"><h3>{session.name}</h3>{hasUsage(summary?.sessions?.[session.id]) && <span className="card-usage" title="Estimate from harness logs; never reset">{usageText(summary!.sessions![session.id])}</span>}</div><p className="path">{session.workingDir}</p><p className="session-meta"><span className="harness-tag"><HarnessIcon tool={session.tool} />{session.tool}</span><span className="runtime-badge" title={session.runtime === "wsl" ? `Runs inside WSL distro ${session.distro}` : "Runs in PowerShell 7 on Windows"}><RuntimeIcon kind={session.runtime === "wsl" ? "wsl" : "powershell"} />{runtimeLabel(session)}</span>{session.worktree && <span className="runtime-badge" title={`Works in the git worktree ${session.worktree}`}>worktree</span>}</p>
+          <div className="card-title"><h3>{session.name}</h3>{hasUsage(summary?.sessions?.[session.id]) && <span className="card-usage" title="Estimate from harness logs; never reset">{usageText(summary!.sessions![session.id])}</span>}</div><p className="path path-line"><span className="path-text">{session.workingDir}</span>{places[session.id]?.label && <span className="path-place" title={places[session.id].worktree ? "Git worktree" : "Git branch"}>[<Icon name={places[session.id].worktree ? "worktree" : "branch"} size={11} />{places[session.id].label}]</span>}</p><p className="session-meta"><span className="harness-tag"><HarnessIcon tool={session.tool} />{session.tool}</span><span className="runtime-badge" title={session.runtime === "wsl" ? `Runs inside WSL distro ${session.distro}` : "Runs in PowerShell 7 on Windows"}><RuntimeIcon kind={session.runtime === "wsl" ? "wsl" : "powershell"} />{runtimeLabel(session)}</span>{session.worktree && <span className="runtime-badge" title={`Works in the git worktree ${session.worktree}`}>worktree</span>}</p>
           {session.lastError && <p className="card-error">{session.lastError}</p>}
           <SessionNotes session={session} onOpen={(url) => app().OpenSessionLink(session.id, url).catch((error) => onError("ui.open-session-link", error))} />
           <div className="card-sizer" aria-hidden="true"><span className="tile-button">Start fresh</span><span className="tile-button">Resume</span><span className="tile-button">Clone</span><span className="check-option"><input type="checkbox" tabIndex={-1} />Auto resume</span></div>
