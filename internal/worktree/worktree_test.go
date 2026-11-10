@@ -79,7 +79,11 @@ func TestCreateInspectRemove(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := filepath.Join(filepath.Dir(repo), "proj.worktrees", "feat"); !strings.EqualFold(result.Path, want) {
+	want := filepath.Join(filepath.Dir(repo), "proj.worktrees", "feat")
+	gotInfo, gotErr := os.Stat(result.Path)
+	wantInfo, wantErr := os.Stat(want)
+	// The temp dir may be an 8.3 short path while git reports the long form, so compare the folders, not the strings.
+	if gotErr != nil || wantErr != nil || !os.SameFile(gotInfo, wantInfo) {
 		t.Fatalf("path = %q, want %q", result.Path, want)
 	}
 	// Only ignored files are copied; tracked a.txt comes from git.
