@@ -2179,6 +2179,7 @@ h3 {
 }
 
 .file-view {
+  position: relative;
   display: flex;
   min-height: 0;
   flex: 1;
@@ -3122,4 +3123,30 @@ h3 {
   color: var(--text-3);
   font-size: var(--fs-13);
   font-variant-numeric: tabular-nums;
+}
+.file-resize {
+  position: absolute;
+  z-index: 2;
+  background: transparent;
+  transition: background 0.12s;
+}
+
+.file-resize:hover {
+  background: var(--accent);
+}
+
+.file-resize-x {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  cursor: col-resize;
+}
+
+.file-resize-y {
+  top: -3px;
+  right: 0;
+  left: 0;
+  height: 6px;
+  cursor: row-resize;
 }

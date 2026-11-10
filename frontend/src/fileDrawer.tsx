@@ -41,6 +41,11 @@ function CodeView({ language, text }: { language: string | null; text: string })
   return html === null ? <pre className="md-code">{text}</pre> : <pre className="md-code"><code className="hljs" dangerouslySetInnerHTML={{ __html: html }} /></pre>;
 }
 
+const sizeKey = "taushell.fileDrawer.v1";
+function readSizes(): { width: number; view: number } {
+  try { const parsed = JSON.parse(localStorage.getItem(sizeKey) ?? "{}"); return { width: Number(parsed.width) || 360, view: Number(parsed.view) || 0 }; } catch { return { width: 360, view: 0 }; }
+}
+
 export function FileDrawer({ session, onClose, onError, onInsert }: { session: Session; onClose: () => void; onError: (error: unknown) => void; onInsert: (path: string) => void }) {
   const [tree, setTree] = useState<Record<string, ProjectEntry[]>>({});
   const [open, setOpen] = useState<string[]>([]);
@@ -50,6 +55,24 @@ export function FileDrawer({ session, onClose, onError, onInsert }: { session: S
   const [collapsed, setCollapsed] = useState<string[]>([]);
   const [note, setNote] = useState("");
   const treeRef = useRef<HTMLDivElement>(null);
+  const drawerRef = useRef<HTMLElement>(null);
+  const [sizes, setSizes] = useState(readSizes);
+  useEffect(() => { try { localStorage.setItem(sizeKey, JSON.stringify(sizes)); } catch { /* sizes are a convenience */ } }, [sizes]);
+  // Drag a border: the left edge sets the drawer width, the file view top edge sets its height.
+  const drag = (axis: "x" | "y") => (event: React.PointerEvent<HTMLDivElement>) => {
+    const drawer = drawerRef.current;
+    if (!drawer) return;
+    event.preventDefault();
+    const target = event.currentTarget;
+    target.setPointerCapture(event.pointerId);
+    const box = drawer.getBoundingClientRect();
+    const move = (at: PointerEvent) => {
+      if (axis === "x") setSizes((now) => ({ ...now, width: Math.round(Math.min(Math.max(box.right - at.clientX, 240), (drawer.parentElement?.clientWidth ?? 900) * 0.9)) }));
+      else setSizes((now) => ({ ...now, view: Math.round(Math.min(Math.max(box.bottom - at.clientY, 80), box.height - 120)) }));
+    };
+    const stop = () => { target.removeEventListener("pointermove", move); target.removeEventListener("pointerup", stop); target.removeEventListener("pointercancel", stop); };
+    target.addEventListener("pointermove", move); target.addEventListener("pointerup", stop); target.addEventListener("pointercancel", stop);
+  };
   const [menu, setMenu] = useState<{ x: number; y: number; entry: ProjectEntry } | null>(null);
   useEffect(() => {
     if (!menu) return;
@@ -135,7 +158,8 @@ export function FileDrawer({ session, onClose, onError, onInsert }: { session: S
     : changes === null ? <div className="toolbar-popover-note">This folder is not a git repository.</div>
     : changes.length === 0 ? <div className="toolbar-popover-note">No changes. The workspace is clean.</div>
     : changeRows(changeTree, 0);
-  return <aside className="file-drawer" aria-label="Project files">
+  return <aside className="file-drawer" ref={drawerRef} style={{ width: `min(${sizes.width}px, 90%)` }} aria-label="Project files">
+    <div className="file-resize file-resize-x" onPointerDown={drag("x")} role="separator" aria-orientation="vertical" aria-label="Resize the file drawer" />
     <div className="file-drawer-head">
       <div className="file-tabs" role="tablist">
         <button role="tab" aria-selected={tab === "files"} className={`file-tab ${tab === "files" ? "active" : ""}`} onClick={() => setTab("files")}>Files</button>
@@ -151,7 +175,8 @@ export function FileDrawer({ session, onClose, onError, onInsert }: { session: S
       <button role="menuitem" onClick={() => { void copyFull(menu.entry); setMenu(null); }}><Icon name="copy" size={14} />Copy full name</button>
       <button role="menuitem" onClick={() => { app().RevealProjectFile(session.id, menu.entry.path).catch(onError); setMenu(null); }}><Icon name="reveal" size={14} />Open in File Explorer</button>
     </div>}
-    {file && <div className="file-view">
+    {file && <div className="file-view" style={sizes.view ? { flex: "none", height: sizes.view } : undefined}>
+      <div className="file-resize file-resize-y" onPointerDown={drag("y")} role="separator" aria-orientation="horizontal" aria-label="Resize the file preview" />
       <div className="file-view-head"><span title={file.path}>{file.path}</span>
         <button className="file-act" onClick={() => onInsert(file.path)} title="Insert the relative path into the prompt" aria-label="Insert the relative path into the prompt"><Icon name="commands" size={14} /></button>
         <button className="file-act" onClick={() => void copy(file.path, "the relative path")} title="Copy relative name" aria-label="Copy the relative name"><Icon name="copy" size={14} /></button>
