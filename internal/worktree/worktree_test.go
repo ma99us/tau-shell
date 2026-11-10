@@ -80,10 +80,8 @@ func TestCreateInspectRemove(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := filepath.Join(filepath.Dir(repo), "proj.worktrees", "feat")
-	gotInfo, gotErr := os.Stat(result.Path)
-	wantInfo, wantErr := os.Stat(want)
 	// The temp dir may be an 8.3 short path while git reports the long form, so compare the folders, not the strings.
-	if gotErr != nil || wantErr != nil || !os.SameFile(gotInfo, wantInfo) {
+	if !sameDir(result.Path, want) {
 		t.Fatalf("path = %q, want %q", result.Path, want)
 	}
 	// Only ignored files are copied; tracked a.txt comes from git.
@@ -94,7 +92,7 @@ func TestCreateInspectRemove(t *testing.T) {
 		t.Fatal(".env was not copied")
 	}
 	info, ok := Inspect(ctx, result.Path)
-	if !ok || info.Name != "feat" || info.Branch != "taushell/feat" || !strings.EqualFold(info.MainRepo, repo) {
+	if !ok || info.Name != "feat" || info.Branch != "taushell/feat" || !sameDir(info.MainRepo, repo) {
 		t.Fatalf("info = %+v ok=%v", info, ok)
 	}
 	if _, err := Create(ctx, Spec{Dir: repo, Name: "feat", Branch: "taushell/other"}); err == nil {
@@ -119,6 +117,12 @@ func TestCreateInspectRemove(t *testing.T) {
 	if list, _ := List(ctx, repo); len(list) != 1 {
 		t.Fatalf("list = %+v", list)
 	}
+}
+
+func sameDir(a, b string) bool {
+	left, errA := os.Stat(a)
+	right, errB := os.Stat(b)
+	return errA == nil && errB == nil && os.SameFile(left, right)
 }
 
 func TestCreateRejectsEmptyRepo(t *testing.T) {
