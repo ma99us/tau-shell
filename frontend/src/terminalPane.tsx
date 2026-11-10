@@ -396,7 +396,7 @@ export function TerminalPane({ session, visible, busy, harness, onSend, onNotice
         <button className="text-button terminal-action icon-button" aria-pressed={drawer === "history"} title="History: past conversations of this session" aria-label="History: past conversations of this session" onClick={() => setDrawer(drawer === "history" ? null : "history")}><Icon name="history" /></button>
         {harness && onSend && <HarnessToolbar session={session} widgets={harness.widgets} modelSupported={harness.modelSupported} send={onSend} onError={onError} />}
       </div>
-      {filesOpen && <FileDrawer session={session} onClose={() => setDrawer(null)} onError={onError} onInsert={(path) => { const why = insertAtPrompt(session, /\s/.test(path) ? `"${path}" ` : `${path} `); if (why) onError(new Error(why)); }} />}
+      {filesOpen && <FileDrawer session={session} onError={onError} onInsert={(path) => { const why = insertAtPrompt(session, /\s/.test(path) ? `"${path}" ` : `${path} `); if (why) onError(new Error(why)); }} />}
       {drawer === "history" && <ConversationsDrawer session={session} busy={busy} onResume={onResumeConversation} onClose={() => setDrawer(null)} onError={onError} />}
     </div>
   </div>;

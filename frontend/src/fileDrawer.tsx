@@ -46,7 +46,7 @@ function readSizes(): { width: number; view: number } {
   try { const parsed = JSON.parse(localStorage.getItem(sizeKey) ?? "{}"); return { width: Number(parsed.width) || 360, view: Number(parsed.view) || 0 }; } catch { return { width: 360, view: 0 }; }
 }
 
-export function FileDrawer({ session, onClose, onError, onInsert }: { session: Session; onClose: () => void; onError: (error: unknown) => void; onInsert: (path: string) => void }) {
+export function FileDrawer({ session, onError, onInsert }: { session: Session; onError: (error: unknown) => void; onInsert: (path: string) => void }) {
   const [tree, setTree] = useState<Record<string, ProjectEntry[]>>({});
   const [open, setOpen] = useState<string[]>([]);
   const [file, setFile] = useState<ProjectFile | null>(null);
@@ -176,7 +176,6 @@ export function FileDrawer({ session, onClose, onError, onInsert }: { session: S
         <button role="tab" aria-selected={tab === "files"} className={`file-tab ${tab === "files" ? "active" : ""}`} onClick={() => setTab("files")}>Files</button>
         <button role="tab" aria-selected={tab === "git"} className={`file-tab ${tab === "git" ? "active" : ""}`} onClick={() => setTab("git")} title="Changed files in this workspace">Git{changeCount > 0 && <span className="file-tab-count">{changeCount}</span>}</button>
       </div>
-      <button className="file-act" onClick={onClose} aria-label="Close the file drawer">x</button>
     </div>
     <div className="file-tree" ref={treeRef}>{tab === "git" ? gitBody : tree[""] ? (tree[""].length ? rows("", 0) : <div className="toolbar-popover-note">Empty folder.</div>) : <div className="toolbar-popover-note">Loading...</div>}</div>
     {note && <div className="toolbar-popover-note">{note}</div>}

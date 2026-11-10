@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestStorePersistsExplicitHarnessIDAndLifecycle(t *testing.T) {
@@ -171,6 +172,44 @@ func TestBeginFreshReplacesSavedHarnessID(t *testing.T) {
 	}
 	if fresh.HarnessSessionID == "" || fresh.HarnessSessionID == first.HarnessSessionID {
 		t.Fatalf("fresh start reused harness session ID %q", fresh.HarnessSessionID)
+	}
+}
+
+func TestFirstStartIsRecordedOnceAndClearedOnDelete(t *testing.T) {
+	store, err := OpenStore(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	if _, ok := store.FirstStarted(ctx, "agent"); ok {
+		t.Fatal("a never-started session has no first start")
+	}
+	if _, err := store.Begin(ctx, "agent", ClaudeCode, false); err != nil {
+		t.Fatal(err)
+	}
+	first, ok := store.FirstStarted(ctx, "agent")
+	if !ok || time.Since(first) > time.Minute {
+		t.Fatalf("first start = %v, %v", first, ok)
+	}
+	if err := store.Finish(ctx, "agent", StatusStopped, ""); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(10 * time.Millisecond)
+	if _, err := store.BeginFresh(ctx, "agent", ClaudeCode); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := store.FirstStarted(ctx, "agent"); !again.Equal(first) {
+		t.Fatalf("first start changed from %v to %v", first, again)
+	}
+	if err := store.Finish(ctx, "agent", StatusStopped, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Delete(ctx, "agent"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := store.FirstStarted(ctx, "agent"); ok {
+		t.Fatal("deleting the session keeps its first start")
 	}
 }
 

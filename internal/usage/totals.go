@@ -50,6 +50,12 @@ type SessionUsage struct {
 	Models        []ModelTotals        `json:"models"`
 	Conversations []ConversationTotals `json:"conversations"`
 	Prices        PriceInfo            `json:"prices"`
+	// FirstStarted is an RFC 3339 time. FirstStartedApprox means it was deduced
+	// from the first day with logged usage (local midnight) because the exact
+	// launch was never recorded.
+	FirstStarted       string `json:"firstStarted"`
+	FirstStartedApprox bool   `json:"firstStartedApprox"`
+	ActiveDays         int    `json:"activeDays"`
 }
 
 // Summary is the Home view: a total per live session plus monthly totals for
@@ -148,7 +154,9 @@ func (ledger *Ledger) SessionUsage(sessionID string, prices PriceTable) (Session
 	result := SessionUsage{Models: []ModelTotals{}, Conversations: []ConversationTotals{}}
 	models := map[string]*ModelTotals{}
 	conversations := map[string]*ConversationTotals{}
+	days := map[string]bool{}
 	for _, row := range rows {
+		days[row.day] = true
 		totals := row.totals(prices)
 		result.Total.add(totals)
 		name := displayModel(row.model)
@@ -171,6 +179,7 @@ func (ledger *Ledger) SessionUsage(sessionID string, prices PriceTable) (Session
 			conversation.LastDay = row.day
 		}
 	}
+	result.ActiveDays = len(days)
 	for _, model := range models {
 		result.Models = append(result.Models, *model)
 	}
@@ -181,6 +190,11 @@ func (ledger *Ledger) SessionUsage(sessionID string, prices PriceTable) (Session
 	sort.Slice(result.Conversations, func(a, b int) bool {
 		return result.Conversations[a].FirstDay < result.Conversations[b].FirstDay
 	})
+	if len(result.Conversations) > 0 {
+		if day, err := time.ParseInLocation(dayLayout, result.Conversations[0].FirstDay, time.Local); err == nil {
+			result.FirstStarted, result.FirstStartedApprox = day.Format(time.RFC3339), true
+		}
+	}
 	return result, nil
 }
 

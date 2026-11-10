@@ -15,6 +15,9 @@ export type SessionUsage = {
   models: (UsageTotals & { model: string })[] | null;
   conversations: (UsageTotals & { harnessSessionId: string; firstDay: string; lastDay: string })[] | null;
   prices: PriceInfo;
+  firstStarted?: string;
+  firstStartedApprox?: boolean;
+  activeDays?: number;
 };
 
 export type UsageSummary = {
@@ -57,8 +60,32 @@ export function monthTooltip(summary: UsageSummary): string {
   return lines.join("\n");
 }
 
-export function usageTooltip(usage: SessionUsage): string {
-  const lines = ["Estimate from harness logs; never reset"];
+export function formatAge(ms: number): string {
+  const minutes = Math.max(0, Math.floor(ms / 60_000));
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor((minutes % 1440) / 60);
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes % 60}m`;
+  return `${minutes}m`;
+}
+
+// Age and rough spend rates. Rates are averages over the whole age (idle time included) and per
+// day with logged usage; priced usage only, so unpriced sessions show no rate.
+export function ageLines(usage: SessionUsage, now: number): string[] {
+  const started = usage.firstStarted ? Date.parse(usage.firstStarted) : NaN;
+  if (Number.isNaN(started) || started > now) return [];
+  const age = now - started;
+  const lines = [`Age: ${usage.firstStartedApprox ? "~" : ""}${formatAge(age)} (first started ${new Date(started).toLocaleString()}${usage.firstStartedApprox ? ", from first logged usage day" : ""})`];
+  if (usage.total.usd > 0) {
+    const hours = age / 3_600_000;
+    if (hours >= 1 / 6) lines.push(`Avg spend: ~$${(usage.total.usd / hours).toFixed(2)}/h over the session age`);
+    if ((usage.activeDays ?? 0) > 0) lines.push(`~$${(usage.total.usd / usage.activeDays!).toFixed(2)} per day with usage (${usage.activeDays} day${usage.activeDays === 1 ? "" : "s"})`);
+  }
+  return lines;
+}
+
+export function usageTooltip(usage: SessionUsage, now: number = Date.now()): string {
+  const lines = ["Estimate from harness logs; never reset", ...ageLines(usage, now)];
   for (const model of usage.models ?? []) lines.push(`${model.model}: ${formatTokens(model.tokens)} ${formatUSD(model)}`);
   if ((usage.conversations?.length ?? 0) > 1) lines.push(`${usage.conversations!.length} conversations`);
   lines.push(`Prices: ${usage.prices.source}${usage.prices.updatedAt ? ` (${usage.prices.updatedAt})` : ""}${usage.prices.stale ? " - stale" : ""}`);

@@ -205,6 +205,9 @@ func (store *Store) delete(ctx context.Context, sessionID string, journal bool, 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM session_order WHERE session_id = ?`, sessionID); err != nil {
 		return fmt.Errorf("delete display order for %q: %w", sessionID, err)
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM app_settings WHERE key = ?`, firstStartedKey(sessionID)); err != nil {
+		return fmt.Errorf("delete first start time for %q: %w", sessionID, err)
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM prompt_queue WHERE session_id = ?`, sessionID); err != nil {
 		return fmt.Errorf("delete queued prompts for %q: %w", sessionID, err)
 	}
@@ -280,6 +283,19 @@ func (store *Store) SetSetting(ctx context.Context, key, value string) error {
 	return nil
 }
 
+func firstStartedKey(sessionID string) string { return "first_started:" + sessionID }
+
+// FirstStarted returns when the session was first launched, or false for a session
+// that started before TauShell recorded it.
+func (store *Store) FirstStarted(ctx context.Context, sessionID string) (time.Time, bool) {
+	value, err := store.Setting(ctx, firstStartedKey(sessionID))
+	if err != nil || value == "" {
+		return time.Time{}, false
+	}
+	started, err := time.Parse(time.RFC3339Nano, value)
+	return started, err == nil
+}
+
 // PromptQueues returns the saved queued prompts of every session, in send order.
 func (store *Store) PromptQueues(ctx context.Context) (map[string][]string, error) {
 	store.mu.Lock()
@@ -309,6 +325,9 @@ func (store *Store) SetPromptQueue(ctx context.Context, sessionID string, prompt
 		return fmt.Errorf("save queued prompts: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM app_settings WHERE key = ?`, firstStartedKey(sessionID)); err != nil {
+		return fmt.Errorf("delete first start time for %q: %w", sessionID, err)
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM prompt_queue WHERE session_id = ?`, sessionID); err != nil {
 		return fmt.Errorf("save queued prompts: %w", err)
 	}
@@ -633,6 +652,10 @@ func (store *Store) begin(ctx context.Context, sessionID string, harness Harness
 	`, runtime.SessionID, runtime.Harness, runtime.HarnessSessionID, runtime.Status, runtime.UpdatedAt.Format(time.RFC3339Nano), runtime.LaunchToken)
 	if err != nil {
 		return Runtime{}, fmt.Errorf("persist starting state for %q: %w", sessionID, err)
+	}
+	// The first launch is the session's start time; later launches keep it.
+	if _, err := conn.ExecContext(ctx, `INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)`, firstStartedKey(sessionID), runtime.UpdatedAt.Format(time.RFC3339Nano)); err != nil {
+		return Runtime{}, fmt.Errorf("record first start of %q: %w", sessionID, err)
 	}
 	if _, err := conn.ExecContext(ctx, "COMMIT"); err != nil {
 		return Runtime{}, fmt.Errorf("commit starting state for %q: %w", sessionID, err)

@@ -26,7 +26,6 @@ export function ConversationsDrawer({ session, busy, onResume, onClose, onError 
   return <aside className="file-drawer conversations-drawer" aria-label="Conversation history">
     <div className="file-drawer-head">
       <strong>History</strong>
-      <button className="file-act" onClick={onClose} aria-label="Close the history drawer">x</button>
     </div>
     <input className="conversation-search" type="search" placeholder="Filter by title, ID or model" value={query} onChange={(event) => setQuery(event.target.value)} />
     {session.runningHere && <div className="toolbar-popover-note">Stop the session to resume a different conversation.</div>}

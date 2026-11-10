@@ -113,6 +113,9 @@ func (manager *Manager) SessionUsage(ctx context.Context, id string) (usage.Sess
 	table, info := manager.prices.Table(priceOverrides(settings), time.Now())
 	result, err := manager.ledger.SessionUsage(id, table)
 	result.Prices = info
+	if started, ok := manager.store.FirstStarted(ctx, id); ok {
+		result.FirstStarted, result.FirstStartedApprox = started.Format(time.RFC3339), false
+	}
 	return result, err
 }
 

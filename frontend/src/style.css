@@ -2634,6 +2634,15 @@ h3 {
   border-color: var(--border-muted);
 }
 
+.harness-option:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.harness-option:disabled:not(.selected) {
+  opacity: 0.45;
+}
+
 .harness-option.selected {
   border-color: var(--accent);
   background: var(--accent-bg-4);
@@ -2680,6 +2689,19 @@ h3 {
   min-height: 75px;
   resize: vertical;
   font-family: var(--font-mono);
+}
+
+input[readonly] {
+  border-style: dashed;
+  background: var(--bg-inset);
+  color: var(--text-4);
+  cursor: default;
+  text-overflow: ellipsis;
+}
+
+input[readonly]:focus {
+  outline: none;
+  border-color: var(--border-strong);
 }
 
 .folder-row {
