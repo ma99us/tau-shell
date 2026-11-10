@@ -1,0 +1,161 @@
+/* TauShell light theme colors. Same token names as dark.css; contrast pairs are checked by theme/contrast.test.ts.
+   See docs/v2/25-ui-design-system.md. */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  /* Surfaces */
+  --bg-app: #f3f5f8;
+  --bg-inset: #eceff3;
+  --bg-panel: #ffffff;
+  --bg-card: #fbfcfd;
+  --bg-raised: #ffffff;
+  --bg-hover: #eef1f5;
+  --bg-control: #eef1f5;
+  --bg-control-hover: #e3e7ed;
+  --bg-elevated: #ffffff;
+  --scrim: #1018288c;
+  --shadow-soft: #1018281f;
+  --shadow-deep: #10182840;
+
+  /* Borders */
+  --border-subtle: #e3e7ed;
+  --border: #d8dde5;
+  --border-strong: #c8cfd9;
+  --border-hover: #bfc7d2;
+  --border-muted: #9aa4b2;
+  --border-control-hover: #aab3c0;
+
+  /* Text ramp, strongest to faintest */
+  --white: #fff;
+  --text-1: #0f141a;
+  --text-title: #141a22;
+  --text-2: #1c232c;
+  --text-3: #2b3440;
+  --text-4: #3a4452;
+  --text-5: #465163;
+  --text-6: #4b5667;
+  --text-7: #505b6c;
+  --text-8: #556070;
+  --text-9: #596474;
+  --text-10: #5d6878;
+  --text-11: #5f6b7a;
+
+  /* Accent (green) and primary action */
+  --accent: #1a7f4b;
+  --accent-hover: #146a3e;
+  --accent-focus: #1f8f56;
+  --accent-eyebrow: #1a7f4b;
+  --on-accent: #ffffff;
+  --action: #16844b;
+  --action-hover: #11713f;
+  --on-action: #ffffff;
+  --accent-text-1: #0f5132;
+  --accent-text-2: #14603a;
+  --accent-text-3: #17683f;
+  --accent-text-4: #1a6e43;
+  --accent-bg-1: #e6f5ec;
+  --accent-bg-2: #def2e7;
+  --accent-bg-3: #d3edde;
+  --accent-bg-4: #d9f1e3;
+  --accent-border-1: #b9dfc9;
+  --accent-border-2: #a9d7bd;
+  --accent-border-3: #94cdaa;
+  --accent-border-muted: #c5d6cc;
+
+  /* Status colors */
+  --status-ok: #1f9d5c;
+  --status-ok-glow: #1f9d5c55;
+  --status-warn: #b7791f;
+  --status-warn-glow: #b7791f55;
+  --status-unseen: #b7791f;
+  --status-unseen-glow-lo: #b7791f88;
+  --status-unseen-glow-hi: #b7791fcc;
+  --status-input: #c2570c;
+  --status-input-glow-lo: #c2570c88;
+  --status-input-glow-hi: #c2570ccc;
+  --status-failed: #d1344a;
+  --drop-indicator: #3b6fe0;
+
+  /* Danger */
+  --danger-text-1: #7f1d1d;
+  --danger-text-2: #8f2323;
+  --danger-text-3: #a02828;
+  --danger-text-4: #b4342f;
+  --danger-bg-1: #fdecea;
+  --danger-bg-2: #fbe3e0;
+  --danger-bg-3: #f9dcd8;
+  --danger-bg-4: #fbe5e2;
+  --danger-border-1: #f2b8b0;
+  --danger-border-2: #eba9a1;
+  --danger-border-3: #e69a92;
+  --danger-border-4: #d9776e;
+  --danger-solid: #c0392f;
+  --danger-solid-hover: #a93129;
+
+  /* Terminal */
+  --terminal-bg: #fbfbfc;
+  --terminal-fg: #24292f;
+  --terminal-cursor: #1f6feb;
+  --terminal-selection: #0969da33;
+  --terminal-min-contrast: 4.5;
+  --ansi-black: #24292f;
+  --ansi-red: #cf222e;
+  --ansi-green: #116329;
+  --ansi-yellow: #7d4e00;
+  --ansi-blue: #0550ae;
+  --ansi-magenta: #8250df;
+  --ansi-cyan: #1b7c83;
+  --ansi-white: #6e7781;
+  --ansi-bright-black: #57606a;
+  --ansi-bright-red: #a40e26;
+  --ansi-bright-green: #1a7f37;
+  --ansi-bright-yellow: #633c01;
+  --ansi-bright-blue: #0969da;
+  --ansi-bright-magenta: #6639ba;
+  --ansi-bright-cyan: #3192aa;
+  --ansi-bright-white: #7f8892;
+
+  /* Brand marks (vendor colors, darkened where needed for a light background) */
+  --brand-claude: #c15f3c;
+  --brand-copilot: #24292f;
+  --brand-codex: #0d8a6a;
+  --brand-opencode: #2f6fd6;
+  --brand-gsd: #a87a00;
+  --brand-node: #3c873a;
+  --brand-git: #d6301f;
+  --brand-linux: #a87a00;
+
+  /* Session tag colors; same hues as dark so saved session colors look consistent */
+  --tag-red: #e5534b;
+  --tag-orange: #e8892b;
+  --tag-green: #4c9f58;
+  --tag-teal: #2fa4a4;
+  --tag-blue: #4f8cff;
+  --tag-purple: #9b73e6;
+  --tag-pink: #d94fb5;
+  --tag-fallback: #6b7686;
+  --tag-text-on-light: #101318;
+  --tag-text-on-dark: #fff;
+  --syntax-keyword: #8250df;
+  --syntax-string: #0a7a3d;
+  --syntax-number: #b35900;
+  --syntax-comment: #6e7781;
+  --syntax-title: #0550ae;
+  --syntax-attr: #8a5a00;
+  --syntax-add: #1a7f37;
+  --syntax-del: #cf222e;
+
+  /* Project file icons */
+  --file-blue: #3b6fe0;
+  --file-cyan: #1f7fb8;
+  --file-yellow: #a67c00;
+  --file-teal: #1b7c83;
+  --file-sky: #2f7fcf;
+  --file-orange: #b35900;
+  --file-red: #cf222e;
+  --file-purple: #8250df;
+  --file-green: #3d8b37;
+  --file-muted: #6e7781;
+  --file-default: #6b7280;
+  --file-folder: #b9812a;
+}

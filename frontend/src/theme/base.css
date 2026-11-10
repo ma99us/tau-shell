@@ -1,0 +1,36 @@
+/* TauShell theme-independent tokens: fonts, type scale and radii. Values only; no selectors.
+   Colors live in dark.css and light.css. See docs/v2/25-ui-design-system.md. */
+:root {
+  --font-ui: "Segoe UI", "Inter", sans-serif;
+  --font-mono: Consolas, "Cascadia Code", monospace;
+  --font-terminal: "Cascadia Code", Consolas, monospace;
+  --tracking-label: 0.12em;
+  --tracking-eyebrow: 0.13em;
+
+  /* UI text scale; the Appearance setting changes --font-scale (1 = 100%). Icons and spacing do not scale. */
+  --font-scale: 1;
+  --fs-10: calc(10px * var(--font-scale));
+  --fs-11: calc(11px * var(--font-scale));
+  --fs-12: calc(12px * var(--font-scale));
+  --fs-13: calc(13px * var(--font-scale));
+  --fs-14: calc(14px * var(--font-scale));
+  --fs-15: calc(15px * var(--font-scale));
+  --fs-16: calc(16px * var(--font-scale));
+  --fs-17: calc(17px * var(--font-scale));
+  --fs-19: calc(19px * var(--font-scale));
+  --fs-22: calc(22px * var(--font-scale));
+
+  /* Terminal text size (px); a separate setting, not scaled by --font-scale */
+  --terminal-font-size: 14px;
+
+  /* Radius scale (px) */
+  --radius-2: 2px;
+  --radius-5: 5px;
+  --radius-6: 6px;
+  --radius-7: 7px;
+  --radius-8: 8px;
+  --radius-9: 9px;
+  --radius-10: 10px;
+  --radius-11: 11px;
+  --radius-20: 20px;
+}

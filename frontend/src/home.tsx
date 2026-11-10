@@ -18,6 +18,7 @@ import { ClaudeQuota, claudeQuotaView, formatDollars, parseBudgetInput } from ".
 import { UpdateDialog } from "./updateDialog";
 import { SessionNotes } from "./sessionNotesView";
 import { GroupControls, GroupHeader } from "./workspaceView";
+import { AppearancePane } from "./appearancePane";
 import { HomePanel, HomePanelId, PanelFeedback, PanelFeedbackState } from "./homePanel";
 export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAll, onAutoResumeAll, onAutoResume, status, busy, tools, skills, onNew, onRefresh, onHome, onLaunch, onDelete, onDuplicate, onError, panelFeedback = {}, onDismissPanelFeedback, onPanelFeedback, dragProps, dropClass, dragId }: {
   workspaces: Workspace[];
@@ -219,6 +220,7 @@ export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAl
       <PhonePane onError={onError} feedback={panelFeedback.phone} onFeedback={(feedback) => onPanelFeedback?.("phone", feedback)} onDismissFeedback={() => onDismissPanelFeedback?.("phone")} />
       <ControlAudit onError={onError} feedback={panelFeedback.control} onFeedback={(feedback) => onPanelFeedback?.("control", feedback)} onDismissFeedback={() => onDismissPanelFeedback?.("control")} />
       <SecretsPane onError={onError} feedback={panelFeedback.secrets} onFeedback={(feedback) => onPanelFeedback?.("secrets", feedback)} onDismissFeedback={() => onDismissPanelFeedback?.("secrets")} />
+      <AppearancePane onError={onError} />
       <div className="home-footer">
         {appUpdate && <button className="link-button home-update" title="View the release and update TauShell" onClick={() => setUpdateOpen(true)}>{appUpdate.tag} available</button>}
         {rollbackVersion && <button className="link-button home-update" title="Restore the previous TauShell version and restart" onClick={() => void app().RollbackAppUpdate().catch((error) => onError("ui.rollback-update", error))}>Roll back to v{rollbackVersion}</button>}

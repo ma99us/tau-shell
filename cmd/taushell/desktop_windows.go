@@ -159,6 +159,7 @@ func runDesktop() error {
 		return fmt.Errorf("initialize session manager: %w", err)
 	}
 	manager.SetVault(application.vault)
+	manager.SetColorScheme(application.colorScheme)
 	application.manager = manager
 	application.initSkills(manager)
 	diagnostics.Info("desktop window starting", "webview2_version", version)
@@ -187,7 +188,7 @@ func runDesktop() error {
 		OnBeforeClose: application.beforeClose,
 		OnShutdown:    application.shutdown,
 		Windows: &windowsOptions.Options{
-			Theme: windowsOptions.Dark,
+			Theme: startupWindowTheme(application.GetAppearance().Theme),
 		},
 	})
 	closeCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)

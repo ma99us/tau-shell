@@ -24,6 +24,7 @@ export type CodexQuota = {
 };
 import type { HarnessId, HarnessInfo, HarnessLoadError } from "./harnesses.ts";
 import type { WorkspaceGroup } from "./workspaces";
+import type { Appearance } from "./theme/appearanceModel";
 
 export type Session = {
   id: string;
@@ -240,6 +241,9 @@ export type SkillsView = {
 };
 
 type WailsApp = {
+  GetAppearance(): Promise<Appearance>;
+  SetAppearance(value: Appearance): Promise<void>;
+  ReportTheme(resolved: string): Promise<void>;
   SetControlEnabled(enabled: boolean): Promise<void>;
   GetControlStatus(): Promise<ControlStatus>;
   SetMobileEnabled(enabled: boolean): Promise<void>;

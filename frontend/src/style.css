@@ -4,7 +4,6 @@
   background: var(--bg-app);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  color-scheme: dark;
   font-optical-sizing: auto;
   font-size: var(--fs-14);
   font-weight: 400;
@@ -3057,4 +3056,70 @@ h3 {
   width: 14px;
   height: 14px;
   flex: 0 0 auto;
+}
+
+/* Appearance panel */
+.appearance-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 10px 0;
+}
+
+.appearance-label {
+  min-width: 140px;
+  color: var(--text-4);
+  font-size: var(--fs-12);
+  font-weight: 600;
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-6);
+  overflow: hidden;
+}
+
+.segment {
+  min-height: 34px;
+  padding: 0 16px;
+  border: 0;
+  border-right: 1px solid var(--border-strong);
+  background: var(--bg-control);
+  color: var(--text-5);
+  font-size: var(--fs-12);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.segment:last-child {
+  border-right: 0;
+}
+
+.segment:hover:not(.active) {
+  background: var(--bg-control-hover);
+}
+
+.segment.active {
+  background: var(--accent-bg-3);
+  color: var(--accent-text-1);
+}
+
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stepper .secondary-button {
+  min-width: 34px;
+  padding: 0;
+}
+
+.stepper-value {
+  min-width: 56px;
+  text-align: center;
+  color: var(--text-3);
+  font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
 }

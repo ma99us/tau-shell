@@ -45,7 +45,7 @@ TauShell is a local Windows desktop session manager: a Go host (`cmd/taushell`, 
 
 - Sessions appear in the same order on Home, the sidebar and the tabs. The sidebar lists only sessions with an open tab; Home lists all.
 - Home is a house icon. Session icons show initials of the session name on the session color; harness marks are Simple Icons credited in `THIRD_PARTY_NOTICES.md`.
-- Session color tints the tab, row, top bar and terminal edge; text color comes from the `sessionColor.ts` contrast rules (4.5:1). Use theme tokens, not hard-coded colors ([`docs/v2/25-ui-design-system.md`](docs/v2/25-ui-design-system.md)).
+- Session color tints the tab, row, top bar and terminal edge; text color comes from the `sessionColor.ts` contrast rules (4.5:1). Use theme tokens, not hard-coded colors or px font sizes; every color token must exist in both dark.css and light.css, and UI text scales with the user font-scale setting ([`docs/v2/25-ui-design-system.md`](docs/v2/25-ui-design-system.md)).
 - No `target="_blank"`; open external links through the bound Go opener restricted to known URLs.
 
 ## Build and verify

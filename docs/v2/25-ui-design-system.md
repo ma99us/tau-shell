@@ -8,10 +8,12 @@ the screens. If the two disagree, fix whichever is wrong in the same change.
 
 | File | Role |
 |---|---|
-| `frontend/src/theme/tokens.css` | Every color, type size, radius and font as a CSS custom property on `:root`, including terminal, brand-mark and session tag colors. Values only, no selectors. |
+| `frontend/src/theme/dark.css`, `light.css` | The same color tokens per theme (`:root[data-theme]`), including terminal, ANSI palette, brand-mark and session tag colors. Values only. |
+| `frontend/src/theme/base.css` | Theme-independent tokens: fonts, the `--fs-N` type scale (`calc(Npx * var(--font-scale))`), radii, terminal font size. |
+| `frontend/src/theme/appearance.ts`, `appearanceModel.ts` | Applies `data-theme`, `--font-scale` and the terminal size, follows the OS for System, and reports the resolved theme to the host. |
 | `frontend/src/theme/theme.ts` | JavaScript access to those tokens (xterm options, tag swatches, brand fills). It reads the CSS variables at runtime and contains no color or size literals. |
 | `frontend/src/style.css` | Layout and components. It must not contain raw color, font-size or border-radius literals; use tokens. |
-| `frontend/scripts/check-tokens.mjs` | `npm run check:tokens` fails on hard-coded colors, font sizes or radii anywhere in `src/` outside `tokens.css`. Run it before committing UI changes. |
+| `frontend/scripts/check-tokens.mjs` | `npm run check:tokens` fails on hard-coded colors, font sizes or radii anywhere in `src/` outside `src/theme/`, and when dark and light define different token sets. Run it before committing UI changes. |
 
 Rules for changes:
 
@@ -30,10 +32,13 @@ Rules for changes:
   in the terminal is never rewritten.
 - No `target=_blank`; links go through the host.
 
-## Theme: dark only
+## Themes and text size
 
-`color-scheme: dark`. There is no light theme or user theme setting in Phase 1;
-the token layer is the seam for adding one later (swap the `:root` values).
+Themes: Dark (default), Light and System (follows the OS). Chosen on Home > Appearance or the command palette and stored in the `appearance:` section of `config.yaml` (`theme`, `fontScale` 0.8-1.6, `terminalFontSize` 9-28). External edits apply at the next start. The title bar follows the theme. UI text size scales every `--fs-N` token; the terminal size is a separate setting.
+
+Tokens keep their component-facing names (`--text-N`, `--accent-bg-N`); dark and light define the same set. A full rename to a two-layer semantic set was not done.
+
+Harnesses: TauShell sets the xterm palette, selection and a minimum contrast ratio (4.5 in light), and exports `COLORFGBG` (user value wins) to new sessions. A running harness that draws fixed truecolor or 256-color backgrounds keeps them; some offer their own theme command (for example `/theme`). Not verified live: light rendering in real harnesses and the visual polish of the light palette; contrast is covered only by token unit tests.
 
 ### Tokens
 
@@ -195,7 +200,7 @@ never for body text or inside buttons.
 
 ## Changing the look
 
-1. Edit a value in `tokens.css` to re-tone everything that uses it.
+1. Edit a value in `dark.css` and `light.css` to re-tone everything that uses it.
 2. For a new color, add a token with a role name, then use `var(--name)`.
 3. If the value is also needed in JavaScript, mirror it in `theme.ts` with a
    comment naming the token.

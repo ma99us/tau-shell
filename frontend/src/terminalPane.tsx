@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
+import { useAppearance } from "./theme/appearance";
 import { app, GitStatus, HarnessWidgets, Session } from "./bridge";
 import { gitParts, gitTooltip } from "./gitChip";
 import { parseOsc52 } from "./osc52";
@@ -269,6 +270,18 @@ export function TerminalPane({ session, visible, busy, harness, onSend, onNotice
     const timer = window.setInterval(fetchRemote, 5 * 60 * 1000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [sessionId, visible]);
+  const { appearance, resolved } = useAppearance();
+  useEffect(() => {
+    const terminal = session ? terminalInstances.get(session.id) : undefined;
+    if (!terminal) return;
+    Object.assign(terminal.options, theme.terminal());
+    try {
+      fitInstances.get(session!.id)?.fit();
+      if (session!.runningHere) void app().ResizeTerminal(session!.id, terminal.cols, terminal.rows).catch((err) => { if (!isStoppedSessionError(err)) onError(err); });
+    } catch {
+      // Hidden panes cannot be measured; the next show re-fits.
+    }
+  }, [session?.id, resolved, appearance.terminalFontSize]);
   useEffect(() => {
     if (!session || !container.current) return;
     let terminal = terminalInstances.get(session.id);
@@ -285,7 +298,7 @@ export function TerminalPane({ session, visible, busy, harness, onSend, onNotice
     container.current.addEventListener("pointerdown", onPointerDown, true);
     container.current.addEventListener("mousedown", onMouseDown, true);
     if (!terminal) {
-      terminal = new Terminal({ convertEol: false, cursorBlink: true, scrollback: 0, fontFamily: theme.fontMono(), fontSize: theme.terminal().fontSize, theme: { background: theme.terminal().background, foreground: theme.terminal().foreground, cursor: theme.terminal().cursor } });
+      terminal = new Terminal({ convertEol: false, cursorBlink: true, scrollback: 0, fontFamily: theme.fontMono(), ...theme.terminal() });
       terminal.loadAddon(fit);
       terminal.open(container.current);
       terminalInstances.set(session.id, terminal);

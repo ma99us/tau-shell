@@ -82,6 +82,9 @@ TauShell -> ConPTY -> wsl.exe -> AI harness inside a WSL2 distro (experimental)
   rollback to the previous version.
 - **Orderly shutdown.** Closing the app or a running tab asks first, interrupts
   gracefully, then force-stops what remains and reports it.
+- **Themes and text size.** Dark, Light or System theme and adjustable UI and
+  terminal text size (Home > Appearance). Harnesses with fixed backgrounds keep
+  their own colors.
 
 ### Phone companion
 

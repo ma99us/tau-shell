@@ -3,10 +3,14 @@ import { createRoot } from "react-dom/client";
 import "@xterm/xterm/css/xterm.css";
 import { app, DialogRequest, InstallResult, Session, SessionEvent, ShutdownProgress, SkillsView, SystemStatus, ToolStatus, UpdateResult, WSLAction, WSLStatus } from "./bridge";
 import { HomePanelId, PanelFeedbackState } from "./homePanel";
-import "./theme/tokens.css";
+import "./theme/base.css";
+import "./theme/dark.css";
+import "./theme/light.css";
 import "./style.css";
 import { Activity, AttentionKind, answerPlan, attentionEdge, combineSignal, freshLogState, hasCueSignal, logActivityCache, nextActivity, promptKind, readDraft, readHarnessSignal, readScreen, reportedState } from "./attention";
 import { moveId } from "./order";
+import { appearanceNow, initAppearance, saveAppearance, setAppearance, useAppearance } from "./theme/appearance";
+import { clampFontScale, fontScale, parseAppearance, themeChoices } from "./theme/appearanceModel";
 import { CommandPalette, PaletteItem } from "./harnessActions";
 import { GearIcon, HomeIcon } from "./harnessIcons";
 import { hasActivityReader, isHarness, setHarnesses } from "./harnesses";
@@ -66,6 +70,7 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { failed: bool
 }
 
 function App() {
+  useAppearance();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [workspaceMap, setWorkspaceMap] = useState<Record<string, WorkspaceGroup>>({});
   const [collapsedGroups, setCollapsedGroups] = useState(() => readCollapsed(localStorage));
@@ -595,6 +600,10 @@ function App() {
       { id: "app:home", group: "App", label: "Go to Home", run: () => setSelected("") },
       { id: "app:refresh", group: "App", label: "Refresh sessions and tools", run: () => void refreshAll() },
       { id: "app:settings", group: "App", label: "Edit settings...", hint: "notifications", run: () => void app().OpenSettingsFile().catch((err) => showError("ui.open-settings", err)) },
+      ...themeChoices.map((choice): PaletteItem => ({ id: `theme:${choice.id}`, group: "App", label: `Theme: ${choice.label}`, run: () => saveAppearance({ ...appearanceNow(), theme: choice.id }, showError) })),
+      { id: "text:bigger", group: "App", label: "Text size: increase", run: () => saveAppearance({ ...appearanceNow(), fontScale: clampFontScale(appearanceNow().fontScale + fontScale.step) }, showError) },
+      { id: "text:smaller", group: "App", label: "Text size: decrease", run: () => saveAppearance({ ...appearanceNow(), fontScale: clampFontScale(appearanceNow().fontScale - fontScale.step) }, showError) },
+      { id: "text:reset", group: "App", label: "Text size: reset to 100%", run: () => saveAppearance({ ...appearanceNow(), fontScale: fontScale.default }, showError) },
     ];
     sessions.forEach((session) => {
       items.push({ id: `open:${session.id}`, group: "Session", label: `Open ${session.name}`, hint: session.runningHere ? "running" : statusLabel(session.status), run: () => openTab(session) });
@@ -942,6 +951,12 @@ async function fitTerminalNow(id: string) {
 // The harness list (cues, brand marks, names) comes from the host, so load it
 // before the first render.
 async function boot() {
+  initAppearance();
+  try {
+    setAppearance(parseAppearance(await app().GetAppearance()));
+  } catch (error) {
+    console.error("load appearance failed", error);
+  }
   try {
     const catalog = await app().GetHarnesses();
     setHarnesses(catalog.harnesses ?? []);

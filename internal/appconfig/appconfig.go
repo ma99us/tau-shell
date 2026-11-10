@@ -84,6 +84,7 @@ type Config struct {
 	Usage         Usage         `yaml:"usage"`
 	Quota         Quota         `yaml:"quota"`
 	Skills        Skills        `yaml:"skills"`
+	Appearance    Appearance    `yaml:"appearance"`
 }
 
 // Quota controls optional Home screen quota chips. A nil flag means enabled.
@@ -209,6 +210,9 @@ func Load(path string) (Config, error) {
 	if err := parsed.Skills.validate(); err != nil {
 		return Config{}, fmt.Errorf("%s: %w", filepath.Base(path), err)
 	}
+	if err := parsed.Appearance.validate(); err != nil {
+		return Config{}, fmt.Errorf("%s: %w", filepath.Base(path), err)
+	}
 	if err := parsed.Mobile.validate(); err != nil {
 		return Config{}, fmt.Errorf("%s: %w", filepath.Base(path), err)
 	}
@@ -260,6 +264,14 @@ quota:
 	# Claude Code uses a LiteLLM proxy. Reads the endpoint and key from Claude Code's
 	# own settings; set false to stop these calls.
 	# claude: true
+
+appearance:
+  # dark, light or system (follows Windows). Applies immediately.
+  # theme: dark
+  # UI text size as a multiplier, 0.8-1.6. Icons and spacing do not scale.
+  # font_scale: 1.0
+  # Terminal text size in pixels, 9-28.
+  # terminal_font_size: 14
 
 skills:
   # Load TauShell's skill library (from the ai-cookbook) into Claude Code and Copilot CLI sessions.

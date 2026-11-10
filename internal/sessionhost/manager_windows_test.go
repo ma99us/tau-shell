@@ -287,6 +287,27 @@ func TestManagerPassesSessionEnvironmentOutsideTheCommandLine(t *testing.T) {
 	}
 }
 
+func TestManagerAdvertisesTheThemeThroughCOLORFGBG(t *testing.T) {
+	manager, _, _ := newLifecycleTestManager(t)
+	scheme := "light"
+	manager.SetColorScheme(func() string { return scheme })
+	environment, err := manager.launchEnvironment(session.Config{ID: "c"})
+	if err != nil || environment["COLORFGBG"] != "0;15" {
+		t.Fatalf("light: %v %v", environment, err)
+	}
+	scheme = "dark"
+	if environment, _ = manager.launchEnvironment(session.Config{ID: "c"}); environment["COLORFGBG"] != "15;0" {
+		t.Fatalf("dark: %v", environment)
+	}
+	if environment, _ = manager.launchEnvironment(session.Config{ID: "c", Environment: map[string]string{"COLORFGBG": "7;0"}}); environment["COLORFGBG"] != "7;0" {
+		t.Fatalf("a user value must win: %v", environment)
+	}
+	scheme = ""
+	if environment, _ = manager.launchEnvironment(session.Config{ID: "c"}); environment["COLORFGBG"] != "" {
+		t.Fatalf("unknown theme must not set a hint: %v", environment)
+	}
+}
+
 func TestManagerInjectsVaultSecretsAndFailsWhenMissing(t *testing.T) {
 	manager, factory, _ := newLifecycleTestManager(t)
 	workingDir := filepath.Join(t.TempDir(), "vault")

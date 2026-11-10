@@ -1,33 +1,7 @@
-/* TauShell design tokens. See docs/v2/22-ui-design-system.md. Values only; no selectors. */
-:root {
-  --font-ui: "Segoe UI", "Inter", sans-serif;
-  --font-mono: Consolas, "Cascadia Code", monospace;
-  --tracking-label: 0.12em;
-  --tracking-eyebrow: 0.13em;
-
-  /* Type scale (px) */
-  --fs-10: 10px;
-  --fs-11: 11px;
-  --fs-12: 12px;
-  --fs-13: 13px;
-  --fs-14: 14px;
-  --fs-15: 15px;
-  --fs-16: 16px;
-  --fs-17: 17px;
-  --fs-19: 19px;
-  --fs-22: 22px;
-
-  /* Radius scale (px) */
-  --radius-2: 2px;
-  --radius-5: 5px;
-  --radius-6: 6px;
-  --radius-7: 7px;
-  --radius-8: 8px;
-  --radius-9: 9px;
-  --radius-10: 10px;
-  --radius-11: 11px;
-  --radius-20: 20px;
-
+/* TauShell dark theme colors (the default). Same token names as light.css. See docs/v2/25-ui-design-system.md. */
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
   /* Surfaces */
   --bg-app: #0c0e12;
   --bg-inset: #0e1116;
@@ -121,8 +95,24 @@
   --terminal-bg: var(--bg-app);
   --terminal-fg: #d8dce5;
   --terminal-cursor: #a4e1c0;
-  --terminal-font-size: var(--fs-14);
-  --font-terminal: "Cascadia Code", Consolas, monospace;
+  --terminal-selection: #ffffff4d;
+  --terminal-min-contrast: 1;
+  --ansi-black: #2e3436;
+  --ansi-red: #cc0000;
+  --ansi-green: #4e9a06;
+  --ansi-yellow: #c4a000;
+  --ansi-blue: #3465a4;
+  --ansi-magenta: #75507b;
+  --ansi-cyan: #06989a;
+  --ansi-white: #d3d7cf;
+  --ansi-bright-black: #555753;
+  --ansi-bright-red: #ef2929;
+  --ansi-bright-green: #8ae234;
+  --ansi-bright-yellow: #fce94f;
+  --ansi-bright-blue: #729fcf;
+  --ansi-bright-magenta: #ad7fa8;
+  --ansi-bright-cyan: #34e2e2;
+  --ansi-bright-white: #eeeeec;
 
   /* Brand marks (vendor colors) */
   --brand-claude: #d97757;
