@@ -2575,6 +2575,22 @@ h3 {
   height: 29px;
 }
 
+.runtime-option {
+  flex: 0 0 auto;
+  flex-direction: row;
+  gap: 7px;
+  width: auto;
+  height: 34px;
+  padding: 0 12px;
+  font-size: var(--fs-12);
+}
+
+.runtime-svg {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+}
+
 .modal input,
 .modal select,
 .modal textarea {

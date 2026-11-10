@@ -18,6 +18,13 @@ export function GearIcon() {
   return <svg className="gear-svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" /></svg>;
 }
 
+export function RuntimeIcon({ kind }: { kind: "powershell" | "wsl" }) {
+  const common = { className: "runtime-svg", viewBox: "0 0 24 24", "aria-hidden": true, fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" } as const;
+  if (kind === "powershell") return <svg {...common}><path d="M4 5h16l-3 14H1z" transform="translate(1 0)" /><path d="m9 9 4 3-4 3" /><path d="M14 16h3" /></svg>;
+  // A small penguin for the Linux distro inside WSL.
+  return <svg {...common}><path d="M12 3c-2.4 0-3.5 2-3.5 4.5 0 1.6-.4 2.4-1.2 3.6C6.4 12.4 6 14.2 6 16c0 2.8 2.7 5 6 5s6-2.2 6-5c0-1.8-.4-3.6-1.3-4.9-.8-1.2-1.2-2-1.2-3.6C15.5 5 14.4 3 12 3Z" /><path d="M10.5 8.5h.01M13.5 8.5h.01" /><path d="m10.5 10.5 1.5 1 1.5-1" /></svg>;
+}
+
 export function HarnessIcon({ tool }: { tool: HarnessId }) {
   const brand = findHarness(tool)?.brand;
   const color = (colors as Record<string, string>)[tool] ?? brand?.color ?? "currentColor";

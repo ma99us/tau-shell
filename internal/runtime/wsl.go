@@ -67,6 +67,7 @@ type Runner func(ctx context.Context, args ...string) ([]byte, error)
 
 func execRunner(ctx context.Context, args ...string) ([]byte, error) {
 	command := exec.CommandContext(ctx, "wsl.exe", args...)
+	hideWindow(command)
 	var stdout, stderr bytes.Buffer
 	command.Stdout, command.Stderr = &stdout, &stderr
 	if err := command.Run(); err != nil {

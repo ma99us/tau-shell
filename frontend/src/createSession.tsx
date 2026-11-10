@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { app, LaunchPreview, Session, WSLStatus, WorktreeEntry, WorktreePlan } from "./bridge";
-import { HarnessIcon } from "./harnessIcons";
+import { HarnessIcon, RuntimeIcon } from "./harnessIcons";
 import { getHarnesses } from "./harnesses";
 import { defaultDistro, isWindowsMount, runtimeLabel, wslChoices, wslHarnessSupported } from "./wslRuntime";
 
@@ -171,14 +171,6 @@ export function CreateSession({ recentFolders, wsl, powershellUsable = true, clo
   return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="modal">
     <div className="modal-heading"><h2>{clone ? `Clone ${clone.source.name}` : "Start new AI session"}</h2><button className="icon-button" onClick={onClose}>x</button></div>
     <form onSubmit={(event) => void submit(event)}>
-      {clone && <label>Runtime <span className="optional">(inherited from the original, cannot be changed)</span><div className="folder-row"><input readOnly value={runtimeLabel(clone.source)} /></div></label>}
-      {!clone && distros.length > 0 && <div className="harness-field"><span className="harness-label" id="runtime-label">Runtime</span>
-        <div className="harness-picker" role="radiogroup" aria-labelledby="runtime-label">
-          <button type="button" role="radio" aria-checked={!inWSL} className={`harness-option ${!inWSL ? "selected" : ""}`} onClick={() => chooseRuntime("")}><span className="harness-name">PowerShell</span></button>
-          <button type="button" role="radio" aria-checked={inWSL} className={`harness-option ${inWSL ? "selected" : ""}`} onClick={() => chooseRuntime("wsl")}><span className="harness-name">WSL</span></button>
-        </div>
-        {inWSL && <label>WSL distro<select value={distro} onChange={(event) => setDistro(event.target.value)}>{distros.map((item) => <option key={item.name} value={item.name}>{item.name}{item.default ? " (default)" : ""}</option>)}</select></label>}
-      </div>}
       {clone
         ? <label>Project folder <span className="optional">(inherited from the original, cannot be changed)</span><div className="folder-row"><input readOnly value={workingDir} /></div></label>
         : <label>Project folder<div className="folder-row"><input autoFocus required list="recent-project-folders" value={workingDir} onChange={(event) => { setWorkingDir(event.target.value); setFormError(""); }} placeholder={inWSL ? "Linux path, for example /home/you/project" : "Choose a local project folder"} /><datalist id="recent-project-folders">{recentFolders.map((folder) => <option key={folder} value={folder} />)}</datalist><button type="button" className="secondary-button" onClick={() => void chooseDirectory()}>Browse</button></div>{inWSL && isWindowsMount(workingDir) && <span className="tool-warning">Projects under /mnt/c live on the Windows disk and are slower inside WSL; prefer a folder in the distro.</span>}</label>}
@@ -209,6 +201,14 @@ export function CreateSession({ recentFolders, wsl, powershellUsable = true, clo
             </button>)}
         </div>
       </div>
+      {clone && <label>Runtime <span className="optional">(inherited from the original, cannot be changed)</span><div className="folder-row"><input readOnly value={runtimeLabel(clone.source)} /></div></label>}
+      {!clone && distros.length > 0 && <div className="harness-field"><span className="harness-label" id="runtime-label">Runtime</span>
+        <div className="harness-picker runtime-picker" role="radiogroup" aria-labelledby="runtime-label">
+          <button type="button" role="radio" aria-checked={!inWSL} className={`harness-option runtime-option ${!inWSL ? "selected" : ""}`} onClick={() => chooseRuntime("")}><RuntimeIcon kind="powershell" /><span className="harness-name">PowerShell</span></button>
+          <button type="button" role="radio" aria-checked={inWSL} className={`harness-option runtime-option ${inWSL ? "selected" : ""}`} onClick={() => chooseRuntime("wsl")}><RuntimeIcon kind="wsl" /><span className="harness-name">WSL</span></button>
+        </div>
+        {inWSL && <label>WSL distro<select value={distro} onChange={(event) => setDistro(event.target.value)}>{distros.map((item) => <option key={item.name} value={item.name}>{item.name}{item.default ? " (default)" : ""}</option>)}</select></label>}
+      </div>}
       <label>Launch arguments <span className="optional">(editable template, one per line)</span><textarea rows={3} value={launchArgs} onChange={(event) => setLaunchArgs(event.target.value)} placeholder="--yolo" /></label>
       <div className="launch-preview">
         {previewError ? <p className="tool-warning">{previewError}</p> : preview && <>
