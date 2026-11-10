@@ -116,6 +116,7 @@ export type WorktreeDeletePlan = {
   exists: boolean;
   sharedBy?: string;
 };
+export type GitPathInfo = { repo: boolean; tracked: boolean; staged: boolean; unstaged: boolean; ignored: boolean };
 export type GitChange = { path: string; code: string; staged: boolean };
 export type ProjectEntry = { name: string; path: string; dir: boolean; size: number };
 export type ProjectListing = { entries: ProjectEntry[]; truncated: boolean };
@@ -345,6 +346,8 @@ type WailsApp = {
   RevealProjectRoot(sessionId: string): Promise<void>;
   OpenProjectFile(sessionId: string, rel: string): Promise<void>;
   ProjectFullPath(sessionId: string, rel: string): Promise<string>;
+  GetGitPathInfo(sessionId: string, rel: string): Promise<GitPathInfo>;
+  GitPathAction(sessionId: string, rel: string, action: "stage" | "unstage" | "untrack" | "ignore"): Promise<string>;
   GetSessionModel(sessionId: string): Promise<string>;
   GetSessionUsage(sessionId: string): Promise<SessionUsage>;
   GetUsageSummary(): Promise<UsageSummary>;

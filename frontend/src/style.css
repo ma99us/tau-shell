@@ -1754,9 +1754,19 @@ h3 {
   text-align: left;
 }
 
-.file-menu button:hover {
+.file-menu button:hover:not(:disabled) {
   background: var(--bg-control-hover);
   color: var(--text-2);
+}
+
+.file-menu button:disabled {
+  opacity: 0.45;
+}
+
+.file-menu-divider {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--border-hover);
 }
 
 .toolbar-menu {

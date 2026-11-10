@@ -1,6 +1,6 @@
 import { Fragment, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { highlightCode, languageFor, languageForFence } from "./highlight";
-import { app, GitChange, ProjectEntry, ProjectFile, Session } from "./bridge";
+import { app, GitChange, GitPathInfo, ProjectEntry, ProjectFile, Session } from "./bridge";
 import { buildChangeTree, ChangeNode, changeLabel, countChanges } from "./gitChanges";
 import { Block, Inline, parseMarkdown } from "./markdown";
 import { Icon } from "./icons";
@@ -73,7 +73,8 @@ export function FileDrawer({ session, onClose, onError, onInsert }: { session: S
     const stop = () => { target.removeEventListener("pointermove", move); target.removeEventListener("pointerup", stop); target.removeEventListener("pointercancel", stop); };
     target.addEventListener("pointermove", move); target.addEventListener("pointerup", stop); target.addEventListener("pointercancel", stop);
   };
-  const [menu, setMenu] = useState<{ x: number; y: number; entry: ProjectEntry } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; entry: ProjectEntry; git?: GitPathInfo } | null>(null);
+  const [refresh, setRefresh] = useState(0);
   useEffect(() => {
     if (!menu) return;
     const close = () => setMenu(null);
@@ -108,7 +109,7 @@ export function FileDrawer({ session, onClose, onError, onInsert }: { session: S
     void refresh();
     const timer = window.setInterval(refresh, tab === "git" ? 4000 : 15000);
     return () => { cancelled = true; window.clearInterval(timer); };
-  }, [session.id, tab]);
+  }, [session.id, tab, refresh]);
   const toggle = (entry: ProjectEntry) => {
     if (open.includes(entry.path)) { setOpen(open.filter((path) => path !== entry.path)); return; }
     setOpen([...open, entry.path]);
@@ -120,12 +121,22 @@ export function FileDrawer({ session, onClose, onError, onInsert }: { session: S
   });
   const copy = (text: string, what: string) => window.runtime.ClipboardSetText(text).then(() => setNote(`Copied ${what}.`)).catch(onError);
   const copyFull = (entry: { path: string }) => app().ProjectFullPath(session.id, entry.path).then((full) => copy(full, "the full path")).catch(onError);
+  // Right-click opens the menu at once; the git actions join it when git answers.
+  const openMenu = (event: React.MouseEvent, entry: ProjectEntry) => {
+    event.preventDefault();
+    setMenu({ x: Math.min(event.clientX, window.innerWidth - 210), y: Math.min(event.clientY, window.innerHeight - 260), entry });
+    app().GetGitPathInfo(session.id, entry.path).then((git) => setMenu((current) => current && current.entry.path === entry.path ? { ...current, git } : current)).catch(() => undefined);
+  };
+  const gitAction = (entry: ProjectEntry, action: "stage" | "unstage" | "untrack" | "ignore") => {
+    setMenu(null);
+    app().GitPathAction(session.id, entry.path, action).then((summary) => { setNote(summary); setRefresh((now) => now + 1); }).catch(onError);
+  };
   const rows = (dir: string, depth: number): ReactNode => (tree[dir] ?? []).map((entry) => {
     const expanded = open.includes(entry.path);
     const kind = fileIconFor(entry.name);
     return <Fragment key={entry.path}>
       <div className={`file-row ${!entry.dir && file?.path === entry.path ? "selected" : ""}`} style={{ paddingLeft: 8 + depth * 14 }}
-        onContextMenu={(event) => { event.preventDefault(); setMenu({ x: Math.min(event.clientX, window.innerWidth - 210), y: Math.min(event.clientY, window.innerHeight - 120), entry }); }}>
+        onContextMenu={(event) => openMenu(event, entry)}>
         <button className="file-name" title={`${entry.path} (right-click for more)`} onClick={() => entry.dir ? toggle(entry) : void view(entry)}>
           <span className="file-ico" style={{ color: entry.dir ? "var(--file-folder)" : kind.color }}><Icon name={entry.dir ? (expanded ? "folderOpen" : "folder") : kind.icon} size={15} /></span><span className="file-label">{entry.name}</span>
         </button>
@@ -143,7 +154,7 @@ export function FileDrawer({ session, onClose, onError, onInsert }: { session: S
     };
     return <Fragment key={node.path}>
       <div className={`file-row ${!node.dir && file?.path === node.path ? "selected" : ""}`} style={{ paddingLeft: 8 + depth * 14 }}
-        onContextMenu={(event) => { if (node.dir) return; event.preventDefault(); setMenu({ x: Math.min(event.clientX, window.innerWidth - 210), y: Math.min(event.clientY, window.innerHeight - 120), entry }); }}>
+        onContextMenu={(event) => openMenu(event, entry)}>
         <button className="file-name" title={node.dir ? node.path : `${node.path} - ${changeLabel(node)}`} onClick={() => node.dir ? setCollapsed(expanded ? [...collapsed, node.path] : collapsed.filter((path) => path !== node.path)) : openChange()}>
           <span className="file-ico" style={{ color: node.dir ? "var(--file-folder)" : kind.color }}><Icon name={node.dir ? (expanded ? "folderOpen" : "folder") : kind.icon} size={15} /></span><span className="file-label">{node.name}</span>
         </button>
@@ -174,6 +185,13 @@ export function FileDrawer({ session, onClose, onError, onInsert }: { session: S
       <button role="menuitem" onClick={() => { void copy(menu.entry.path, "the relative path"); setMenu(null); }}><Icon name="copy" size={14} />Copy relative name</button>
       <button role="menuitem" onClick={() => { void copyFull(menu.entry); setMenu(null); }}><Icon name="copy" size={14} />Copy full name</button>
       <button role="menuitem" onClick={() => { app().RevealProjectFile(session.id, menu.entry.path).catch(onError); setMenu(null); }}><Icon name="reveal" size={14} />Open in File Explorer</button>
+      {menu.git?.repo && <>
+        <div className="file-menu-divider" role="separator" />
+        <button role="menuitem" disabled={!menu.git.unstaged} onClick={() => gitAction(menu.entry, "stage")}><Icon name="arrowUp" size={14} />Stage (git add)</button>
+        <button role="menuitem" disabled={!menu.git.staged} onClick={() => gitAction(menu.entry, "unstage")}><Icon name="arrowDown" size={14} />Unstage</button>
+        <button role="menuitem" disabled={menu.git.ignored} onClick={() => gitAction(menu.entry, "ignore")} title="Append to the nearest existing .gitignore"><Icon name="stop" size={14} />Add to .gitignore</button>
+        <button role="menuitem" disabled={!menu.git.tracked} onClick={() => gitAction(menu.entry, "untrack")} title="Remove from git, keep on disk; Sync changes then removes it from the remote"><Icon name="clear" size={14} />Stop tracking (keep file)</button>
+      </>}
     </div>}
     {file && <div className="file-view" style={sizes.view ? { flex: "none", height: sizes.view } : undefined}>
       <div className="file-resize file-resize-y" onPointerDown={drag("y")} role="separator" aria-orientation="horizontal" aria-label="Resize the file preview" />
