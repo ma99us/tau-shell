@@ -153,11 +153,7 @@ textarea:focus-visible,
   background: var(--bg-panel);
 }
 
-.sidebar-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 7px 9px;
+.nav-label {
   color: var(--text-9);
   font-size: var(--fs-10);
   font-weight: 700;
@@ -165,9 +161,17 @@ textarea:focus-visible,
 }
 
 .add-button {
-  width: 25px;
-  height: 25px;
-  font-size: var(--fs-17);
+  flex: 0 0 auto;
+  width: 28px;
+  height: 30px;
+  color: var(--action);
+  font-size: var(--fs-22);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.add-button:hover {
+  color: var(--action-hover);
 }
 
 .nav-row,
@@ -225,6 +229,22 @@ textarea:focus-visible,
 .session-row-text small {
   color: var(--text-9);
   font-size: var(--fs-10);
+}
+
+.session-row-text .session-place {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.session-row-text .session-place .ui-icon {
+  flex: 0 0 auto;
+}
+
+.toolbar-branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .status-dot {
@@ -349,15 +369,10 @@ textarea:focus-visible,
 }
 
 .sidebar.collapsed .brand-text,
-.sidebar.collapsed .sidebar-title,
+.sidebar.collapsed .nav-label,
 .sidebar.collapsed .session-row-text,
 .sidebar.collapsed .delete-button {
   display: none;
-}
-
-.sidebar.collapsed .sidebar-heading {
-  justify-content: center;
-  padding: 0 0 9px;
 }
 
 .sidebar.collapsed .nav-row {
@@ -436,7 +451,7 @@ textarea:focus-visible,
 .tabs {
   display: flex;
   min-width: 0;
-  flex: 1;
+  flex: 0 1 auto;
   align-items: flex-end;
   gap: 3px;
   overflow-x: auto;
@@ -541,7 +556,7 @@ textarea:focus-visible,
 }
 
 .home {
-  width: min(100%, 1120px);
+  width: min(100%, 1440px);
   margin: 0 auto;
   padding: 34px 36px 42px;
 }
@@ -966,12 +981,33 @@ h3 {
 }
 
 .runtime-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   margin-left: 8px;
   padding: 1px 6px;
   border: 1px solid var(--accent-border-3);
   border-radius: var(--radius-8);
   color: var(--text-11);
   font-size: var(--fs-10);
+  vertical-align: middle;
+}
+
+.runtime-badge .runtime-svg {
+  width: 11px;
+  height: 11px;
+}
+
+.harness-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  vertical-align: middle;
+}
+
+.harness-tag .harness-svg {
+  width: 12px;
+  height: 12px;
 }
 
 .session-meta {
@@ -1439,6 +1475,9 @@ h3 {
 }
 
 .toolbar-model {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   color: var(--accent);
 }
 
@@ -2728,13 +2767,8 @@ h3 {
     display: none;
   }
 
-  .sidebar-heading {
-    padding: 0;
-    font-size: 0;
-  }
-
-  .sidebar-heading .add-button {
-    font-size: var(--fs-17);
+  .nav-label {
+    display: none;
   }
 
   .nav-row,

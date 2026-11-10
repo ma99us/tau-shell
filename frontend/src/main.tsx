@@ -805,8 +805,7 @@ function App() {
       <div className="workspace">
         <aside className={`sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
           <div className="sidebar-brand"><img className="brand-mark" src={appIcon} alt="" /><span className="brand-text"><strong>TauShell</strong><small>Your AI sessions</small></span></div>
-          <div className="sidebar-heading"><span className="sidebar-title">SESSIONS</span> <button className="add-button" title="New session" onClick={() => setDialogOpen(true)}>+</button></div>
-          <button className={`nav-row ${selected ? "" : "active"}`} title="Home" aria-label="Home" onClick={() => setSelected("")}><HomeIcon /></button>
+          <button className={`nav-row ${selected ? "" : "active"}`} title="Home" aria-label="Home" onClick={() => setSelected("")}><HomeIcon /><span className="nav-label">SESSIONS</span></button>
           <SessionTree workspaces={workspaces} openIds={new Set(tabs.map((tab) => tab.id))} selected={selected} collapsed={sidebarCollapsed} activity={activity} groupControls={groupControls} dragId={dragId} dragProps={dragProps} dropClass={dropClass} onOpen={openTab} onMenu={openMenu} onDelete={setDeleteRequest} />
           <div className="sidebar-foot"><button className="sidebar-toggle" aria-label="TauShell settings" title="TauShell settings (opens config.yaml)" onClick={() => void app().OpenSettingsFile().catch((err) => showError("ui.open-settings", err))}><GearIcon /></button><button className="sidebar-toggle" aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setSidebarCollapsed((value) => !value)}>{sidebarCollapsed ? ">>" : "<<"}</button></div>
         </aside>
@@ -845,6 +844,7 @@ function App() {
               ))}
             </div>
             <button className="tab-scroll-button" aria-label="Scroll tabs right" disabled={!tabScroll.right} onClick={() => scrollTabs(1)}>&gt;</button>
+            <button className="add-button" aria-label="New session" title="New session" onClick={() => setDialogOpen(true)}>+</button>
           </div>
           <ToastStack toasts={toasts} scope={APP_SCOPE} />
           <section className="main-content">

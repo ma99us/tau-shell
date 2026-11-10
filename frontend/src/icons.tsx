@@ -32,7 +32,8 @@ const paths: Record<string, ReactNode> = {
   arrowDown: <path d="M12 5v14M6 13l6 6 6-6" />,
   play: <path d="M7 5l12 7-12 7z" />,
   stop: <rect x="6" y="6" width="12" height="12" rx="1.5" />,
-  worktree: <><circle cx="6" cy="5.5" r="2" /><circle cx="6" cy="18.5" r="2" /><circle cx="18" cy="9" r="2" /><path d="M6 7.5v9M18 11c0 3-3 3.5-8.5 5.2" /></>,
+  branch: <><path d="M6 3v12" /><circle cx="18" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><path d="M18 9a9 9 0 0 1-9 9" /></>,
+  worktree: <><path d="M9 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v5" /><circle cx="13" cy="12" r="2" /><path d="M18 19c-2.8 0-5-2.2-5-5v8" /><circle cx="20" cy="19" r="2" /></>,
   pullRequest: <><circle cx="6" cy="5.5" r="2" /><circle cx="6" cy="18.5" r="2" /><circle cx="18" cy="18.5" r="2" /><path d="M6 7.5v9M18 16.5V9a2 2 0 0 0-2-2h-3m2-2.5L13 7l2 2.5" /></>,
 };
 
