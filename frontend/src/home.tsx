@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { app, AppUpdate, CodexQuota, CopilotQuota, InstallResult, Session, SkillsView, SystemStatus, ToolStatus, WSLAction, WSLStatus } from "./bridge";
 import { UsageSummary, hasUsage, monthTooltip, usageText } from "./usage";
-import { GearIcon, HarnessIcon, RuntimeIcon } from "./harnessIcons";
+import { GearIcon, HarnessIcon, RuntimeIcon, ToolIcon } from "./harnessIcons";
 import { Icon } from "./icons";
 import { usePlaces } from "./sessionTree";
 import { getHarnesses, harnessIds, harnessShort, isHarness } from "./harnesses";
@@ -385,7 +385,7 @@ function WSLRow({ actions }: { actions: ToolActions }) {
   return <div className="tool-row" title={notes.join("\n") || undefined}>
     <span className={`status-dot ${ready && failed.length === 0 ? "online" : wsl.installed ? "warn" : ""}`} />
     <div className="tool-details">
-      <div className="tool-heading"><strong>WSL (optional)</strong><span className="tool-version">{wsl.installed ? details || "Installed" : "Not installed"}</span></div>
+      <div className="tool-heading"><strong className="tool-name"><ToolIcon id="wsl" />WSL (optional)</strong><span className="tool-version">{wsl.installed ? details || "Installed" : "Not installed"}</span></div>
       {wsl.distros.length > 0 && <span className="tool-path">{wsl.distros.map((distro) => `${distro.name}${distro.default ? " (default)" : ""}: ${distro.running ? "running" : "stopped"}`).join(" | ")}</span>}
       {notes.map((note) => <span key={note} className="tool-warning tool-support-note">{note}</span>)}
       {loadError && <span className="tool-warning tool-support-note">{loadError}</span>}
@@ -431,7 +431,7 @@ function ToolRow({ tool, actions }: { tool: ToolStatus; actions: ToolActions }) 
   return <div className="tool-row" title={title || undefined}>
     <span className={`status-dot ${usable ? "online" : tool.installed || tool.error ? "warn" : ""}`} />
     <div className="tool-details">
-      <div className="tool-heading"><strong title={tool.name}>{tool.name}</strong><span className="tool-version">{label}</span></div>
+      <div className="tool-heading"><strong className="tool-name" title={tool.name}>{isHarness(tool.id) ? <HarnessIcon tool={tool.id} /> : <ToolIcon id={tool.id} />}{tool.name}</strong><span className="tool-version">{label}</span></div>
       {pathLabel && <code className="tool-path" title={executablePaths.join("\n")}>{pathLabel}</code>}
       {warning && <span className="tool-warning tool-support-note">{warning}</span>}
       {(needsInstall || availableUpdate) && <div className="tool-actions">

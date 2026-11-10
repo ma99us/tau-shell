@@ -35,7 +35,7 @@ SOFTWARE.
 
 ## Simple Icons
 
-The Claude and GitHub Copilot marks in rontend/src/harnessIcons.tsx come from Simple Icons (<https://simpleicons.org>, CC0 1.0). The logos remain trademarks of their owners (Anthropic; GitHub/Microsoft) and are used only to identify the tools.
+The Claude and GitHub Copilot marks in rontend/src/harnessIcons.tsx come from Simple Icons (<https://simpleicons.org>, CC0 1.0). The logos remain trademarks of their owners (Anthropic; GitHub/Microsoft; the OpenCode, Node.js and Git projects; Linux) and are used only to identify the tools.
 
 
 ## highlight.js

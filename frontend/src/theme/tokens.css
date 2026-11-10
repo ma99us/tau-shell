@@ -130,6 +130,9 @@
   --brand-codex: #10a37f;
   --brand-opencode: #6ea8fe;
   --brand-gsd: #f0b429;
+  --brand-node: #5fa04e;
+  --brand-git: #f03c2e;
+  --brand-linux: #fcc624;
 
   /* Session tag colors; the hex is saved in the session YAML, so changing it recolors only new picks */
   --tag-red: #e5534b;

@@ -3045,3 +3045,16 @@ h3 {
   overflow: auto;
   margin: 10px 0;
 }
+
+.tool-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tool-name .harness-svg,
+.tool-name .runtime-svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
