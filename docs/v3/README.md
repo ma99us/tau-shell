@@ -48,6 +48,8 @@ against the current code.
 | 9 | [Lightweight workspaces](features/09-lightweight-workspaces.md) | Built | none |
 | 10 | [Declarative harness adapters](features/10-declarative-adapters.md) | Partial | 2 (cue schema) |
 
+Unranked future idea: [harness conformance suite and common harness improvements](features/11-harness-conformance-and-common-improvements.md) (built on the [v2 harness research](../v2/28-harness-capability-research.md)).
+
 Already implemented and therefore not ranked: fleet restore (Resume All and auto resume),
 usage and cost ledger, tool actions, terminal compatibility, skills, updates and clone. See
 [the gap analysis](01-research-and-gap-analysis.md#2-status-of-candidate-ideas-checked-against-the-code).

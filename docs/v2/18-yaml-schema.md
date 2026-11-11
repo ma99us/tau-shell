@@ -103,8 +103,8 @@ entries are appended after the global ones and replace a global preset with the
 same name. Variables: `{project}` (working-directory name), `{dir}`,
 `{session}` (session name), `{branch}` (current git branch, empty outside a
 repository), `{date}` (YYYY-MM-DD). Unknown `{name}` tokens are left as written.
-Do not put secrets in presets. `submit: true` presses Enter only when the
-harness is idle; see the current
+Do not put secrets in presets. Presets are always submitted when the composer is
+empty and the harness is not waiting for input; `submit` is no longer used. See the current
 [widget delivery notes](21-engineering-handoff.md#harness-widgets-implemented).
 The [V1 UI design](../v1/08-UI-Design.md#10-harness-widgets) is historical
 context.

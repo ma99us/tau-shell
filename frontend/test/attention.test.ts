@@ -158,6 +158,11 @@ test("alerts fire once on edges", () => {
 test("injected text joins the draft", () => {
   assert.equal(planSend("idle", true, "existing prompt"), "insert");
   assert.equal(planSend("idle", true, ""), "submit");
+  assert.equal(planSend("working", true, ""), "submit");
+  assert.equal(planSend(undefined, true, ""), "submit");
+  assert.equal(planSend(undefined, true, "draft"), "insert");
+  assert.equal(planSend(undefined, false, ""), "insert");
+  assert.equal(planSend("input", true, ""), "blocked");
   assert.equal(composeInjection("", "/compact", true), "/compact");
   assert.equal(composeInjection("existing prompt", "/compact", false), "existing prompt /compact");
   assert.equal(composeInjection("existing prompt", "/model gpt-6-luna", true), "existing prompt /model gpt-6-luna");

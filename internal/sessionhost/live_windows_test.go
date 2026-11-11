@@ -73,6 +73,17 @@ func (output *liveOutput) hasSince(mark int, fragments ...string) bool {
 	return false
 }
 
+// since returns the ANSI-stripped output recorded after mark.
+func (output *liveOutput) since(mark int) string {
+	output.mu.Lock()
+	defer output.mu.Unlock()
+	text := output.text.String()
+	if mark < 0 || mark > len(text) {
+		return ""
+	}
+	return liveANSI.ReplaceAllString(text[mark:], "")
+}
+
 func (output *liveOutput) hasAny(fragments ...string) bool {
 	output.mu.Lock()
 	defer output.mu.Unlock()
@@ -770,6 +781,42 @@ func TestLiveHarness(t *testing.T) {
 	})
 	report("usage recorded: %v", usageRecorded)
 
+	// TAUSHELL_LIVE_OPENCODE_MODELS is a "|" list of model_picker entries to switch to
+	// through the picker, as the toolbar does; each costs one model reply.
+	if entries := os.Getenv("TAUSHELL_LIVE_OPENCODE_MODELS"); tool == session.OpenCode && hasID && entries != "" {
+		for _, entry := range strings.Split(entries, "|") {
+			before, _, _ := harness.OpenCodeMessages(runtime.HarnessSessionID)
+			mark := output.mark()
+			for _, step := range []struct {
+				text  string
+				pause time.Duration
+			}{{"/models", 500 * time.Millisecond}, {"\r", 1500 * time.Millisecond}, {entry, 1200 * time.Millisecond}, {"\r", 1500 * time.Millisecond}, {"\r", 1500 * time.Millisecond}, {"Reply with exactly the word OK", 500 * time.Millisecond}, {"\r", 0}} {
+				if err := manager.Write("live", []byte(step.text)); err != nil {
+					t.Fatal(err)
+				}
+				time.Sleep(step.pause)
+			}
+			var latest string
+			switched := waitFor(90*time.Second, func() bool {
+				messages, _, err := harness.OpenCodeMessages(runtime.HarnessSessionID)
+				if err != nil || len(messages) <= len(before) {
+					return false
+				}
+				latest = messages[len(messages)-1].Model
+				return true
+			})
+			report("picker entry %q: new reply=%v model=%q", entry, switched, latest)
+			if !switched {
+				screen := regexp.MustCompile(`\s+`).ReplaceAllString(output.since(mark), " ")
+				if len(screen) > 1500 {
+					screen = screen[len(screen)-1500:]
+				}
+				report("screen tail: %s", screen)
+			}
+			time.Sleep(8 * time.Second)
+		}
+	}
+
 	stopStarted := time.Now()
 	if err := manager.Stop(ctx, "live"); err != nil {
 		t.Errorf("stop failed: %v", err)
@@ -839,6 +886,9 @@ func TestLiveHarness(t *testing.T) {
 			}
 			return count > before
 		})
+	} else if tool == session.OpenCode {
+		// The recall question never contains the sentinel, so any new sighting is the model answering from restored context.
+		recalled = waitFor(120*time.Second, func() bool { return output.count("PONGTAU") > before })
 	} else {
 		recalled = waitFor(120*time.Second, func() bool { return output.count("PONGTAU") >= before+3 })
 	}

@@ -96,7 +96,7 @@ function handleClipboardKey(event: globalThis.KeyboardEvent, terminal: Terminal,
 
 // Harness widgets type into the terminal through xterm so input accounting matches real typing.
 // What the harness shows decides whether text is submitted, only inserted, or refused.
-export function sendToSession(session: Session, text: string, submit: boolean, label: string, notify: (message: string) => void, fail: (message: string) => void) {
+export function sendToSession(session: Session, text: string, submit: boolean, label: string, notify: (message: string) => void, fail: (message: string) => void, pickerEntry?: string) {
   const terminal = terminalInstances.get(session.id);
   if (!terminal || !session.runningHere) {
     fail(`${session.name} is not running, so nothing was sent.`);
@@ -108,11 +108,22 @@ export function sendToSession(session: Session, text: string, submit: boolean, l
     fail(sendNotice(plan, label));
     return;
   }
+  if (pickerEntry && plan !== "submit") {
+    fail("Clear the prompt first: the model picker needs an empty input.");
+    return;
+  }
   const injected = composeInjection(draft, text, plan === "submit");
   if (injected.includes("\n")) terminal.paste(injected);
   else terminal.input(injected, true);
   // Enter goes separately so the harness has finished handling the pasted text.
   if (plan === "submit") window.setTimeout(() => terminal.input("\r", true), 150);
+  // The picker needs a moment to open before it takes the search text and the choice.
+  if (pickerEntry) {
+    window.setTimeout(() => terminal.input(pickerEntry, true), 1500);
+    window.setTimeout(() => terminal.input("\r", true), 2700);
+    // Models with reasoning variants open a variant list; a second Enter keeps its default. On an empty prompt it does nothing.
+    window.setTimeout(() => terminal.input("\r", true), 4200);
+  }
   notify(sendNotice(plan, label));
   window.setTimeout(() => terminal.focus(), 160);
 }

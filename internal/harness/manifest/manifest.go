@@ -105,6 +105,7 @@ type Command struct {
 type Widgets struct {
 	Commands      []Command `yaml:"commands,omitempty"`
 	Models        []string  `yaml:"models,omitempty"`
+	ModelPicker   string    `yaml:"model_picker,omitempty"`
 	InterruptKeys []string  `yaml:"interrupt_keys,omitempty"`
 	CompactText   string    `yaml:"compact_text,omitempty"`
 	ClearText     string    `yaml:"clear_text,omitempty"`

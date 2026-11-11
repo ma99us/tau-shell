@@ -6,7 +6,7 @@ import { Icon } from "./icons";
 
 // What to do with text bound for the harness, given what its own UI is showing.
 //  - "blocked": a permission/selection prompt is open; typed text could answer it.
-//  - "submit": the harness is idle, so type the text and press Enter.
+//  - "submit": the prompt is empty, so type the text and press Enter.
 //  - "insert": type the text only; the user presses Enter when ready.
 export function sendNotice(plan: SendPlan, label: string): string {
   if (plan === "blocked") return "Not sent: the harness is waiting for an answer. Answer it in the terminal first.";
@@ -14,7 +14,8 @@ export function sendNotice(plan: SendPlan, label: string): string {
   return `Inserted ${label}; press Enter in the terminal when ready.`;
 }
 
-export type SendFn = (text: string, submit: boolean, label: string) => void;
+// pickerEntry, when set, is typed into the picker that `text` opens, then confirmed with Enter.
+export type SendFn = (text: string, submit: boolean, label: string, pickerEntry?: string) => void;
 
 export type PaletteItem = {
   id: string;
@@ -109,8 +110,9 @@ export function HarnessToolbar({ session, widgets, modelSupported, send, onError
   };
   const sendModel = (model: string, close: () => void) => {
     const id = model.trim();
-    if (!id || /\s/.test(id)) { onError(new Error("Model IDs cannot contain spaces.")); return; }
-    send(`/model ${id}`, true, `/model ${id}`);
+    if (!id || (!widgets.modelPicker && /\s/.test(id))) { onError(new Error("Model IDs cannot contain spaces.")); return; }
+    if (widgets.modelPicker) send(widgets.modelPicker, true, `model "${id}"`, id);
+    else send(`/model ${id}`, true, `/model ${id}`);
     close();
   };
   return <div className="harness-actions">
@@ -122,7 +124,7 @@ export function HarnessToolbar({ session, widgets, modelSupported, send, onError
         {[presets?.filter((preset) => !preset.remote), presets?.filter((preset) => preset.remote)].map((group, index) => group && group.length > 0 && <Fragment key={index}>
           {index === 1 && presets?.some((preset) => !preset.remote) && <hr />}
           {group.map((preset) => <button role="menuitem" key={preset.name} title={preset.text}
-            onClick={() => { send(preset.text, preset.submit, `"${preset.name}"`); close(); }}>{preset.name}</button>)}
+            onClick={() => { send(preset.text, true, `"${preset.name}"`); close(); }}>{preset.name}</button>)}
         </Fragment>)}
         <hr />
         <button role="menuitem" onClick={() => { app().OpenPresetsFile().catch(onError); close(); }}>Edit presets...</button>
@@ -137,11 +139,11 @@ export function HarnessToolbar({ session, widgets, modelSupported, send, onError
     </ToolbarMenu>
     {modelSupported && <ToolbarMenu up label={<Icon name="model" />} title="Model: ask the harness to switch model (sends /model)">
       {(close) => <>
-        <button role="menuitem" onClick={() => { send("/model", true, "/model"); close(); }}>Open the harness model picker<small>/model</small></button>
+        <button role="menuitem" onClick={() => { send(widgets.modelPicker ?? "/model", true, widgets.modelPicker ?? "/model"); close(); }}>Open the harness model picker<small>{widgets.modelPicker ?? "/model"}</small></button>
         <hr />
         {widgets.models.map((model) => <button role="menuitem" key={model} onClick={() => sendModel(model, close)}>{model}</button>)}
         <form className="toolbar-popover-form" onSubmit={(event) => { event.preventDefault(); sendModel(customModel, close); }}>
-          <input value={customModel} onChange={(event) => setCustomModel(event.target.value)} placeholder="Custom model ID" aria-label="Custom model ID" />
+          <input value={customModel} onChange={(event) => setCustomModel(event.target.value)} placeholder={widgets.modelPicker ? "Search text" : "Custom model ID"} aria-label={widgets.modelPicker ? "Model search text" : "Custom model ID"} />
           <button type="submit" disabled={!customModel.trim()}>Send</button>
         </form>
       </>}

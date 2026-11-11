@@ -77,6 +77,8 @@ graceful_exit:                 # ordered writes that make the harness quit by it
 widgets:                       # quick actions typed into the session (unconfirmed by the harness)
   commands:
     - { label: Compact conversation, text: "/compact" }
+  # model_picker: "/models"  # for harnesses without "/model <id>": open this picker, then type
+  #                           # each models entry into its search box and press Enter
   interrupt_keys: ["\x1b"]
 cues:                          # ordered rules; the first match wins
   - { state: working, source: last-rows, rows: 2, pattern: 'esc to interrupt', ignore_case: true }

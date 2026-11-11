@@ -88,6 +88,7 @@ export type ToolStatus = {
 export type HarnessWidgets = {
   commands: { label: string; text: string }[];
   models: string[];
+  modelPicker?: string;
   interruptKeys: string[];
   compactText: string;
   clearText: string;

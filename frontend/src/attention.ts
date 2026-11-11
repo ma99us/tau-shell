@@ -9,8 +9,8 @@ export type SendPlan = "blocked" | "submit" | "insert";
 
 export function planSend(signal: HarnessSignal, submit: boolean, draft = ""): SendPlan {
   if (signal === "input") return "blocked";
-  if (submit && draft.trim()) return "insert";
-  return submit && signal === "idle" ? "submit" : "insert";
+  // An empty prompt is submitted whatever the harness shows (a busy harness queues it); an unsent draft is never sent.
+  return submit && !draft.trim() ? "submit" : "insert";
 }
 
 export type AttentionKind = "input" | "done";
@@ -151,7 +151,41 @@ export function readScreen(terminal: Terminal, count: number): string[] {
   return rows;
 }
 
+// OpenCode draws its input as an indented box: a bare bar row, the text rows, a bare bar
+// row, a status row ("Build - model"), then a bottom border row. The box floats mid-screen
+// on an empty conversation, so find the border anywhere in view and read the rows above it.
+function readOpenCodeDraft(terminal: Terminal): string | undefined {
+  const buffer = terminal.buffer.active;
+  const end = buffer.baseY + terminal.rows;
+  const cell = buffer.getNullCell();
+  for (let border = end - 1; border >= Math.max(0, end - 40); border--) {
+    if (!/^\s*\u2579\u2580+\s*$/.test(buffer.getLine(border)?.translateToString(true) ?? "")) continue;
+    // border-1 is the status row and border-2 the bottom padding; the text rows end at border-3
+    // and the blank top padding row closes the box.
+    const rows: string[] = [];
+    for (let y = border - 3; y >= 0; y--) {
+      const line = buffer.getLine(y);
+      const marker = line && /^\s*\u2503(?:\s\s|$)/.exec(line.translateToString(true));
+      if (!line || !marker) break;
+      let text = "";
+      for (let x = marker[0].length; x < line.length; x++) {
+        const current = line.getCell(x, cell);
+        if (!current || current.isDim() || current.isInverse()) continue;
+        text += current.getChars() || " ";
+      }
+      if (y !== border - 3 && !text.trim()) break;
+      rows.unshift(text.trim());
+    }
+    // The placeholder is drawn in plain gray, not dim, so recognise its fixed lead-in.
+    const draft = rows.join(" ").trim();
+    return /^Ask anything\u2026/.test(draft) ? "" : draft;
+  }
+  return undefined;
+}
+
 export function readDraft(terminal: Terminal): string {
+  const openCode = readOpenCodeDraft(terminal);
+  if (openCode !== undefined) return openCode;
   const buffer = terminal.buffer.active;
   const end = buffer.baseY + terminal.rows;
   const cell = buffer.getNullCell();

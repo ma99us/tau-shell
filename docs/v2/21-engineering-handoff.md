@@ -685,7 +685,10 @@ attention detection from visible cues and activity readers; when idle cannot
 be established, the text is only inserted. For toolbar and palette commands,
 a nonempty composer draft receives
 the action appended but is not submitted; with an empty composer, TauShell
-submits it. The shared send-planning behavior has focused frontend tests.
+submits it unless the harness shows a permission or input prompt (the idle
+signal is no longer required; presets always submit). OpenCode model switching
+uses the manifest `model_picker` (`/models`, search text, Enter); the picker
+switch was verified live for all five listed entries (see the backlog). OpenCode drafts are read from its indented input box (bottom border `╹▀`), checked by feeding captured raw output to a headless xterm: empty placeholder reads empty, typed text reads as a draft, so auto-send does not land over unsent text. Conversation-time screens were not re-captured. The shared send-planning behavior has focused frontend tests.
 
 Known limits: there is no general success confirmation from the harness. The
 frontend unit test covers draft-aware delivery, but the packaged toolbar,

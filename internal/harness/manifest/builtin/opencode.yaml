@@ -33,6 +33,15 @@ widgets:
     - { label: New conversation, text: "/new" }
     - { label: Choose model, text: "/models" }
     - { label: Help, text: "/help" }
+  # OpenCode has no "/model <id>": /models opens a picker, which TauShell filters by
+  # typing the entry and choosing the first match.
+  model_picker: "/models"
+  models:
+    - "Claude Sonnet 5.5 GitHub Copilot"
+    - "Claude Opus 5.5 GitHub Copilot"
+    - "Claude Haiku 5.5 GitHub Copilot"
+    - "GPT-6.1 Sol GitHub Copilot"
+    - "Gemini 3.8 Flash GitHub Copilot"
   interrupt_keys: ["\x1b", "\x1b"]
   compact_text: "/compact"
   clear_text: "/new"

@@ -589,10 +589,10 @@ function App() {
   };
   const toastTtl = 6000;
   const notifySession = (sessionId: string, message: string) => toasts.notify(sessionId, "info", message, { ttl: toastTtl });
-  const sendFor = (session: Session) => (text: string, submit: boolean, label: string) =>
+  const sendFor = (session: Session) => (text: string, submit: boolean, label: string, pickerEntry?: string) =>
     sendToSession(session, text, submit, label,
       (message) => notifySession(session.id, message),
-      (message) => toasts.notify(session.id, "error", message, { ttl: toastTtl }));
+      (message) => toasts.notify(session.id, "error", message, { ttl: toastTtl }), pickerEntry);
 
   const openPalette = async () => {
     const items: PaletteItem[] = [
@@ -618,16 +618,17 @@ function App() {
       const send = sendFor(active);
       try {
         (await app().GetPresets(active.id) ?? []).forEach((preset) =>
-          items.push({ id: `preset:${active.id}:${preset.name}`, group: "Prompt", label: preset.name, hint: preset.text.slice(0, 60), run: () => send(preset.text, preset.submit, `"${preset.name}"`) }));
+          items.push({ id: `preset:${active.id}:${preset.name}`, group: "Prompt", label: preset.name, hint: preset.text.slice(0, 60), run: () => send(preset.text, true, `"${preset.name}"`) }));
       } catch (err) {
         showError("ui.presets", err);
       }
       harness.widgets.commands.forEach((command) =>
         items.push({ id: `command:${active.tool}:${command.text}`, group: "Command", label: command.label, hint: command.text, run: () => send(command.text, true, command.text) }));
       if (harness.modelSupported) {
-        items.push({ id: `model:${active.tool}:picker`, group: "Model", label: "Open the harness model picker", hint: "/model", run: () => send("/model", true, "/model") });
+        const picker = harness.widgets.modelPicker;
+        items.push({ id: `model:${active.tool}:picker`, group: "Model", label: "Open the harness model picker", hint: picker ?? "/model", run: () => send(picker ?? "/model", true, picker ?? "/model") });
         harness.widgets.models.forEach((model) =>
-          items.push({ id: `model:${active.tool}:${model}`, group: "Model", label: `Switch model to ${model}`, hint: `/model ${model}`, run: () => send(`/model ${model}`, true, `/model ${model}`) }));
+          items.push({ id: `model:${active.tool}:${model}`, group: "Model", label: `Switch model to ${model}`, hint: picker ? `${picker} + search` : `/model ${model}`, run: () => picker ? send(picker, true, `model "${model}"`, model) : send(`/model ${model}`, true, `/model ${model}`) }));
       }
       items.push({ id: `interrupt:${active.tool}`, group: "Command", label: "Interrupt the harness", hint: "Esc", run: () => interruptSession(active, harness.widgets.interruptKeys) });
     }

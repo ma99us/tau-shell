@@ -54,6 +54,10 @@ type Widgets struct {
 	// Models are suggestions for the live "/model <id>" action; users can
 	// also enter a custom model ID.
 	Models []string `json:"models"`
+	// ModelPicker is the command that opens the harness's own model picker, for
+	// harnesses without "/model <id>". Each Models entry is then the text typed
+	// into the picker's search box, and the first match is chosen.
+	ModelPicker string `json:"modelPicker,omitempty"`
 	// InterruptKeys are sent in order, with a short gap, to interrupt a working
 	// harness. Copilot CLI needs Esc twice; a single Esc was verified not to stop it.
 	InterruptKeys []string `json:"interruptKeys"`
@@ -199,6 +203,7 @@ func harnessSpecs() []Spec {
 			widgets := &Widgets{
 				Commands:      []Command{},
 				Models:        append([]string{}, item.Widgets.Models...),
+				ModelPicker:   item.Widgets.ModelPicker,
 				InterruptKeys: append([]string{}, item.Widgets.InterruptKeys...),
 				CompactText:   item.Widgets.CompactText,
 				ClearText:     item.Widgets.ClearText,

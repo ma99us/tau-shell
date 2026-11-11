@@ -207,7 +207,8 @@ Remaining work:
 
 | Gap | Applies to | Blocker |
 |---|---|---|
-| Alternate-model reply / OpenCode model reply and usage not proven live | GSD, OpenCode | GSD's alternate-model selection changed the recorded model, but its follow-up reply was not verified. OpenCode's free model returned Forbidden from this network; needs a working provider key. |
+| Alternate-model reply / OpenCode model reply and usage not proven live | GSD, OpenCode | GSD's alternate-model selection changed the recorded model, but its follow-up reply was not verified. OpenCode's free model returned Forbidden from this network. With a logged-in Copilot provider the live suite later passed (start, reply, resume ID, model, usage, stop, restore). |
+| OpenCode toolbar model switch | OpenCode | Verified live (2026-11-10, OpenCode 1.19.5, Copilot login): the picker entries for Claude Sonnet 5.5, Opus 5.5, Haiku 5.5, GPT-6.1 Sol and Gemini 3.8 Flash each switched the recorded model (`TAUSHELL_LIVE_OPENCODE_MODELS="<entry>|<entry>" TAUSHELL_LIVE=opencode go test ./internal/sessionhost -run TestLiveHarness -v`). Models with reasoning variants open a variant list, so the toolbar presses Enter twice. Not driven through the packaged toolbar itself; a second provider with the same display name (corporate proxy) is avoided only by the "GitHub Copilot" suffix in the entry. |
 | Attention cues (working / input / idle) | OpenCode | Cues must be captured while a model turn runs, so they need working model access. Until then they use output-timing fallback (`hasCueSignal` in `frontend/src/attention.ts` is false). |
 | Interrupt keys | OpenCode | Needs a running model turn to interrupt. GSD and Codex single-Esc interruption were verified against controlled running tool calls. |
 | End-to-end skill response | GSD, OpenCode | GSD native project-skill loading was inconsistent; OpenCode has no verified per-launch skill route. |
