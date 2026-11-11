@@ -1492,6 +1492,9 @@ h3 {
 }
 
 .path-reveal {
+  width: 26px;
+  height: 26px;
+  padding: 0;
   flex: 0 0 auto;
   margin-left: 4px;
 }
@@ -1696,8 +1699,8 @@ h3 {
 }
 
 .git-sync-button {
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   padding: 0;
   flex: 0 0 auto;
 }
@@ -1710,14 +1713,14 @@ h3 {
 }
 
 .ide-main {
-  width: 24px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   padding: 0;
 }
 
 .ide-caret {
-  width: 14px;
-  height: 22px;
+  width: 16px;
+  height: 26px;
   padding: 0;
   margin-left: -2px;
 }

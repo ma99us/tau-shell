@@ -188,12 +188,12 @@ function GitChip({ session, git, onChange, onError, onNotice }: { session: Sessi
   };
   return <>
     <span className="toolbar-branch" title={gitTooltip(git)}>
-      <Icon name={git.worktree ? "worktree" : "branch"} size={13} />{parts.label}{parts.dirty && <b className="git-flag">*</b>}
+      <Icon name={git.worktree ? "worktree" : "branch"} size={14} />{parts.label}{parts.dirty && <b className="git-flag">*</b>}
       {parts.ahead > 0 && <span className="git-count" aria-label={`${parts.ahead} unpushed`}><Icon name="arrowUp" size={12} />{parts.ahead}</span>}
       {parts.behind > 0 && <span className="git-count" aria-label={`${parts.behind} to pull`}><Icon name="arrowDown" size={12} />{parts.behind}</span>}
     </span>
-    <button className="text-button icon-button git-sync-button" disabled={syncing} title="Sync changes: commit all pending changes, pull (rebase) and push" aria-label="Sync changes" onClick={sync}><Icon name="sync" size={14} /></button>
-    {git.worktree && <button className="text-button icon-button git-sync-button" title="Open a GitHub pull request for this branch" aria-label="Open pull request" onClick={() => { app().OpenPullRequest(session.id).catch(onError); }}><Icon name="pullRequest" size={14} /></button>}
+    <button className="text-button icon-button git-sync-button" disabled={syncing} title="Sync changes: commit all pending changes, pull (rebase) and push" aria-label="Sync changes" onClick={sync}><Icon name="sync" size={16} /></button>
+    {git.worktree && <button className="text-button icon-button git-sync-button" title="Open a GitHub pull request for this branch" aria-label="Open pull request" onClick={() => { app().OpenPullRequest(session.id).catch(onError); }}><Icon name="pullRequest" size={16} /></button>}
   </>;
 }
 
@@ -393,9 +393,9 @@ export function TerminalPane({ session, visible, busy, harness, onSend, onNotice
   return <div className="terminal-view" style={sessionColorStyle(session.color)} data-colored={session.color ? "" : undefined}>
     <div className="terminal-toolbar">
       <span className={`status-dot ${session.runningHere ? "online" : ""}`} /><span className="harness-tag"><HarnessIcon tool={session.tool} />{session.tool}</span>{harness && onSend && <InterruptButton interrupt={onInterrupt} />}
-      <Sep /><span className="toolbar-path-group"><span className="toolbar-path">{session.workingDir}</span><button className="text-button icon-button path-reveal" title="Open the project folder in File Explorer" aria-label="Open the project folder in File Explorer" onClick={() => app().RevealProjectRoot(session.id).catch(onError)}><Icon name="reveal" size={14} /></button><IdeButton session={session} onError={onError} onNotice={onNotice} /></span>
+      <Sep /><span className="toolbar-path-group"><span className="toolbar-path">{session.workingDir}</span><button className="text-button icon-button path-reveal" title="Open the project folder in File Explorer" aria-label="Open the project folder in File Explorer" onClick={() => app().RevealProjectRoot(session.id).catch(onError)}><Icon name="reveal" size={16} /></button><IdeButton session={session} onError={onError} onNotice={onNotice} /></span>
       {git?.branch && <><Sep /><GitChip session={session} git={git} onChange={setGit} onError={onError} onNotice={onNotice} /></>}
-      {model && <><Sep /><span className={`toolbar-model ${isExpensiveModel(model) ? "expensive" : ""}`} title={isExpensiveModel(model) ? "Expensive model (last recorded by the harness)" : "Model last recorded by the harness"}><Icon name="model" size={13} />{model}</span></>}
+      {model && <><Sep /><span className={`toolbar-model ${isExpensiveModel(model) ? "expensive" : ""}`} title={isExpensiveModel(model) ? "Expensive model (last recorded by the harness)" : "Model last recorded by the harness"}><Icon name="model" size={14} />{model}</span></>}
       {hasUsage(usage?.total) && <UsageChips usage={usage!} />}
       <span className={`terminal-status ${!session.runningHere && session.status === "failed" ? "status-warn-text" : ""}`}>{session.runningHere ? "" : statusLabel(session.status) || "Not started"}</span>
       {!session.runningHere && (session.hasResumeId && session.resumeNote ? <button className="secondary-button terminal-action" disabled={busy} title={session.resumeNote} onClick={() => onLaunch(session, "fresh")}>Start fresh</button> : <button className="primary-button terminal-action" disabled={busy} onClick={() => onLaunch(session, session.hasResumeId ? "restore" : "start")}>{session.hasResumeId ? "Resume" : "Start"}</button>)}

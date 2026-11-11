@@ -4,7 +4,7 @@ import { Icon } from "./icons";
 import { IdeOption, readIdePick, writeIdePick } from "./idePick";
 
 function IdeGlyph({ option }: { option: IdeOption }) {
-  return option.icon ? <img className="ide-icon" src={option.icon} alt="" width={16} height={16} /> : <Icon name="code" size={14} />;
+  return option.icon ? <img className="ide-icon" src={option.icon} alt="" width={16} height={16} /> : <Icon name="code" size={16} />;
 }
 
 // Split button: the main part opens the project in the last-used IDE, the caret lists the others.
@@ -49,7 +49,7 @@ export function IdeButton({ session, onError, onNotice }: { session: Session; on
   };
   return <span className="ide-button" ref={group}>
     <button className="text-button icon-button ide-main" title={`Open the project in ${current.name}`} aria-label={`Open the project in ${current.name}`} onClick={() => launch(current)}><IdeGlyph option={current} /></button>
-    {options.length > 1 && <button className="text-button icon-button ide-caret" title="Choose an IDE" aria-label="Choose an IDE" aria-haspopup="menu" aria-expanded={open} onClick={() => { const rect = group.current?.getBoundingClientRect(); if (rect) setMenuAt({ left: Math.min(rect.left, window.innerWidth - 220), top: rect.bottom + 4 }); setOpen(!open); }}><Icon name="chevron" size={10} /></button>}
+    {options.length > 1 && <button className="text-button icon-button ide-caret" title="Choose an IDE" aria-label="Choose an IDE" aria-haspopup="menu" aria-expanded={open} onClick={() => { const rect = group.current?.getBoundingClientRect(); if (rect) setMenuAt({ left: Math.min(rect.left, window.innerWidth - 220), top: rect.bottom + 4 }); setOpen(!open); }}><Icon name="chevron" size={12} /></button>}
     {open && <div className="ide-menu" role="menu" style={menuAt}>
       {options.map((option) => <button key={option.id} role="menuitemradio" aria-checked={option.id === current.id} className="context-menu-item ide-menu-item" onClick={() => launch(option)}><IdeGlyph option={option} />{option.name}</button>)}
     </div>}
