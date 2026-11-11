@@ -401,6 +401,7 @@ function WSLRow({ actions }: { actions: ToolActions }) {
           <select aria-label="Distribution to install" value={choice} onChange={(event) => setChoice(event.target.value)}>{available.map((name) => <option key={name} value={name}>{name}</option>)}</select>
           <button className="secondary-button tool-action" disabled={actions.wslBusy || !choice} title={`Run wsl --install -d ${choice} (asks first)`} onClick={() => actions.onWSLChange("distro", choice)}>Install</button>
         </> : <span className="muted">Every offered distribution is already installed.</span>)}
+        {wsl.installed && online !== null && <button className="secondary-button tool-action" disabled={actions.wslBusy} onClick={() => setOnline(null)}>Cancel</button>}
       </div>
     </div>
   </div>;

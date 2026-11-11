@@ -1702,6 +1702,56 @@ h3 {
   flex: 0 0 auto;
 }
 
+.ide-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.ide-main {
+  width: 24px;
+  height: 22px;
+  padding: 0;
+}
+
+.ide-caret {
+  width: 14px;
+  height: 22px;
+  padding: 0;
+  margin-left: -2px;
+}
+
+.ide-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+.ide-menu {
+  position: fixed;
+  z-index: 30;
+  min-width: 190px;
+  padding: 5px;
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius-8);
+  background: var(--bg-raised);
+  box-shadow: 0 12px 36px var(--shadow-soft);
+}
+
+.ide-menu .ide-menu-item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.ide-menu .ide-menu-item[aria-checked="true"] {
+  background: var(--bg-control-hover);
+}
+
 .icon-button[aria-pressed="true"] {
   background: var(--bg-control-hover);
   color: var(--text-2);
@@ -2672,6 +2722,17 @@ h3 {
   height: 18px;
 }
 
+.modal .distro-field {
+  flex: 1 1 140px;
+  width: auto;
+  height: 34px;
+  padding: 0 10px;
+}
+
+.modal.session-modal {
+  max-height: calc(100vh - 40px);
+}
+
 .modal input,
 .modal select,
 .modal textarea {
@@ -2683,6 +2744,17 @@ h3 {
   background: var(--bg-inset);
   color: var(--text-2);
   font-size: var(--fs-12);
+}
+
+.modal label.check-option {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.modal .check-option input {
+  width: auto;
+  flex: 0 0 auto;
+  padding: 0;
 }
 
 .modal textarea {

@@ -197,6 +197,9 @@ never for body text or inside buttons.
   shows a trailing `+` or `$?`, and tooltips say "estimate".
 - **Errors surface:** failures show a banner or notice; nothing is swallowed
   silently.
+- **IDE split button:** top bar, after the path. The main part opens the last
+  IDE; the caret opens a `position: fixed` menu (the toolbar clips overflow).
+  Icons come from the installed executable, not bundled assets.
 
 ## Changing the look
 

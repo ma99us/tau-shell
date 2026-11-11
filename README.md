@@ -72,6 +72,11 @@ TauShell -> ConPTY -> wsl.exe -> AI harness inside a WSL2 distro (experimental)
   name in place of the branch, Sync publishes the new branch, and deleting the
   session can remove the folder and branch (blocked by unsaved work). Lightly
   verified; see [git worktrees](docs/v2/27-git-worktrees.md).
+- **Open in your IDE.** The top bar shows a split button when the project
+  folder has IDE markers (`.idea`, `.sln`, ...) and that IDE is installed;
+  VS Code and Cursor are offered whenever installed. Icons come from the
+  installed IDE. Detection was verified for VS Code, IntelliJ IDEA, Android
+  Studio and Visual Studio; see [IDE integration](docs/v3/features/12-ide-integration.md).
 - **Know which agent needs you.** State indicators, taskbar flash and Windows
   toasts flag input requests and completed turns. Session colors tint tabs,
   sidebar rows, the top bar and terminal edge to reduce wrong-session mistakes.

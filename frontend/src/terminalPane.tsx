@@ -6,6 +6,7 @@ import { app, GitStatus, HarnessWidgets, Session } from "./bridge";
 import { gitParts, gitTooltip } from "./gitChip";
 import { parseOsc52 } from "./osc52";
 import { Icon } from "./icons";
+import { IdeButton } from "./ideButton";
 import { theme } from "./theme/theme";
 import { combineSignal, composeInjection, controlSendPlan, freshLogState, planSend, promptKind, readDraft, readHarnessSignal } from "./attention";
 import { SessionUsage, formatTokens, formatUSD, hasUsage, usageTooltip } from "./usage";
@@ -392,7 +393,7 @@ export function TerminalPane({ session, visible, busy, harness, onSend, onNotice
   return <div className="terminal-view" style={sessionColorStyle(session.color)} data-colored={session.color ? "" : undefined}>
     <div className="terminal-toolbar">
       <span className={`status-dot ${session.runningHere ? "online" : ""}`} /><span className="harness-tag"><HarnessIcon tool={session.tool} />{session.tool}</span>{harness && onSend && <InterruptButton interrupt={onInterrupt} />}
-      <Sep /><span className="toolbar-path-group"><span className="toolbar-path">{session.workingDir}</span><button className="text-button icon-button path-reveal" title="Open the project folder in File Explorer" aria-label="Open the project folder in File Explorer" onClick={() => app().RevealProjectRoot(session.id).catch(onError)}><Icon name="reveal" size={14} /></button></span>
+      <Sep /><span className="toolbar-path-group"><span className="toolbar-path">{session.workingDir}</span><button className="text-button icon-button path-reveal" title="Open the project folder in File Explorer" aria-label="Open the project folder in File Explorer" onClick={() => app().RevealProjectRoot(session.id).catch(onError)}><Icon name="reveal" size={14} /></button><IdeButton session={session} onError={onError} onNotice={onNotice} /></span>
       {git?.branch && <><Sep /><GitChip session={session} git={git} onChange={setGit} onError={onError} onNotice={onNotice} /></>}
       {model && <><Sep /><span className={`toolbar-model ${isExpensiveModel(model) ? "expensive" : ""}`} title={isExpensiveModel(model) ? "Expensive model (last recorded by the harness)" : "Model last recorded by the harness"}><Icon name="model" size={13} />{model}</span></>}
       {hasUsage(usage?.total) && <UsageChips usage={usage!} />}

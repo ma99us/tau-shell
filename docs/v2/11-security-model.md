@@ -291,6 +291,17 @@ logged. Markdown is parsed into plain UI nodes: no HTML is passed through,
 links are shown as text and never followed, and images referenced from
 Markdown are not loaded.
 
+## IDE launcher
+
+`internal/ide` lets the top bar open the session working folder in an IDE. The
+frontend sends only the session ID and an IDE ID from a fixed catalog. The
+host resolves the executable itself (known install paths, uninstall entries,
+PATH) and the folder from the session, then starts the process with discrete
+argv values and no shell. Nothing from YAML, the terminal or the UI is used as
+a path or argument. Icons are read from the resolved executable and returned as
+PNG `data:` URLs. WSL sessions are limited to VS Code and Insiders
+(`--remote wsl+<distro>`) and their folders are not scanned.
+
 ## Phone server (experimental, off by default)
 
 `mobile.enabled` in `~/.tau_shell/config.yaml` (the Home Phone switch opens or

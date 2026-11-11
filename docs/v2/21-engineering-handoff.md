@@ -209,6 +209,12 @@ Open gaps are tracked only in [`docs/wsl/06-backlog.md`](../wsl/06-backlog.md)
 - TUI-specific Bubble Tea, ultraviolet, and x/vt modules were removed by
   `go mod tidy`. The generated, gitignored `cmd/taushell/frontend/dist/`
   directory is required by Go's `embed` directive; build `frontend/` first.
+- IDE launcher (`internal/ide`, top-bar split button): detection and icon
+  extraction were verified live for VS Code, IntelliJ IDEA, Android Studio and
+  Visual Studio, and the button and menu were seen in a real window. Launching
+  each IDE, Cursor, Eclipse (no confirmed folder-import command line), the
+  other JetBrains products and the WSL path are not verified. See
+  [IDE integration](../v3/features/12-ide-integration.md).
 
 ## Distribution
 

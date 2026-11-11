@@ -345,6 +345,8 @@ type WailsApp = {
   ResumeConversation(sessionId: string, harnessSessionId: string, columns: number, rows: number): Promise<Session>;
   RevealProjectFile(sessionId: string, rel: string): Promise<void>;
   RevealProjectRoot(sessionId: string): Promise<void>;
+  ListIDEs(sessionId: string): Promise<{ id: string; name: string; icon: string; matched: boolean }[] | null>;
+  OpenInIDE(sessionId: string, ideId: string): Promise<string>;
   OpenProjectFile(sessionId: string, rel: string): Promise<void>;
   ProjectFullPath(sessionId: string, rel: string): Promise<string>;
   GetGitPathInfo(sessionId: string, rel: string): Promise<GitPathInfo>;

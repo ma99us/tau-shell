@@ -168,7 +168,7 @@ export function CreateSession({ recentFolders, wsl, powershellUsable = true, clo
       onCreated(session);
     } catch (err) { fail(err); } finally { setSaving(false); }
   };
-  return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="modal">
+  return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="modal session-modal">
     <div className="modal-heading"><h2>{clone ? `Clone ${clone.source.name}` : "Start new AI session"}</h2><button className="icon-button" onClick={onClose}>x</button></div>
     <form onSubmit={(event) => void submit(event)}>
       {clone
@@ -205,9 +205,9 @@ export function CreateSession({ recentFolders, wsl, powershellUsable = true, clo
         <div className="harness-picker runtime-picker" role="radiogroup" aria-labelledby="runtime-label">
           <button type="button" role="radio" aria-checked={!inWSL} disabled={!!clone} className={`harness-option runtime-option ${!inWSL ? "selected" : ""}`} onClick={() => chooseRuntime("")}><RuntimeIcon kind="powershell" /><span className="harness-name">PowerShell</span></button>
           <button type="button" role="radio" aria-checked={inWSL} disabled={!!clone} className={`harness-option runtime-option ${inWSL ? "selected" : ""}`} onClick={() => chooseRuntime("wsl")}><RuntimeIcon kind="wsl" /><span className="harness-name">WSL</span></button>
+          {inWSL && clone && <input className="distro-field" aria-label="WSL distro" title="WSL distro (inherited, cannot be changed)" readOnly value={distro} />}
+          {inWSL && !clone && <select className="distro-field" aria-label="WSL distro" title="WSL distro" value={distro} onChange={(event) => setDistro(event.target.value)}>{distros.map((item) => <option key={item.name} value={item.name}>{item.name}{item.default ? " (default)" : ""}</option>)}</select>}
         </div>
-        {inWSL && clone && <label>WSL distro<div className="folder-row"><input readOnly value={distro} /></div></label>}
-        {inWSL && !clone && <label>WSL distro<select value={distro} onChange={(event) => setDistro(event.target.value)}>{distros.map((item) => <option key={item.name} value={item.name}>{item.name}{item.default ? " (default)" : ""}</option>)}</select></label>}
       </div>}
       <label>Launch arguments <span className="optional">(editable template, one per line)</span><textarea rows={3} value={launchArgs} onChange={(event) => setLaunchArgs(event.target.value)} placeholder="--yolo" /></label>
       <div className="launch-preview">

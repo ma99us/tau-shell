@@ -149,7 +149,7 @@ var specs = []Spec{
 		VersionArgs:  []string{"--version"},
 		Minimum:      "22.0.0",
 		TestedFrom:   "26.13.0",
-		TestedBefore: "26.13.1",
+		TestedBefore: "27.0.0",
 		Companions: []CompanionSpec{{
 			Name:        "npm",
 			Executable:  "npm.cmd",
@@ -158,11 +158,14 @@ var specs = []Spec{
 		Install: InstallSource{ManagedStrategy: ManagedNodeLTS, VendorURL: "https://nodejs.org/en/download"},
 	},
 	{
-		ID:          Git,
-		Name:        "Git for Windows",
-		Executable:  "git.exe",
-		VersionArgs: []string{"--version"},
-		Install:     InstallSource{ManagedStrategy: ManagedPortableGit, VendorURL: "https://gitforwindows.org/"},
+		ID:           Git,
+		Name:         "Git for Windows",
+		Executable:   "git.exe",
+		VersionArgs:  []string{"--version"},
+		Minimum:      "2.25.0",
+		TestedFrom:   "2.50.0",
+		TestedBefore: "3.0.0",
+		Install:      InstallSource{ManagedStrategy: ManagedPortableGit, VendorURL: "https://gitforwindows.org/"},
 	},
 }
 

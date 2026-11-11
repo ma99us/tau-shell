@@ -119,7 +119,7 @@ func TestDetectGitWithoutHarnessCapabilities(t *testing.T) {
 	status := Detect(context.Background(), fakeEnvironment(`C:\Git\cmd\git.exe`, map[string]string{
 		"--version": "git version 2.56.0.windows.4",
 	}, nil), mustSpec(t, Git))
-	if !status.Usable() || status.Version != "2.56.0" || status.Support != SupportUnknown || len(status.Capabilities) != 0 {
+	if !status.Usable() || status.Version != "2.56.0" || status.Support != SupportTested || len(status.Capabilities) != 0 {
 		t.Fatalf("Git status = %+v", status)
 	}
 }
@@ -176,7 +176,8 @@ func TestClassify(t *testing.T) {
 		{claude, "0.1.0", SupportUntested},
 		{node, "20.20.2", SupportBelowMinimum},
 		{node, "26.13.0", SupportTested},
-		{node, "26.13.1", SupportUntested},
+		{node, "26.13.1", SupportTested},
+		{node, "27.0.0", SupportUntested},
 		{node, "22.23.4", SupportUntested},
 	}
 	for _, test := range tests {
