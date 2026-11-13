@@ -47,6 +47,7 @@ class MainActivity : Activity(), SessionActions {
     private val cards = LinkedHashMap<String, SessionCard>()
     private var list: LinearLayout? = null
     private var banner: TextView? = null
+    private var repairButton: View? = null
     private var empty: TextView? = null
     private var refreshing = false
     private var pairingInFlight = false
@@ -236,6 +237,18 @@ class MainActivity : Activity(), SessionActions {
         session = null
         openId = null
         val gear = iconButton(R.drawable.ic_gear, "Settings") { showSettings() }
+        val viewToggle = iconButton(R.drawable.ic_sessions_active, "") { }
+        fun styleToggle() {
+            viewToggle.setImageResource(if (store.showStopped) R.drawable.ic_sessions_all else R.drawable.ic_sessions_active)
+            viewToggle.contentDescription = if (store.showStopped) "Showing all sessions. Show only active" else "Showing active sessions. Show all"
+            viewToggle.tooltipText = viewToggle.contentDescription
+        }
+        styleToggle()
+        viewToggle.setOnClickListener {
+            store.showStopped = !store.showStopped
+            styleToggle()
+            apply(Result.Ok(latest))
+        }
         val header = linear(this).apply {
             setPadding(dp(18), dp(16), dp(18), dp(8))
             addView(brand(gear))
@@ -246,7 +259,16 @@ class MainActivity : Activity(), SessionActions {
                 visibility = View.GONE
             }.also { banner = it }
             addView(bannerView, lp().apply { topMargin = dp(14) })
-            addView(eyebrow("Sessions"), lp().apply { topMargin = dp(14) })
+            addView(button("Forget this PC and pair again", false) { forgetPc() }.apply {
+                setTextColor(Theme.dangerText)
+                background = shape(Theme.dangerBg, 8, Theme.failed)
+                visibility = View.GONE
+            }.also { repairButton = it }, lp().apply { topMargin = dp(8) })
+            addView(LinearLayout(this@MainActivity).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                addView(eyebrow("Sessions"), lp(0, weight = 1f))
+                addView(viewToggle)
+            }, lp().apply { topMargin = dp(10) })
         }
         val content = linear(this).apply { setPadding(dp(18), dp(4), dp(18), dp(24)) }
         val container = linear(this).also { list = it }
@@ -255,11 +277,34 @@ class MainActivity : Activity(), SessionActions {
         content.addView(emptyView, lp().apply { topMargin = dp(4) })
         val page = linear(this).apply {
             addView(header, lp())
-            addView(ScrollView(this@MainActivity).apply { addView(content) }, lp(height = 0, weight = 1f))
+            addView(ScrollView(this@MainActivity).apply {
+                addView(content)
+                pullToRefresh(this)
+            }, lp(height = 0, weight = 1f))
         }
         swap(page, Screen.HOME)
         ui.removeCallbacks(poll)
         ui.post(poll)
+    }
+
+    /** Dragging down from the top of the list asks for an immediate refresh. */
+    @android.annotation.SuppressLint("ClickableViewAccessibility")
+    private fun pullToRefresh(scroll: ScrollView) {
+        var startY = -1f
+        scroll.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> startY = if (scroll.scrollY == 0) event.rawY else -1f
+                android.view.MotionEvent.ACTION_UP -> {
+                    if (startY >= 0 && scroll.scrollY == 0 && event.rawY - startY > dp(90)) {
+                        Toast.makeText(this, "Refreshing…", Toast.LENGTH_SHORT).show()
+                        refresh()
+                    }
+                    startY = -1f
+                }
+                android.view.MotionEvent.ACTION_CANCEL -> startY = -1f
+            }
+            false
+        }
     }
 
     private fun showSession(item: SessionItem) {
@@ -306,15 +351,18 @@ class MainActivity : Activity(), SessionActions {
     private fun apply(outcome: Result<List<SessionItem>>) {
         when (outcome) {
             is Result.Fail -> {
-                banner?.text = outcome.message + if (outcome.code == "unauthorized" || outcome.code == "pin_mismatch") "\nOpen Settings to forget this PC and pair again." else ""
+                banner?.text = outcome.message
                 banner?.visibility = View.VISIBLE
+                repairButton?.visibility = if (outcome.code == "unauthorized" || outcome.code == "pin_mismatch") View.VISIBLE else View.GONE
                 if (cards.isEmpty()) empty?.text = "No connection."
             }
             is Result.Ok -> {
                 banner?.visibility = View.GONE
-                val items = outcome.value
-                items.forEach { StateClock.observe(it) }
-                latest = items
+                repairButton?.visibility = View.GONE
+                val all = outcome.value
+                all.forEach { StateClock.observe(it) }
+                latest = all
+                val items = if (store.showStopped) all else all.filter { it.running }
                 val container = list ?: return
                 (cards.keys - items.map { it.id }.toSet()).forEach { id -> cards.remove(id)?.let { container.removeView(it) } }
                 items.forEachIndexed { index, item ->
@@ -328,7 +376,11 @@ class MainActivity : Activity(), SessionActions {
                     }
                 }
                 pendingOpen?.let { id -> items.firstOrNull { it.id == id }?.let { showSession(it); return } }
-                empty?.text = if (items.isEmpty()) "No sessions on this PC yet." else ""
+                empty?.text = when {
+                    items.isNotEmpty() -> ""
+                    all.isEmpty() -> "No sessions on this PC yet."
+                    else -> "No open sessions. Use the list button to show all."
+                }
                 empty?.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
             }
         }
@@ -365,6 +417,12 @@ class MainActivity : Activity(), SessionActions {
             ui.post { done(outcome) }
         }
     }
+
+    override fun scrollHoldMs(): Long = store.scrollHoldSeconds * 1000L
+
+    override fun screenTextSp(): Int = store.screenTextSp
+
+    override fun haptics(): Boolean = store.haptics
 
     override fun quickReplies(): List<String> = (store.presets + pcPresets).distinct()
 
@@ -425,6 +483,36 @@ class MainActivity : Activity(), SessionActions {
             text("Keeps a quiet notification running and checks every few seconds. Turn on battery “Unrestricted” for TauShell Phone if alerts stop.", 12f, Theme.text10),
             lp().apply { topMargin = dp(4) },
         )
+
+        content.addView(eyebrow("Session text"), lp().apply { topMargin = dp(24) })
+        content.addView(text("Seconds without touching the text before it resumes following new output. Updates are paused while you scroll.", 12f, Theme.text10), lp().apply { topMargin = dp(8) })
+        val holdField = field("Seconds").apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            setText(store.scrollHoldSeconds.toString())
+        }
+        content.addView(holdField, lp().apply { topMargin = dp(8) })
+        content.addView(button("Save seconds", false) {
+            store.scrollHoldSeconds = holdField.text.toString().trim().toIntOrNull() ?: store.scrollHoldSeconds
+            holdField.setText(store.scrollHoldSeconds.toString())
+        }, lp().apply { topMargin = dp(8) })
+
+        content.addView(text("Terminal text size in sp (8 to 24).", 12f, Theme.text10), lp().apply { topMargin = dp(12) })
+        val sizeField = field("Text size").apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            setText(store.screenTextSp.toString())
+        }
+        content.addView(sizeField, lp().apply { topMargin = dp(8) })
+        content.addView(button("Save text size", false) {
+            store.screenTextSp = sizeField.text.toString().trim().toIntOrNull() ?: store.screenTextSp
+            sizeField.setText(store.screenTextSp.toString())
+        }, lp().apply { topMargin = dp(8) })
+        val haptics = Switch(this).apply {
+            text = "Vibrate when a prompt is sent or refused"
+            setTextColor(Theme.text4)
+            isChecked = store.haptics
+            setOnCheckedChangeListener { _, checked -> store.haptics = checked }
+        }
+        content.addView(haptics, lp().apply { topMargin = dp(16) })
 
         content.addView(eyebrow("Quick replies"), lp().apply { topMargin = dp(24) })
         val presetField = field("One reply per line", multiline = true).apply { setText(store.presets.joinToString("\n")); minLines = 4 }

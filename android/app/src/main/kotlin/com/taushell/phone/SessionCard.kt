@@ -13,6 +13,9 @@ interface SessionActions {
     fun start(item: SessionItem, mode: String, done: (Result<Unit>) -> Unit)
     fun screen(item: SessionItem, done: (Result<List<String>>) -> Unit)
     fun quickReplies(): List<String>
+    fun scrollHoldMs(): Long
+    fun screenTextSp(): Int
+    fun haptics(): Boolean
     fun sessionPresets(item: SessionItem, done: (Result<List<PromptPreset>>) -> Unit)
     fun promptHistory(id: String): List<String>
     fun rememberPrompt(id: String, text: String)

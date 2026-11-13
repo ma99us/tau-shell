@@ -89,6 +89,24 @@ class Store(context: Context) {
         get() = prefs.getStringSet("muted", emptySet()) ?: emptySet()
         set(value) = prefs.edit().putStringSet("muted", value).apply()
 
+    var showStopped: Boolean
+        get() = prefs.getBoolean("showStopped", false)
+        set(value) = prefs.edit().putBoolean("showStopped", value).apply()
+
+    /** Seconds without touching the text before held updates resume. */
+    var scrollHoldSeconds: Int
+        get() = prefs.getInt("scrollHoldSeconds", 15).coerceIn(1, 600)
+        set(value) = prefs.edit().putInt("scrollHoldSeconds", value.coerceIn(1, 600)).apply()
+
+    /** Terminal text size in sp. */
+    var screenTextSp: Int
+        get() = prefs.getInt("screenTextSp", 11).coerceIn(8, 24)
+        set(value) = prefs.edit().putInt("screenTextSp", value.coerceIn(8, 24)).apply()
+
+    var haptics: Boolean
+        get() = prefs.getBoolean("haptics", false)
+        set(value) = prefs.edit().putBoolean("haptics", value).apply()
+
     var alerts: Boolean
         get() = prefs.getBoolean("alerts", false)
         set(value) = prefs.edit().putBoolean("alerts", value).apply()

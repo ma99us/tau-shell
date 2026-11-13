@@ -3,6 +3,7 @@ package com.taushell.phone
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -91,10 +92,19 @@ class SessionScreen(
 
     private var shownPromptHistory: List<String>? = null
     private var screenBusy = false
-    private var stickToLatest = true
     private var applyingScreenUpdate = false
     private var wrapEnabled = false
     private var busy = false
+    private var lastUserScroll = 0L
+    private var pendingText: String? = null
+    private val resumeUpdates = Runnable { resumeNow() }
+    private val pausedBar = context.text("Updates paused while you scroll. Tap to show the latest.", 12f, Theme.warn, true).apply {
+        gravity = Gravity.CENTER
+        setPadding(context.dp(12), context.dp(6), context.dp(12), context.dp(6))
+        setBackgroundColor(Theme.bgPanel)
+        visibility = View.GONE
+        setOnClickListener { resumeNow() }
+    }
 
     init {
         orientation = VERTICAL
@@ -131,12 +141,35 @@ class SessionScreen(
         vertical.addView(horizontal, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         vertical.setBackgroundColor(Theme.bgApp)
         vertical.setOnScrollChangeListener { _, _, _, _, _ ->
-            if (!applyingScreenUpdate) stickToLatest = isAtBottomLeft()
+            if (SystemClock.uptimeMillis() >= noPauseUntil) lastScrollChange = SystemClock.uptimeMillis()
+            if (pullStartY >= 0) pullStartY = -1f
+            if (!applyingScreenUpdate) noteUserScroll()
         }
-        horizontal.setOnScrollChangeListener { _, _, _, _, _ ->
-            if (!applyingScreenUpdate) stickToLatest = isAtBottomLeft()
+        val touchTracker = View.OnTouchListener { _, event ->
+            noteUserScroll()
+            when (event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    val settled = SystemClock.uptimeMillis() - lastScrollChange > 600
+                    pullTop = vertical.scrollY == 0
+                    pullBottom = !vertical.canScrollVertically(1)
+                    pullStartY = if (settled && (pullTop || pullBottom)) event.rawY else -1f
+                }
+                android.view.MotionEvent.ACTION_UP -> {
+                    val drag = event.rawY - pullStartY
+                    val pulled = (pullTop && vertical.scrollY == 0 && drag > context.dp(120)) || (pullBottom && !vertical.canScrollVertically(1) && -drag > context.dp(120))
+                    if (pullStartY >= 0 && pulled) pullRefresh()
+                    pullStartY = -1f
+                }
+                android.view.MotionEvent.ACTION_CANCEL -> pullStartY = -1f
+            }
+            false
         }
-        addView(vertical, lp(height = 0, weight = 1f))
+        vertical.setOnTouchListener(touchTracker)
+        horizontal.setOnTouchListener(touchTracker)
+        val textArea = android.widget.FrameLayout(context)
+        textArea.addView(vertical, android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        textArea.addView(pausedBar, android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP))
+        addView(textArea, lp(height = 0, weight = 1f))
         startRow.addView(context.button("Resume", true) { startSession("restore") }, lp(0, weight = 1f))
         startRow.addView(context.button("Start fresh", false) { startSession("fresh") }, lp(0, weight = 1f).apply { leftMargin = context.dp(8) })
         promptRow.gravity = Gravity.BOTTOM
@@ -183,6 +216,7 @@ class SessionScreen(
         styleIcon(context, icon, next)
         noteBlock.bind(next)
         renderMute()
+        screenView.textSize = actions.screenTextSp().toFloat()
         render()
         if (first || next.running) fetchScreen()
     }
@@ -241,25 +275,61 @@ class SessionScreen(
                 is Result.Ok -> outcome.value.joinToString("\n").ifEmpty { "(the terminal is empty)" }
                 is Result.Fail -> if (outcome.code == "disabled") "Screen sharing is off on the PC (mobile.screen: false)." else outcome.message
             }
-            if (text == screenView.text.toString()) return@screen
-            val pinned = stickToLatest
-            val previousY = vertical.scrollY
-            val previousX = horizontal.scrollX
-            applyingScreenUpdate = true
-            screenView.text = text
-            vertical.post {
-                if (pinned) {
-                    horizontal.scrollTo(0, 0)
-                    vertical.scrollTo(0, vertical.getChildAt(0).height)
-                } else {
-                    horizontal.scrollTo(previousX, 0)
-                    vertical.scrollTo(0, previousY)
-                }
-                applyingScreenUpdate = false
-            }
+            if (updatesHeld()) pendingText = text else applyScreenText(text)
         }
     }
 
+    private fun updatesHeld() = lastUserScroll != 0L && SystemClock.uptimeMillis() - lastUserScroll < actions.scrollHoldMs()
+
+    /** Any touch or scroll by the user freezes the text for HoldMs so it can be read and selected without it moving. */
+    private fun noteUserScroll() {
+        if (SystemClock.uptimeMillis() < noPauseUntil) return
+        lastUserScroll = SystemClock.uptimeMillis()
+        pausedBar.visibility = View.VISIBLE
+        handler.removeCallbacks(resumeUpdates)
+        handler.postDelayed(resumeUpdates, actions.scrollHoldMs())
+    }
+
+    private var pullStartY = -1f
+    private var pullTop = false
+    private var pullBottom = false
+    private var lastScrollChange = 0L
+    private var noPauseUntil = 0L
+
+    /** Dragging down from the top ends any pause and fetches the latest text now. */
+    private fun pullRefresh() {
+        noPauseUntil = SystemClock.uptimeMillis() + 1200
+        pendingText = null
+        resumeNow()
+        android.widget.Toast.makeText(context, "Refreshing…", android.widget.Toast.LENGTH_SHORT).show()
+        fetchScreen()
+    }
+
+    private fun resumeNow() {
+        handler.removeCallbacks(resumeUpdates)
+        lastUserScroll = 0L
+        pausedBar.visibility = View.GONE
+        val latest = pendingText
+        if (latest != null) applyScreenText(latest) else scrollToLatest()
+    }
+
+    /** Accepted updates always follow the newest text. */
+    private fun applyScreenText(text: String) {
+        pendingText = null
+        if (text == screenView.text.toString()) return
+        applyingScreenUpdate = true
+        screenView.text = text
+        scrollToLatest()
+    }
+
+    private fun scrollToLatest() {
+        applyingScreenUpdate = true
+        vertical.post {
+            horizontal.scrollTo(0, 0)
+            vertical.scrollTo(0, vertical.getChildAt(0).height)
+            applyingScreenUpdate = false
+        }
+    }
     private fun submit() {
         val text = prompt.text.toString().trim()
         if (text.isNotEmpty()) prompt.dismissDropDown()
@@ -325,13 +395,26 @@ class SessionScreen(
                         promptHistoryButton.visibility = if (shownPromptHistory.isNullOrEmpty()) View.GONE else View.VISIBLE
                     }
                     if (clear) prompt.setText("")
-                    show(if (insertOnly) "Typed into the session. Press Enter in the session to submit." else "Sent.", Theme.ok)
+                    val sent = if (insertOnly) "Typed into the session. Press Enter in the session to submit." else "Sent."
+                    show(sent, Theme.ok)
+                    feedback(sent, true)
                     (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(prompt.windowToken, 0)
                 }
-                is Result.Fail -> show(outcome.message, if (outcome.code == "refused") Theme.input else Theme.failed)
+                is Result.Fail -> {
+                    show(outcome.message, if (outcome.code == "refused") Theme.input else Theme.failed)
+                    feedback(outcome.message, false)
+                }
             }
         }
         actions.send(item, text, insertOnly) { outcome -> finish(outcome) }
+    }
+
+    /** A longer-lived toast so the result is not missed, plus an optional vibration when the user turned it on. */
+    private fun feedback(message: String, ok: Boolean) {
+        android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
+        if (actions.haptics()) {
+            performHapticFeedback(if (ok) android.view.HapticFeedbackConstants.CONFIRM else android.view.HapticFeedbackConstants.REJECT)
+        }
     }
 
     private fun setWrap(enabled: Boolean) {
@@ -359,12 +442,6 @@ class SessionScreen(
         }
     }
 
-    private fun isAtBottomLeft(): Boolean {
-        val child = vertical.getChildAt(0) ?: return true
-        val atBottom = child.bottom - (vertical.scrollY + vertical.height) <= context.dp(4)
-        val atLeft = wrapEnabled || horizontal.scrollX <= context.dp(4)
-        return atBottom && atLeft
-    }
 
     private fun startSession(mode: String) {
         if (busy) return
