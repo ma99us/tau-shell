@@ -13,6 +13,7 @@ import { SessionUsage, formatTokens, formatUSD, hasUsage, usageTooltip } from ".
 import { HarnessIcon } from "./harnessIcons";
 import { HarnessToolbar, InterruptButton, sendNotice } from "./harnessActions";
 import type { QueueHooks } from "./promptQueue";
+import { enqueuePrompt } from "./promptQueue";
 import { FileDrawer } from "./fileDrawer";
 import { ConversationsDrawer } from "./conversationsDrawer";
 import { reportFrontendFailure, isStoppedSessionError } from "./errors";
@@ -71,7 +72,13 @@ const isEmptyClipboardError = (error: unknown) => /operation completed successfu
 // Windows Terminal convention: Ctrl+C copies only when text is selected (otherwise it is ^C
 // for the harness); Ctrl+V and Ctrl+Shift+C/V always paste/copy. Uses the native clipboard
 // because WebView2's navigator.clipboard needs a permission prompt.
-function handleClipboardKey(event: globalThis.KeyboardEvent, terminal: Terminal, onError: (error: unknown) => void): boolean {
+function handleClipboardKey(event: globalThis.KeyboardEvent, terminal: Terminal, onError: (error: unknown) => void, onQueueDraft: () => boolean): boolean {
+  // Ctrl+Enter moves the typed prompt into the queue instead of sending it; with nothing typed it passes through.
+  if (event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey && event.key === "Enter") {
+    if (!onQueueDraft()) return true;
+    event.preventDefault();
+    return false;
+  }
   // App shortcuts (tab switching, command palette) are handled at window level; the terminal must not consume them.
   if (event.ctrlKey && !event.altKey && !event.metaKey &&
     (event.key === "Tab" || (event.shiftKey && event.key.toLowerCase() === "p") || (!event.shiftKey && /^[1-9]$/.test(event.key)))) return false;
@@ -93,6 +100,23 @@ function handleClipboardKey(event: globalThis.KeyboardEvent, terminal: Terminal,
     void window.runtime.ClipboardGetText().then((text) => { if (text) terminal.paste(text); }).catch((error) => { if (!isEmptyClipboardError(error)) onError(error); });
   }
   return false;
+}
+
+// Moves the text typed in the harness input into the session's prompt queue and clears the input.
+// Returns false when there is nothing to move, so the key passes through to the harness.
+export function queueTypedPrompt(session: Session, notify: (message: string) => void, running = session.runningHere): boolean {
+  const terminal = terminalInstances.get(session.id);
+  if (!terminal || !running) return false;
+  const draft = readDraft(terminal).trim();
+  if (!draft) return false;
+  enqueuePrompt(session.id, draft);
+  // Backspaces work in every text input; extra ones on an empty input do nothing.
+  terminal.input("\x7f".repeat(draft.length + 2), true);
+  notify("Moved the typed prompt to Queued Prompts.");
+  window.setTimeout(() => {
+    if (readDraft(terminal).trim()) notify("Queued the prompt, but part of it is still in the input line; clear it before the queue sends.");
+  }, 600);
+  return true;
 }
 
 // Harness widgets type into the terminal through xterm so input accounting matches real typing.
@@ -317,7 +341,7 @@ export function TerminalPane({ session, visible, busy, harness, onSend, onNotice
       terminal.onTitleChange((title) => terminalTitles.set(session.id, title));
       terminal.onData((data) => { lastInputAt.set(session.id, Date.now()); void app().WriteTerminal(session.id, data).catch((err) => onError(err)); });
       terminal.onBinary((data) => { void app().WriteTerminalBinary(session.id, btoa(data)).catch((err) => onError(err)); });
-      terminal.attachCustomKeyEventHandler((event) => handleClipboardKey(event, terminal!, onError));
+      terminal.attachCustomKeyEventHandler((event) => handleClipboardKey(event, terminal!, onError, () => queueTypedPrompt(session, (message) => onNotice?.(message), runningRef.current)));
       // Harnesses with their own mouse selection (Copilot CLI) copy through OSC 52.
       terminal.parser.registerOscHandler(52, (payload) => {
         const text = parseOsc52(payload);

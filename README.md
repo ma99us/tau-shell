@@ -43,6 +43,8 @@ TauShell -> ConPTY -> wsl.exe -> AI harness inside a WSL2 distro (experimental)
   has saved prompts and a prompt queue. Add tasks while an agent works.
   TauShell sends one prompt at a time when a supported harness is confirmed
   idle. It does not answer permission prompts or replace unsent text.
+  Press Ctrl+Enter in the terminal to move the text you typed into the queue
+  instead of sending it (not yet verified against each harness).
   Queued prompts are saved locally and survive restarts; after a restart the queue stays paused until you press Send in the queue popup.
 - **Reusable skills from ai-cookbook.** Start with a bundled
   [ai-cookbook](https://github.com/mgerdov-igt/ai-cookbook) skill library,
