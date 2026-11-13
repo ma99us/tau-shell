@@ -155,8 +155,9 @@ gh attestation verify .\TauShell-<version>-windows-x64.zip --repo ma99us/tau-she
    ```
 
 2. Creating a session in the app starts it immediately. If you added YAML
-   manually, start the session from Home. Right-click its tab to rename or
-   recolor it.
+   manually, start the session from Home. Right-click its tab (or its sidebar row) to rename, recolor, or
+   open its YAML definition (**Edit session YAML**; also an icon on its Home tile).
+   Changes apply the next time the session starts.
 3. Stop and Restore later to resume the harness conversation where supported.
 
 Schema and options: [YAML schema](docs/v2/18-yaml-schema.md).

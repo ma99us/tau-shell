@@ -19,9 +19,16 @@ What the code does, with frontend unit tests (`frontend/test/workspaces.test.ts`
   folders have their own group; sessions without a mapping fall into "Sessions".
 - Groups keep the shared session order: a group sits where its first session
   appears, and grouping is only a view over the flat order.
-- Home has a "Group by workspace" switch, off by default and saved in WebView
-  local storage (`taushell.home-grouped.v1`). Off lists every session in one flat
-  grid. The sidebar always groups, and shows only sessions that have an open tab.
+- Home has a "Group by workspace" toggle button, off by default and saved in
+  WebView local storage (`taushell.home-grouped.v1`). Off lists every session in
+  one flat grid. The sidebar always groups, and shows only sessions that have an
+  open tab.
+- Next to it, a sort button switches between "Sort: Recent first" (the default,
+  saved as `taushell.home-sort-recent.v1`) and "Sort: Default" (the saved order).
+  Recent first lists running sessions, then the latest `lastActive` time (the
+  runtime state's last update: start, stop or recorded conversation), and orders
+  groups by their newest session. It is only a view; the saved order is not
+  changed, and dragging is disabled while it is on. Not verified in a real window.
 - Dragging within a group moves one session; dropping onto a session of another
   group moves the whole group (`moveGroup`).
 - Group Resume restores stopped sessions with a saved conversation and no
