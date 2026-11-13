@@ -13,6 +13,8 @@ import (
 	"unsafe"
 )
 
+const errClipboardNotOpen = syscall.Errno(1418)
+
 const (
 	cfUnicodetext = 13
 	gmemMoveable  = 0x0002
@@ -34,13 +36,40 @@ func waitOpenClipboard() error {
 	return err
 }
 
-func GetClipboardText() (string, error) {
+// retryClipboard repeats an operation a few times when Windows reports that the clipboard is not open.
+// Another process (clipboard manager, remote session) can take it between our calls.
+func retryClipboard(operation func() error) error {
+	var err error
+	for attempt := 0; attempt < 4; attempt++ {
+		if err = operation(); err != errClipboardNotOpen {
+			return err
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return err
+}
+
+func GetClipboardText() (text string, err error) {
+	err = retryClipboard(func() error {
+		var inner error
+		text, inner = getClipboardText()
+		return inner
+	})
+	return text, err
+}
+
+func SetClipboardText(text string) error {
+	return retryClipboard(func() error { return setClipboardText(text) })
+}
+
+func getClipboardText() (string, error) {
 	// LockOSThread ensure that the whole method will keep executing on the same thread from begin to end (it actually locks the goroutine thread attribution).
 	// Otherwise if the goroutine switch thread during execution (which is a common practice), the OpenClipboard and CloseClipboard will happen on two different threads, and it will result in a clipboard deadlock.
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
-	if formatAvailable, _, err := procIsClipboardFormatAvailable.Call(cfUnicodetext); formatAvailable == 0 {
-		return "", err
+	// No text (for example an image-only clipboard) is an empty result. The last error is stale here, so it is never reported.
+	if formatAvailable, _, _ := procIsClipboardFormatAvailable.Call(cfUnicodetext); formatAvailable == 0 {
+		return "", nil
 	}
 	err := waitOpenClipboard()
 	if err != nil {
@@ -74,7 +103,7 @@ func GetClipboardText() (string, error) {
 	return text, nil
 }
 
-func SetClipboardText(text string) error {
+func setClipboardText(text string) error {
 	// LockOSThread ensure that the whole method will keep executing on the same thread from begin to end (it actually locks the goroutine thread attribution).
 	// Otherwise if the goroutine switch thread during execution (which is a common practice), the OpenClipboard and CloseClipboard will happen on two different threads, and it will result in a clipboard deadlock.
 	runtime.LockOSThread()
@@ -123,7 +152,8 @@ func SetClipboardText(text string) error {
 
 	r, _, err = kernelGlobalUnlock.Call(h)
 	if r == 0 {
-		if err.(syscall.Errno) != 0 {
+		// The clipboard is open here, so a "not open" code is a stale last error.
+		if errno, _ := err.(syscall.Errno); errno != 0 && errno != errClipboardNotOpen {
 			_, _, _ = procCloseClipboard.Call()
 			return err
 		}
