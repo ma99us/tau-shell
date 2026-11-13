@@ -11,9 +11,9 @@ import { clearPollFailure, shouldReportPollFailure } from "./polling";
 import { ControlAudit } from "./controlAudit";
 import { PhonePane } from "./phonePane";
 import { SecretsPane } from "./secretsPane";
-import { Workspace, ungrouped } from "./workspaces";
+import { Workspace, sortRecent, ungrouped } from "./workspaces";
 import { runtimeLabel } from "./wslRuntime";
-import { claudeBudgetKey, groupedKey, readClaudeBudget, readGrouped, writeStored } from "./storage";
+import { claudeBudgetKey, groupedKey, readClaudeBudget, readGrouped, readSortRecent, sortRecentKey, writeStored } from "./storage";
 import { ClaudeQuota, claudeQuotaView, formatDollars, parseBudgetInput } from "./claudeQuota";
 import { UpdateDialog } from "./updateDialog";
 import { SessionNotes } from "./sessionNotesView";
@@ -52,6 +52,11 @@ export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAl
   const changeGrouped = (value: boolean) => {
     setGrouped(value);
     writeStored(groupedKey, value, onError);
+  };
+  const [sortedRecent, setSortedRecent] = useState(() => readSortRecent(localStorage));
+  const changeSortedRecent = (value: boolean) => {
+    setSortedRecent(value);
+    writeStored(sortRecentKey, value, onError);
   };
   const [summary, setSummary] = useState<UsageSummary | null>(null);
   const pollFailures = useRef(new Set<string>());
@@ -171,7 +176,7 @@ export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAl
           <button className="primary-button"           onClick={onNew}>New session</button>
         </div>
       </div>
-      <div className="section-title"><div><h2>Your sessions</h2></div>{!loaded && <span className="spinner" role="status" aria-label="Loading sessions" />}<label className="check-option" title="Group sessions by workspace, or list them all in one row of cards"><input type="checkbox" role="switch" checked={grouped} onChange={(event) => changeGrouped(event.target.checked)} />Group by workspace</label></div>
+      <div className="section-title"><div><h2>Your sessions</h2></div>{!loaded && <span className="spinner" role="status" aria-label="Loading sessions" />}</div>
       {quota && !quota.unlimited && <p className={`home-usage home-quota${quota.canProject && quota.projected > quota.entitlement ? " warn" : ""}`} title={`${quota.account ? `Copilot account: ${quota.account}. ` : ""}Plan: ${quota.plan}. Read through your GitHub CLI sign-in. ${quota.daysLeft} days left in the cycle.`}>Copilot{quota.account ? ` (${quota.account})` : ""}: <b className="kv">{Math.round(quota.used)} / {Math.round(quota.entitlement)} credits ({Math.round(quota.percentUsed)}%)</b>, resets {quota.resetDate}{quota.canProject ? <>, on pace for <b className="kv">~{Math.round(quota.projected)}</b></> : ""}</p>}
       {codexQuota && <p className="home-usage home-quota" title="Codex plan windows reported by the local Codex app-server. Separate from TauShell token and cost estimates.">Codex{codexQuota.plan ? ` (${codexQuota.plan})` : ""}: <b className="kv">{codexQuota.windows.map((window) => `${window.label}: ${Math.round(100 - window.usedPercent)}% remaining${window.resetAt ? `, resets ${new Date(window.resetAt).toLocaleString()}` : ""}`).join(" | ")}</b></p>}
       {claudeQuota && (() => {
@@ -182,11 +187,15 @@ export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAl
           {view.overridden && <button className="quota-reset" title={`Use the proxy value${claudeQuota.budget > 0 ? ` (${formatDollars(claudeQuota.budget)})` : ""}`} onClick={() => commitBudget("")}>reset</button>}</p>;
       })()}
       {summary && hasUsage(summary.month) && <p className="home-usage" title={monthTooltip(summary)}>This month: <b className="kv">{usageText(summary.month)}</b>{harnessIds().map((tool) => hasUsage(summary.monthByTool?.[tool]) ? <span key={tool}> | {harnessShort(tool)} <b className="kv">{usageText(summary.monthByTool![tool])}</b></span> : null)}</p>}
+      <div className="home-view-bar" role="toolbar" aria-label="Session list view">
+        <button className="secondary-button view-button" aria-pressed={grouped} title="Group sessions by workspace, or list them all together" onClick={() => changeGrouped(!grouped)}><Icon name="groupBy" size={14} />Group by workspace</button>
+        <button className="secondary-button view-button" aria-pressed={sortedRecent} title={sortedRecent ? "Recent first (running, then last active). Click for your saved order" : "Your saved order. Click to list recently active sessions first"} onClick={() => changeSortedRecent(!sortedRecent)}><Icon name="sortRecent" size={14} />{sortedRecent ? "Sort: Recent first" : "Sort: Default"}</button>
+      </div>
       {sessions.length === 0 ? (!loaded ? <div className="loading-card" role="status"><span className="spinner" aria-hidden="true" /><span className="muted">Loading sessions...</span></div> : <div className="empty-card"><div className="empty-icon">+</div><h3>No sessions yet</h3><p>Create a session to connect a project folder to an AI harness such as Claude Code or GitHub Copilot CLI.</p>      <button className="primary-button" onClick={onNew}>New session</button></div>) :
-        <>{(grouped ? workspaces : [{ group: ungrouped, sessions }]).map((workspace) => <div className="home-group" key={workspace.group.key}>
+        <>{(() => { const base = grouped ? workspaces : [{ group: ungrouped, sessions }]; return sortedRecent ? sortRecent(base) : base; })().map((workspace) => <div className="home-group" key={workspace.group.key}>
         {grouped && <GroupHeader workspace={workspace} controls={groupControls} variant="home" />}
-        {(!grouped || !groupControls.collapsed.has(workspace.group.key)) && <div className="session-grid">{workspace.sessions.map((session) => <article className={`session-card ${session.runningHere ? "running" : ""} ${dragId === session.id ? "dragging" : ""} ${dropClass(session.id)}`} key={session.id} style={sessionColorStyle(session.color)} data-colored={session.color ? "" : undefined} {...dragProps(session.id)}>
-          <div className="card-top"><ProjectIcon session={session} /><span className={`state-pill ${session.runningHere ? "running" : ""} ${!session.runningHere && session.status === "failed" ? "status-warn-text" : ""}`}>{session.runningHere ? "Running" : statusLabel(session.status)}</span><button className="delete-button" aria-label={`Delete ${session.name}`} title="Delete session" onClick={() => onDelete(session)}>x</button></div>
+        {(!grouped || !groupControls.collapsed.has(workspace.group.key)) && <div className="session-grid">{workspace.sessions.map((session) => <article className={`session-card ${session.runningHere ? "running" : ""} ${dragId === session.id ? "dragging" : ""} ${dropClass(session.id)}`} key={session.id} style={sessionColorStyle(session.color)} data-colored={session.color ? "" : undefined} {...(sortedRecent ? {} : dragProps(session.id))}>
+          <div className="card-top"><ProjectIcon session={session} /><span className={`state-pill ${session.runningHere ? "running" : ""} ${!session.runningHere && session.status === "failed" ? "status-warn-text" : ""}`}>{session.runningHere ? "Running" : statusLabel(session.status)}</span><span className="card-top-actions"><button className="icon-button card-file-button" aria-label={`Edit the definition of ${session.name}`} title="Edit session YAML (changes apply the next time it starts)" onClick={() => app().OpenSessionFile(session.id).catch((error) => onError("ui.open-session-file", error))}><Icon name="sessionFile" size={16} /></button><button className="delete-button" aria-label={`Delete ${session.name}`} title="Delete session" onClick={() => onDelete(session)}>x</button></span></div>
           <div className="card-title"><h3>{session.name}</h3>{hasUsage(summary?.sessions?.[session.id]) && <span className="card-usage" title="Estimate from harness logs; never reset">{usageText(summary!.sessions![session.id])}</span>}</div><p className="path path-line"><span className="path-text">{session.workingDir}</span>{places[session.id]?.label && <span className="path-place" title={places[session.id].worktree ? "Git worktree" : "Git branch"}>[<Icon name={places[session.id].worktree ? "worktree" : "branch"} size={11} />{places[session.id].label}]</span>}</p><p className="session-meta"><span className="harness-tag"><HarnessIcon tool={session.tool} />{session.tool}</span><span className="runtime-badge" title={session.runtime === "wsl" ? `Runs inside WSL distro ${session.distro}` : "Runs in PowerShell 7 on Windows"}><RuntimeIcon kind={session.runtime === "wsl" ? "wsl" : "powershell"} />{runtimeLabel(session)}</span>{session.worktree && <span className="runtime-badge" title={`Works in the git worktree ${session.worktree}`}>worktree</span>}</p>
           {session.lastError && <p className="card-error">{session.lastError}</p>}
           <SessionNotes session={session} onOpen={(url) => app().OpenSessionLink(session.id, url).catch((error) => onError("ui.open-session-link", error))} />

@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { app, SecretInfo } from "./bridge";
 import { HomePanel, PanelFeedbackState } from "./homePanel";
+import { Icon } from "./icons";
+
+// The text to paste into a session's secrets map; it names the secret and never holds its value.
+const referenceFor = (secret: SecretInfo) => `{ENV_VAR: ${secret.name}}`;
 
 // Home pane for the secret vault. Values go in and never come back out.
 export function SecretsPane({ onError, feedback, onFeedback, onDismissFeedback }: {
@@ -29,12 +33,20 @@ export function SecretsPane({ onError, feedback, onFeedback, onDismissFeedback }
     run("ui.secret-save", () => app().SetSecret(name.trim(), value), "Saving secret...", "Secret saved.", () => { setName(""); setValue(""); });
   };
 
+  const copyReference = (secret: SecretInfo) => {
+    window.runtime.ClipboardSetText(referenceFor(secret))
+      .then(() => onFeedback?.({ tone: "success", message: `Copied ${referenceFor(secret)}.` }))
+      .catch((err) => onError("ui.secret-copy", err));
+  };
+
   return <HomePanel className="secrets-pane" title="Secrets" description={<>Stored in Windows Credential Manager. Reference one in a session with <code>secrets: {"{ENV_VAR: secret-name}"}</code>; its value reaches only that session's environment.</>}
     feedback={feedback} onDismissFeedback={onDismissFeedback}>
     {secrets && secrets.length > 0 && <ul className="secret-list">{secrets.map((secret) => <li key={secret.name}>
       <code>{secret.name}</code>
+      <code className="secret-reference">{referenceFor(secret)}</code>
       <span className={`muted ${secret.missing ? "warn" : ""}`}>{secret.missing ? "not stored" : "stored"}{secret.usedBy.length ? `; used by ${secret.usedBy.join(", ")}` : "; not used"}</span>
-      {!secret.missing && <button className="secondary-button" disabled={busy} onClick={() => setRemoving(secret)}>Delete</button>}
+      <button className="icon-button" title="Copy the session reference to the clipboard" aria-label={`Copy reference for ${secret.name}`} onClick={() => copyReference(secret)}><Icon name="copy" size={16} /></button>
+      {!secret.missing && <button className="icon-button" title="Delete this secret" aria-label={`Delete ${secret.name}`} disabled={busy} onClick={() => setRemoving(secret)}><Icon name="clear" size={16} /></button>}
     </li>)}</ul>}
     <form className="secret-form" onSubmit={save}>
       <input placeholder="Secret name" aria-label="Secret name" value={name} onChange={(event) => setName(event.target.value)} autoComplete="off" />

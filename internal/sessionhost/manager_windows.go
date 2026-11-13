@@ -71,6 +71,9 @@ type Snapshot struct {
 	ResumeNote  string                `json:"resumeNote,omitempty"`
 	// LaunchNote is set only on the result of a launch that fell back to a fresh conversation.
 	LaunchNote string `json:"launchNote,omitempty"`
+	// LastActive is when the session last started, stopped or recorded a
+	// conversation, in Unix milliseconds; 0 when it never ran.
+	LastActive int64 `json:"lastActive,omitempty"`
 }
 
 type managedSession struct {
@@ -313,10 +316,14 @@ func (manager *Manager) List(ctx context.Context) ([]Snapshot, error) {
 		return nil, err
 	}
 	result := make([]Snapshot, 0, len(configs))
+	lastActive := make(map[string]int64, len(configs))
 	for _, config := range configs {
 		runtime, err := session.RecoverRuntime(ctx, manager.store, config.ID)
 		if err != nil {
 			return nil, err
+		}
+		if !runtime.UpdatedAt.IsZero() {
+			lastActive[config.ID] = runtime.UpdatedAt.UnixMilli()
 		}
 		snapshot := Snapshot{
 			ID:          config.ID,
@@ -350,6 +357,7 @@ func (manager *Manager) List(ctx context.Context) ([]Snapshot, error) {
 		if current := manager.sessions[result[index].ID]; current != nil {
 			result[index] = current.snapshot()
 		}
+		result[index].LastActive = lastActive[result[index].ID]
 	}
 	manager.mu.Unlock()
 	if err := manager.applyOrder(ctx, result); err != nil {

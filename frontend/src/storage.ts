@@ -6,6 +6,7 @@ export const savedTabsKey = "taushell.tabs.v1";
 export const recentFoldersKey = "taushell.recent-folders.v1";
 export const maxRecentFolders = 5;
 export const groupedKey = "taushell.home-grouped.v1";
+export const sortRecentKey = "taushell.home-sort-recent.v1";
 export const claudeBudgetKey = "taushell.claude-budget.v1";
 
 // A hand-set monthly Claude budget in USD; null means use the proxy's value.
@@ -28,6 +29,15 @@ export function readGrouped(storage: Pick<Storage, "getItem">): boolean {
 }
 
 type Report = (source: string, error: unknown) => void;
+
+// Home lists recent sessions first unless the user chose their saved order.
+export function readSortRecent(storage: Pick<Storage, "getItem">): boolean {
+  try {
+    return storage.getItem(sortRecentKey) !== "false";
+  } catch {
+    return true;
+  }
+}
 
 function readJsonArray(key: string, source: string, report: Report): unknown[] {
   try {

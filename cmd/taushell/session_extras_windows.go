@@ -32,6 +32,21 @@ func (application *App) SetSessionOrder(ids []string) (err error) {
 	return application.manager.SetOrder(context.Background(), ids)
 }
 
+// OpenSessionFile opens a session's YAML definition in the default editor.
+// Edits apply the next time the session starts.
+func (application *App) OpenSessionFile(id string) (err error) {
+	defer func() {
+		if err != nil {
+			diagnostics.Error("open session file failed", err, "session_id", id)
+		}
+	}()
+	path, err := session.ConfigPath(application.configDirectory, id)
+	if err != nil {
+		return err
+	}
+	return application.openEditableFile(path, func(string) error { return nil })
+}
+
 // GetSessionLaunchArgs returns a session's configured launch arguments, to
 // prefill the clone dialog.
 func (application *App) GetSessionLaunchArgs(id string) ([]string, error) {

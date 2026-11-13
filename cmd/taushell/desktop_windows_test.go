@@ -360,6 +360,27 @@ func TestCreateSessionRejectsDuplicateIDWithoutOverwriting(t *testing.T) {
 	}
 }
 
+func TestOpenSessionFileOpensExistingYAMLOnly(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "api.yaml")
+	if err := os.WriteFile(path, []byte("id: ["), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var opened []string
+	application := &App{configDirectory: directory, openFile: func(p string) error { opened = append(opened, p); return nil }}
+	if err := application.OpenSessionFile("api"); err != nil || len(opened) != 1 || opened[0] != path {
+		t.Fatalf("OpenSessionFile = %v, opened %v; want %s", err, opened, path)
+	}
+	for _, id := range []string{"missing", "..\\api", "../api"} {
+		if err := application.OpenSessionFile(id); err == nil {
+			t.Fatalf("OpenSessionFile(%q) succeeded", id)
+		}
+	}
+	if len(opened) != 1 {
+		t.Fatalf("unexpected opens: %v", opened)
+	}
+}
+
 func TestBeforeCloseKeepsWindowOpenWhenSessionCheckFails(t *testing.T) {
 	root := t.TempDir()
 	configDirectory := filepath.Join(root, "sessions")

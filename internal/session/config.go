@@ -450,6 +450,19 @@ func LockConfig(directory, id string) (func(), error) {
 	return lockConfigPath(filepath.Join(directory, id+".yaml"))
 }
 
+// ConfigPath returns the path of an existing session definition without
+// parsing it, so a file that no longer validates can still be opened and fixed.
+func ConfigPath(directory, id string) (string, error) {
+	if !idPattern.MatchString(id) {
+		return "", fmt.Errorf("invalid session id %q", id)
+	}
+	path := filepath.Join(directory, id+".yaml")
+	if _, err := os.Stat(path); err != nil {
+		return "", fmt.Errorf("session definition %q: %w", id, err)
+	}
+	return path, nil
+}
+
 // ValidateLaunchArgs rejects user-configured launch arguments that would
 // override a TauShell-managed session/resume identity argument for tool.
 // Exported so callers (such as a launch-command preview) can reuse the same

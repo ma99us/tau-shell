@@ -38,6 +38,14 @@ export function moveGroup(workspaces: Workspace[], fromId: string, toId: string,
 
 export const flattenWorkspaces = (workspaces: Workspace[]): Session[] => workspaces.flatMap((workspace) => workspace.sessions);
 
+// Running sessions first, then the most recently active; ties keep the shared
+// order. Groups follow their most recent session. Only a view: saved order is untouched.
+export function sortRecent(workspaces: Workspace[]): Workspace[] {
+  const rank = (session: Session) => (session.runningHere ? Number.MAX_SAFE_INTEGER : session.lastActive ?? 0);
+  const sorted = workspaces.map((workspace) => ({ ...workspace, sessions: [...workspace.sessions].sort((a, b) => rank(b) - rank(a)) }));
+  return sorted.sort((a, b) => rank(b.sessions[0]) - rank(a.sessions[0]));
+}
+
 export type WorkspaceSummary = { total: number; running: number; needsAttention: number; resumable: Session[]; stoppable: Session[] };
 
 export function summarize(sessions: Session[], needsAttention: (session: Session) => boolean): WorkspaceSummary {

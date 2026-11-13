@@ -670,6 +670,25 @@ h3 {
   margin: 0 0 15px;
 }
 
+.home-view-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.view-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.view-button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--bg-control-hover);
+  color: var(--text-2);
+}
+
 .section-title .muted,
 .tools-panel .muted {
   font-size: var(--fs-12);
@@ -883,6 +902,17 @@ h3 {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 13px;
+}
+
+.card-top-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.card-file-button {
+  width: 24px;
+  height: 24px;
 }
 
 .tool-icon {
@@ -2175,6 +2205,10 @@ h3 {
 
 .secret-list li .muted {
   flex: 1;
+}
+
+.secret-reference {
+  color: var(--text-6);
 }
 
 .secret-form input {

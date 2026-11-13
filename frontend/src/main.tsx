@@ -884,6 +884,7 @@ function App() {
       {cloneRequest && <CreateSession recentFolders={recentFolders} clone={cloneRequest} onClose={() => setCloneRequest(null)} onCreated={(copy) => void cloneCreated(copy)} onError={(failure) => showError("ui.duplicate-session", failure)} />}
       {menu && <SessionMenu x={menu.x} y={menu.y} session={menu.session} onClose={() => setMenu(null)}
         onDuplicate={() => { const target = menu.session; setMenu(null); void duplicateSession(target); }}
+        onEditFile={() => { const target = menu.session; setMenu(null); app().OpenSessionFile(target.id).catch((err) => showError("ui.open-session-file", err)); }}
         onRename={() => { setRenameRequest(menu.session); setMenu(null); }}
         onNotes={() => { setNotesRequest(menu.session); setMenu(null); }}
         onColor={(color) => { const id = menu.session.id; setMenu(null); void updateSession("ui.set-session-color", () => app().SetSessionColor(id, color)); }} />}

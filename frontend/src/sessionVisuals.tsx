@@ -54,7 +54,7 @@ export function sessionColorStyle(tag?: string): CSSProperties | undefined {
   } as CSSProperties;
 }
 
-export function SessionMenu({ x, y, session, onClose, onRename, onNotes, onDuplicate, onColor }: {
+export function SessionMenu({ x, y, session, onClose, onRename, onNotes, onDuplicate, onEditFile, onColor }: {
   x: number;
   y: number;
   session: Session;
@@ -62,6 +62,7 @@ export function SessionMenu({ x, y, session, onClose, onRename, onNotes, onDupli
   onRename: () => void;
   onNotes: () => void;
   onDuplicate: () => void;
+  onEditFile: () => void;
   onColor: (color: string) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -83,10 +84,11 @@ export function SessionMenu({ x, y, session, onClose, onRename, onNotes, onDupli
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  return <div className="context-menu" role="menu" ref={ref} style={{ left: Math.min(x, window.innerWidth - 216), top: Math.min(y, window.innerHeight - 180) }}>
+  return <div className="context-menu" role="menu" ref={ref} style={{ left: Math.min(x, window.innerWidth - 216), top: Math.min(y, window.innerHeight - 212) }}>
     <button role="menuitem" className="context-menu-item" onClick={onRename}>Rename...</button>
     <button role="menuitem" className="context-menu-item" onClick={onNotes}>Notes and tags...</button>
     <button role="menuitem" className="context-menu-item" onClick={onDuplicate}>Clone</button>
+    <button role="menuitem" className="context-menu-item" onClick={onEditFile}>Edit session YAML</button>
     <div className="context-menu-label">Color</div>
     <div className="color-swatches">
       {sessionColors().map((color) => <button key={color.value} role="menuitemradio" aria-checked={session.color === color.value} className={`color-swatch ${session.color === color.value ? "selected" : ""}`} style={{ background: color.value }} title={color.name} aria-label={color.name} onClick={() => onColor(color.value)} />)}

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Session } from "../src/bridge.ts";
-import { flattenWorkspaces, groupSessions, moveGroup, readCollapsed, summarize, summaryText, writeCollapsed } from "../src/workspaces.ts";
+import { flattenWorkspaces, groupSessions, moveGroup, readCollapsed, sortRecent, summarize, summaryText, writeCollapsed } from "../src/workspaces.ts";
 
 const make = (id: string, over: Partial<Session> = {}): Session => ({ id, name: id, tool: "claude-code", workingDir: "C:/x", status: "stopped", runningHere: false, hasResumeId: false, autoResume: false, ...over } as Session);
 const groups = {
@@ -21,6 +21,13 @@ test("dropping onto another workspace moves the whole group", () => {
   assert.deepEqual(moveGroup(result, "a1", "new", true), ["b1", "new", "a1", "a2"]);
   assert.deepEqual(moveGroup(result, "new", "a2", false), ["new", "a1", "a2", "b1"]);
   assert.deepEqual(moveGroup(result, "a1", "a2", true), ["a1", "a2", "b1", "new"]);
+});
+
+test("recent sort puts running first, then latest activity, and orders groups by their newest session", () => {
+  const result = groupSessions([make("a1", { lastActive: 5 }), make("b1", { lastActive: 50 }), make("a2", { lastActive: 90 }), make("new", { runningHere: true })], groups);
+  const sorted = sortRecent(result);
+  assert.deepEqual(sorted.map((w) => [w.group.key, w.sessions.map((s) => s.id)]), [["ungrouped", ["new"]], ["a", ["a2", "a1"]], ["b", ["b1"]]]);
+  assert.deepEqual(result[0].sessions.map((s) => s.id), ["a1", "a2"]);
 });
 
 test("summary follows the Resume All rule and counts attention only for running sessions", () => {
