@@ -40,6 +40,9 @@
 
 ## Planning and history
 
+- [Provider gateway study](provider-gateway/README.md): unimplemented feasibility
+  study for provider selection, an optional local proxy, and per-launch harness
+  connection overrides that preserve native defaults.
 - [V3](v3/README.md): future planning only; not current requirements.
 - [V1](v1/README.md): historical product and implementation documents.
 - [V1 UI design](v1/08-UI-Design.md) and
