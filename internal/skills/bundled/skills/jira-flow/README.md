@@ -1,0 +1,90 @@
+# jira-flow: setup and configuration
+
+`scripts/jira.py` is a generic Jira Server/Data Center REST v2 client for agents and people. It uses only the Python 3.8+ standard library. `scripts/jira_text.py` holds the pure helpers (Markdown → wiki markup, log reduction, comment markers, transition choice), tested offline by `scripts/test_jira_text.py`.
+
+## Install
+
+- **Personal:** copy `skills/jira-flow` (and `skills/jira-to-pr`) to `~/.copilot/skills/` and/or `~/.claude/skills/`, or run `bash skills/github-pr-flow/sync.sh --apply --global`.
+- **In a repo:** `sync.sh --apply --repo <path>` copies the scripts to `<path>/tools/jira/` when that folder or `<path>/.jira-flow.json` exists. The repo then carries its own copy and needs no personal install.
+- **Token:** create a Jira personal access token (Profile → Personal Access Tokens). Put it in a gitignored notes file at the repo root (default `LOCAL-ENVIRONMENT.md`) as `ai-jira-token: <token>`, or export `JIRA_TOKEN`.
+- **Repo files:** add `.jira-flow/` (the per-issue work folder) to `.gitignore`. Commit `.jira-flow.json`; it holds no secret.
+
+## Set up a new project
+
+```bash
+python3 tools/jira/jira.py init --project VTA --sample VTA-123,VTA-456
+```
+
+`init` prints the issue types with their statuses, the ids of the common fields, and the transition screens of the sample issues (`*` marks a required field). Use samples that are **assigned to you**: a workflow often shows the developer screens (for example "Resolve") only to the assignee. Add `--out .jira-flow.json` to write a skeleton. Then edit three things per profile:
+
+- `path`: the forward workflow, in order. The API lists statuses in no particular order.
+- `status`: which status each event should reach.
+- `never`: statuses the tool must never enter.
+
+## .jira-flow.json
+
+```json
+{
+  "url": "https://jira.example.com",
+  "read_only": false,
+  "work_dir": ".jira-flow",
+  "token": {"file": "LOCAL-ENVIRONMENT.md", "labels": ["ai-jira-token", "jira-token"]},
+  "queries": {
+    "mine": "project = ABC AND issuetype = Story",
+    "pi": "project = ABC AND issuetype = Story AND fixVersion = \"{pi}\""
+  },
+  "profiles": {
+    "story": {
+      "issue_types": ["Story"],
+      "fields": {"ac": "Acceptance Criteria", "points": "Story Points", "epic": "Epic Link"},
+      "path": ["Opened", "Assigned", "In Development", "In Test", "Done"],
+      "status": {"plan_approved": "In Development", "pr_opened": "In Development", "merged": "In Test"},
+      "never": ["Done", "Descoped"]
+    },
+    "defect": {
+      "issue_types": ["Bug", "re:^TIR\\b"],
+      "fields": {"severity": "Severity", "found_in": "Found-In Batch"},
+      "path": ["Opened", "Reopened", "Assigned", "In Progress", "Resolved", "Ready for Dev Integration", "Ready for QA Test"],
+      "required_fields": {"Resolved": ["Resolution Description", "Repair Code", "Fix Version/s"],
+                          "Ready for Dev Integration": ["Resolution"]},
+      "status": {"started": "In Progress", "fixed": "Resolved",
+                 "pr_opened": "Ready for Dev Integration", "merged": "Ready for QA Test"},
+      "never": ["Closed*", "Defer*"]
+    }
+  }
+}
+```
+
+| Key | Meaning |
+|---|---|
+| `url` | Jira base URL (`JIRA_URL` overrides). |
+| `read_only` | `true`: `--yes` is ignored and non-GET requests are refused. `--allow-write` overrides this config value for one invocation; writes still require `--yes`. `JIRA_FLOW_READ_ONLY=1` is a hard lock and cannot be overridden. |
+| `work_dir` | Per-issue cache under the repo root: `digest.md`, `attachments/`, `seen.json`, plus the `jira-to-pr` state and drafts. Gitignore it. |
+| `token` | Notes file and labels searched for the token (`label: value` on one line, or the label line followed by the value). |
+| `queries.mine` / `queries.pi` | JQL behind `mine` and `pi`; `{pi}` is replaced by the fix-version argument. |
+| `profiles` | The first profile whose `issue_types` matches wins (exact name, case-insensitive, or `re:<regex>`). List the narrower profile first, for example `TIR - Developer` before `re:^TIR`. |
+| `profiles.*.fields` | Label → Jira field **name** (or id). `digest` shows these fields; `ac` is the acceptance-criteria field; `epic` and `points` are optional. |
+| `profiles.*.path` | Forward status order that `walk` may move along. Statuses not on the path are never entered by default. With explicit `--allow-never`, `walk --to <status>` may append one never-listed final target after this path; the target must also be a live transition from the path's final status. List downstream statuses after ordinary targets (for example QA and customer test) so issues already there count as "already past" instead of "off the path". |
+| `profiles.*.status` | Event → target status. `jira-to-pr` fires, in order: `started` (work begins on the issue), `plan_approved`, `fixed` (fix done, unit tests pass), `pr_opened` (PR open, CI and review running), `merged`. Leave an event out to skip it; `walk` passes through the path statuses in between (for example Assigned) and is a no-op when the issue is already there or past. |
+| `profiles.*.never` | Statuses or transition names never taken automatically; `*` and `?` wildcards. Walking from a `never` status is a no-op (the issue is final). |
+| `profiles.*.levels` | Optional. `{"ready": "<status>", "done": "<status>"}`: the two levels of finished. `ready` = development done, ready for QA (for example `In E2E Int Test`). ``--level ready or done` = the real, final Done (one-way). `walk KEY --level ready` or `--level done` picks the target from this map. `done` is usually on the `never` list, so it still needs `--allow-never` (and `--allow-write` when read-only). |
+| `profiles.*.required_fields` | Optional. `{status: [field names]}` that your team treats as mandatory when entering that status, even if Jira's screen does not. `walk` checks the whole route before its first write; empty or `"?"` values count as missing. A listed field that is not on the transition screen is set by an issue edit right after that step. |
+
+Transition screens are filled from `walk --fields-file f.json`, a flat object keyed by field name or id: `{"Resolution Description": "...", "Repair Code": "Code", "Fix Version/s": "2.1.18"}`. Values are converted to the shape the field needs: option, user, version, resolution, number or array. A missing required field stops the walk and names the field.
+
+For a specifically authorized terminal exception, one `walk` can follow the configured path and take a never-listed terminal status as its final step. Keep the default dry run, then repeat with `--yes`; if the repo config has `"read_only": true`, add `--allow-write` to both invocations. `JIRA_FLOW_READ_ONLY=1` always blocks writes.
+
+```bash
+python3 tools/jira/jira.py walk KEY --to Done --allow-never --allow-write
+python3 tools/jira/jira.py walk KEY --to Done --allow-never --allow-write --yes
+```
+
+## Comment markers
+
+`upsert-comment --marker <name>` appends a small grey footer (`jiraflow:<name>` and the UTC update time) to a comment posted under your token. Later calls edit that same comment instead of adding a new one. `replies` and `pending` use the markers to find human answers posted after the bot's comment. Only your own marked comments count; other people's comments are never edited.
+
+## Test
+
+```bash
+python3 -m unittest discover -s skills/jira-flow/scripts -p "test_*.py"
+```

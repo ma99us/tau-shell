@@ -1,0 +1,318 @@
+"""Offline tests for jira_text.py:  python3 -m unittest discover -s <scripts dir> -p "test_*.py" """
+import io
+import os
+import sys
+import unittest
+import zipfile
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import jira_text as jt  # noqa: E402
+
+
+class MdToWiki(unittest.TestCase):
+    def test_blocks(self):
+        md = "# Title\n## Sub\n- a\n  - b\n1. one\n> quote\n---"
+        self.assertEqual(jt.md_to_wiki(md), "h1. Title\nh2. Sub\n* a\n** b\n# one\nbq. quote\n----")
+
+    def test_inline(self):
+        self.assertEqual(jt.md_to_wiki("**bold** and *it* and `x{y}` and [PR #5](https://g/h/5)"),
+                         "*bold* and _it_ and {{x{y}}} and [PR #5|https://g/h/5]")
+
+    def test_braces_escaped_outside_code(self):
+        self.assertEqual(jt.md_to_wiki("map {a}"), r"map \{a\}")
+
+    def test_table(self):
+        md = "| AC | Evidence |\n|---|---|\n| AC1 | `a_test.dart` |"
+        self.assertEqual(jt.md_to_wiki(md), "||AC||Evidence||\n|AC1|{{a_test.dart}}|")
+
+    def test_code_fence_untouched(self):
+        md = "```dart\nfinal x = {**a};\n```"
+        self.assertEqual(jt.md_to_wiki(md), "{code:dart}\nfinal x = {**a};\n{code}")
+
+
+class Markers(unittest.TestCase):
+    def setUp(self):
+        self.cs = [
+            {"id": "1", "author": {"name": "ME"}, "created": "2026-10-01T10:00", "updated": "2026-10-02T10:00",
+             "body": "Q1?\n" + jt.marker_footer("questions")},
+            {"id": "2", "author": {"name": "PO"}, "created": "2026-10-01T11:00", "body": "A1"},
+            {"id": "3", "author": {"name": "OTHER"}, "created": "2026-10-01T12:00", "body": "x " + jt.marker_footer("plan")},
+            {"id": "4", "author": {"name": "ME"}, "created": "2026-10-03T10:00", "updated": "2026-10-03T10:00",
+             "body": "plan " + jt.marker_footer("plan")},
+            {"id": "5", "author": {"name": "PO"}, "created": "2026-10-03T11:00", "body": "Approved, go."},
+        ]
+
+    def test_find_own_marker_only(self):
+        self.assertEqual(jt.find_marked(self.cs, "plan", "ME")["id"], "4")
+        self.assertIsNone(jt.find_marked(self.cs, "plan", "NOBODY"))
+
+    def test_replies_and_approval(self):
+        q = jt.find_marked(self.cs, "questions", "ME")
+        self.assertEqual([c["id"] for c in jt.replies_after(self.cs, q, "ME")], ["2", "5"])
+        p = jt.find_marked(self.cs, "plan", "ME")
+        reps = jt.replies_after(self.cs, p, "ME", "updated")
+        self.assertEqual([c["id"] for c in reps], ["5"])
+        self.assertTrue(jt.APPROVAL_RE.match(reps[0]["body"]))
+        self.assertFalse(jt.APPROVAL_RE.match("not approved yet"))
+
+
+class Token(unittest.TestCase):
+    def test_same_line_label(self):
+        self.assertEqual(jt.token_from_text("x\n##### My JIRA access:\nJira url: https://j/\nai-jira-token: ABC123\n"), "ABC123")
+
+    def test_label_then_next_line(self):
+        self.assertEqual(jt.token_from_text("##### My JIRA access token:\nXYZ789\n"), "XYZ789")
+
+    def test_missing(self):
+        self.assertIsNone(jt.token_from_text("nothing here"))
+
+
+def _t(name, to, **fields):
+    return {"id": name, "name": name, "to": {"name": to}, "fields": fields}
+
+
+class Walk(unittest.TestCase):
+    path = ["Opened", "Reopened", "Assigned", "In Progress", "Resolved", "Ready for Dev Integration", "Ready for QA Test"]
+
+    def test_terminal_target_requires_explicit_opt_in(self):
+        never = ["Closed*", "Defer*"]
+        self.assertEqual(jt.walk_route(self.path, "Closed, Passed Verification", never), (self.path, False))
+        route, allow = jt.walk_route(self.path, "Closed, Passed Verification", never, allow_never=True)
+        self.assertEqual(route, self.path + ["Closed, Passed Verification"])
+        self.assertTrue(allow)
+
+    def test_picks_nearest_forward(self):
+        ts = [_t("Close", "Closed"), _t("Resolve", "Resolved"), _t("Start", "In Progress")]
+        t, _ = jt.choose_transition(ts, self.path, "Assigned", "Ready for QA Test")
+        self.assertEqual(t["name"], "Start")
+
+    def test_never_and_overshoot(self):
+        ts = [_t("Fwd", "Ready for QA Test")]
+        self.assertIsNone(jt.choose_transition(ts, self.path, "In Progress", "Resolved")[0])
+        self.assertIsNone(jt.choose_transition(ts, self.path, "In Progress", "Ready for QA Test", ["Ready for QA Test"])[0])
+        self.assertIsNone(jt.choose_transition([_t("Close it", "Resolved")], self.path, "In Progress",
+                                               "Resolved", ["close*"])[0])
+        self.assertTrue(jt.is_banned("Closed, No Fix", ["Closed*"]))
+        self.assertFalse(jt.is_banned("Reopened", ["Closed*"]))
+
+    def test_explicitly_allowed_banned_terminal_target(self):
+        path = self.path + ["Done"]
+        passed = _t("Passed E2E Int Test", "Done")
+        t, _ = jt.choose_transition([passed], path, self.path[-1], "Done", ["Done", "Descoped"],
+                                    allow_banned_target=True)
+        self.assertEqual(t, passed)
+        self.assertIsNone(jt.choose_transition([passed], path, self.path[-1], "Done", ["Done", "Descoped"])[0])
+        banned_transition = _t("Passed E2E Int Test", "Done")
+        self.assertIsNone(jt.choose_transition([banned_transition], path, self.path[-1], "Done",
+                                               ["Done", "Passed E2E Int Test"],
+                                               allow_banned_target=True)[0])
+
+
+    def test_already_there_or_past(self):
+        self.assertEqual(jt.choose_transition([], self.path, "Resolved", "Resolved")[1], "already there")
+        self.assertTrue(jt.choose_transition([], self.path, "Ready for QA Test", "Resolved")[1].startswith("already past"))
+
+    def test_off_path(self):
+        self.assertIn("off the configured path", jt.choose_transition([], self.path, "Defer", "Resolved")[1])
+
+    def test_missing_required(self):
+        t = _t("Resolve", "Resolved", customfield_1={"name": "Resolution Description", "required": True},
+               resolution={"name": "Resolution", "required": True, "hasDefaultValue": True},
+               customfield_2={"name": "Notes", "required": False})
+        self.assertEqual(jt.missing_required(t, {}), ["Resolution Description"])
+        self.assertEqual(jt.missing_required(t, {"resolution description": "x"}), [])
+
+    def test_coerce(self):
+        self.assertEqual(jt.coerce({"schema": {"type": "option"}}, "Code"), {"value": "Code"})
+        self.assertEqual(jt.coerce({"schema": {"type": "resolution"}}, "Fixed"), {"name": "Fixed"})
+        self.assertEqual(jt.coerce({"schema": {"type": "array", "items": "version"}}, "SM09"), [{"name": "SM09"}])
+        self.assertEqual(jt.coerce({"schema": {"type": "string"}}, "text"), "text")
+        self.assertEqual(jt.coerce({"schema": {"type": "number"}}, "5"), 5)
+
+    def test_profile_regex(self):
+        profs = {"story": {"issue_types": ["Story"]}, "defect": {"issue_types": ["Bug", "re:^TIR\\b"]}}
+        self.assertEqual(jt.profile_for("TIR - BTC", profs)[0], "defect")
+        self.assertEqual(jt.profile_for("story", profs)[0], "story")
+        self.assertIsNone(jt.profile_for("Epic", profs)[0])
+
+
+class ReadOnly(unittest.TestCase):
+    def test_config_read_only_is_default_but_can_be_explicitly_overridden(self):
+        self.assertEqual(jt.read_only_reason(True), "config read_only")
+        self.assertEqual(jt.read_only_reason(True, allow_write=True), "")
+        self.assertEqual(jt.read_only_reason(False), "")
+
+    def test_environment_read_only_is_a_hard_lock(self):
+        self.assertEqual(jt.read_only_reason(False, "1"), "JIRA_FLOW_READ_ONLY")
+        self.assertEqual(jt.read_only_reason(True, "1", allow_write=True), "JIRA_FLOW_READ_ONLY")
+
+
+class TirResolveReplay(unittest.TestCase):
+    """POA-44717 (TIR - BTC) went In Progress -> Resolved... -> Ready for Dev Integration -> Ready for QA Test."""
+    path = ["Opened", "Reopened", "Assigned", "In Progress", "Resolved, Ready for Unit Test/Review/Inspection",
+            "Ready for Dev Integration", "Ready for QA Test"]
+    never = ["Closed*", "Defer*", "Awaiting No Fix Approval"]
+    resolve = {"customfield_24607": {"name": "Resolution Description", "required": True, "schema": {"type": "string"}},
+               "customfield_24599": {"name": "Repair Code", "required": True, "schema": {"type": "option"}},
+               "customfield_24490": {"name": "Defect Origination Activity", "required": True, "schema": {"type": "option"}},
+               "fixVersions": {"name": "Fix Version/s", "required": True, "schema": {"type": "array", "items": "version"}}}
+    fields = {"Resolution Description": "zip-archive old log files", "Repair Code": "Configuration",
+              "Defect Origination Activity": "Design", "Fix Version": "Open Retail 2.0.10"}
+
+    def test_walk_sequence(self):
+        steps = {"In Progress": [_t("Close, No Fix", "Closed, Not a Problem"), _t("Defer", "Defer"),
+                                 _t("Resolve", self.path[4], **self.resolve)],
+                 self.path[4]: [_t("Ready for Integration", "Ready for Dev Integration",
+                                   resolution={"name": "Resolution", "required": True, "schema": {"type": "resolution"}})],
+                 "Ready for Dev Integration": [_t("Ready for QA", "Ready for QA Test")]}
+        cur, seen = "In Progress", []
+        while cur in steps:
+            t, _ = jt.choose_transition(steps[cur], self.path, cur, "Ready for QA Test", self.never)
+            self.assertIsNotNone(t)
+            seen.append(t["name"])
+            self.assertEqual(jt.missing_required(t, dict(self.fields, Resolution="Fixed")), [])
+            cur = t["to"]["name"]
+        self.assertEqual(seen, ["Resolve", "Ready for Integration", "Ready for QA"])
+        self.assertEqual(jt.missing_required(_t("Resolve", "x", **self.resolve), {}),
+                         ["Resolution Description", "Repair Code", "Defect Origination Activity", "Fix Version/s"])
+
+    def test_config_mandatory_fields_checked_for_whole_route(self):
+        req = {self.path[4]: ["Resolution Description", "Repair Code", "Defect Origination Activity",
+                              "Modules Affected", "Release Considerations", "Test Considerations", "Fix Version/s"],
+               "Ready for Dev Integration": ["Resolution"]}
+        full = dict(self.fields, **{"Modules Affected": "configuration", "Release Considerations": "none",
+                                    "Test Considerations": "none", "Resolution": "Fixed"})
+        self.assertEqual(jt.mandatory_on_route(req, self.path, "In Progress", "Ready for QA Test", full), [])
+        gaps = jt.mandatory_on_route(req, self.path, "In Progress", "Ready for QA Test",
+                                     dict(full, **{"Test Considerations": "?", "Resolution": ""}))
+        self.assertEqual(gaps, [(self.path[4], "Test Considerations"), ("Ready for Dev Integration", "Resolution")])
+        # Statuses already passed are not re-checked.
+        self.assertEqual(jt.mandatory_on_route(req, self.path, "Ready for Dev Integration", "Ready for QA Test", {}), [])
+
+    def test_staged_events_check_only_their_own_step(self):
+        """jira-to-pr walks started -> fixed -> pr_opened -> merged; each checks only the statuses it enters."""
+        req = {self.path[4]: ["Resolution Description", "Repair Code"], "Ready for Dev Integration": ["Resolution"]}
+        self.assertEqual(jt.mandatory_on_route(req, self.path, "Opened", "In Progress", {}), [])  # started
+        self.assertEqual(jt.mandatory_on_route(req, self.path, "In Progress", self.path[4],
+                                               {"Resolution Description": "x", "Repair Code": "Code"}), [])  # fixed
+        self.assertEqual(jt.mandatory_on_route(req, self.path, self.path[4], "Ready for Dev Integration", {}),
+                         [("Ready for Dev Integration", "Resolution")])  # pr_opened
+        self.assertEqual(jt.mandatory_on_route(req, self.path, "Ready for Dev Integration", "Ready for QA Test", {}), [])
+
+    def test_downstream_qa_statuses_are_already_past(self):
+        """Full TIR workflow (2026-10 diagram): after Ready for QA Test come QA, customer test and production."""
+        path = self.path + ["In QA Test", "Ready for Customer Test", "In Customer Test", "Ready for Production"]
+        offered = [_t("Fail", "Reopened"), _t("Pass", "Ready for Customer Test")]
+        for cur in path[7:]:
+            self.assertEqual(jt.choose_transition(offered, path, cur, "Ready for QA Test", self.never),
+                             (None, "already past 'Ready for QA Test'"))
+        # Final and parked branches stay untouched.
+        for cur in ("Closed, Passed Verification", "Closed, Won't Fix", "Defer", "Awaiting No Fix Approval"):
+            self.assertTrue(jt.is_banned(cur, self.never), cur)
+        # From Ready for QA Test nothing is walked further, even when QA's moves are offered.
+        self.assertEqual(jt.choose_transition(offered, path, "Ready for QA Test", "Ready for QA Test", self.never)[1],
+                         "already there")
+
+    def test_fix_version_alias_and_coerce(self):
+        self.assertTrue(jt.field_matches("Fix Version", "fixVersions", self.resolve["fixVersions"]))
+        self.assertEqual(jt.coerce(self.resolve["fixVersions"], "Open Retail 2.0.10"), [{"name": "Open Retail 2.0.10"}])
+        self.assertEqual(jt.coerce(self.resolve["customfield_24599"], "Configuration"), {"value": "Configuration"})
+
+
+class LooseNames(unittest.TestCase):
+    VERSIONS = ["Product Increment %d" % n for n in range(2, 10)] + ["Epic Backlog"]
+
+    def test_fix_version_by_number(self):
+        for said in ("Project Iteration 3", "PI 3", "pi3", "Increment 3", "product increment 3"):
+            self.assertEqual(jt.resolve_name(said, self.VERSIONS)[0], "Product Increment 3", said)
+
+    def test_project_by_name_or_key(self):
+        names = ["VTA", "Terminal App", "POA", "Point of Access", "CLDTM", "Terminal Manager"]
+        self.assertEqual(jt.resolve_name("terminal app", names)[0], "Terminal App")
+        self.assertEqual(jt.resolve_name("vta", names)[0], "VTA")
+        self.assertEqual(jt.resolve_name("Terminal App VTA", names)[0], "VTA")
+        hit, others = jt.resolve_name("Terminal", names)
+        self.assertIsNone(hit)
+        self.assertEqual(others, ["Terminal App", "Terminal Manager"])
+
+    def test_no_match(self):
+        self.assertEqual(jt.resolve_name("PI 42", self.VERSIONS), (None, []))
+
+    def test_with_project(self):
+        self.assertEqual(jt.with_project('project = VTA AND issuetype = Story', "POA"),
+                         'project = "POA" AND issuetype = Story')
+        self.assertEqual(jt.with_project('project in (A, B) AND x = 1', "POA"), 'project = "POA" AND x = 1')
+        self.assertEqual(jt.with_project('issuetype = Bug', "POA"), 'project = "POA" AND (issuetype = Bug)')
+
+
+class ShortText(unittest.TestCase):
+    def test_wiki_markup_dropped_and_cut(self):
+        d = "h2. Steps\r\n\r\nTerminal returns {*}*Error 12*{*} see [log|http://x/y] !shot.png!\r\n{code}stack{code}"
+        self.assertEqual(jt.short_text(d), "Steps Terminal returns Error 12 see log stack")
+        self.assertEqual(len(jt.short_text("word " * 100, 40)), 40)
+        self.assertEqual(jt.short_text(None), "")
+
+
+class Logs(unittest.TestCase):
+    LOG = [
+        "00:09:59.100 INFO boot",
+        "00:10:05.000 ERROR credit device 17 unavailable",
+        "java.lang.IllegalStateException: no device",
+        "\tat a.b.C.run(C.java:10)",
+        "\tat a.b.D.go(D.java:20)",
+        "00:10:06.000 INFO retry",
+        "00:10:07.000 ERROR credit device 18 unavailable",
+        "00:15:00.000 WARN slow response 250ms",
+        "00:25:00.000 ERROR outside window",
+        "00:26:00.000 INFO done",
+    ]
+
+    def test_dedup_and_trace(self):
+        r = jt.reduce_log(self.LOG)
+        self.assertIn("x2", r)  # two 'credit device N unavailable' collapse
+        self.assertIn("at a.b.D.go", r)
+        self.assertIn("time span: 00:09:59 .. 00:26:00", r)
+
+    def test_window(self):
+        r = jt.reduce_log(self.LOG, jt.parse_window("00:10-00:20"))
+        self.assertNotIn("outside window", r.split("--- problems")[1])
+        self.assertIn("WARN=1", r)
+
+    def test_cap(self):
+        many = ["00:00:%02d ERROR unique problem %s" % (i % 60, chr(65 + i % 26) * (i + 1)) for i in range(300)]
+        r = jt.reduce_log(many, max_lines=60)
+        self.assertLessEqual(len(r.splitlines()), 62)
+        self.assertIn("more signatures not shown", r)
+
+    def test_bad_window(self):
+        with self.assertRaises(ValueError):
+            jt.parse_window("10 to 20")
+
+    def test_long_lines_clipped(self):
+        r = jt.reduce_log(["00:00:01 INFO a", "00:00:02 ERROR " + "x" * 5000], max_width=100)
+        self.assertLess(len(r), 1000)
+        self.assertIn("...[+", r)
+
+
+class Office(unittest.TestCase):
+    def test_xlsx(self):
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as z:
+            z.writestr("xl/sharedStrings.xml",
+                       '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+                       "<si><t>Step</t></si><si><t>Result</t></si></sst>")
+            z.writestr("xl/worksheets/sheet1.xml",
+                       '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+                       '<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row>'
+                       '<row r="2"><c r="A2"><v>1</v></c><c r="C2" t="inlineStr"><is><t>fail</t></is></c></row>'
+                       "</sheetData></worksheet>")
+        self.assertEqual(jt.xlsx_preview(buf.getvalue()), "## sheet1.xml\nStep,Result\n1,,fail\n")
+
+    def test_text_names(self):
+        self.assertTrue(jt.is_text_name("GT28 - Betslip reader app.log"))
+        self.assertTrue(jt.is_text_name("app.log.3"))
+        self.assertFalse(jt.is_text_name("credit device.png"))
+
+
+if __name__ == "__main__":
+    unittest.main()
