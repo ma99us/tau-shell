@@ -128,6 +128,10 @@ jobs:
           if ($info.ProductVersion -ne $bare) { throw "ProductVersion '$($info.ProductVersion)' != '$bare'" }
           Get-AuthenticodeSignature $exe | Format-List Status, StatusMessage
 
+      - name: Ensure the WebView2 runtime is installed
+        shell: pwsh
+        run: ./scripts/ensure-webview2.ps1
+
       - name: End-to-end smoke test of the packaged ZIP
         shell: pwsh
         run: |
