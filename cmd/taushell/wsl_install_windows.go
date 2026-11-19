@@ -72,16 +72,52 @@ func (application *App) InstallWSL(action, distro string) (result WSLInstallResu
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), installTimeout)
 	defer cancel()
-	if runErr := hostruntime.RunInConsole(ctx, args); runErr != nil {
+	run := hostruntime.RunInConsole
+	if action == hostruntime.ActionInstallWSL {
+		run = hostruntime.RunElevatedInConsole
+	}
+	if runErr := run(ctx, args); runErr != nil {
+		if errors.Is(runErr, hostruntime.ErrElevationDeclined) {
+			return WSLInstallResult{Outcome: "cancelled", Message: "The Windows administrator prompt was declined, so WSL was not installed.", Status: detectWSL()}, nil
+		}
 		return WSLInstallResult{Outcome: "failed", Message: runErr.Error(), Status: detectWSL()}, nil
 	}
-	result = finishWSLInstall(action, distro, detectWSL())
+	status := detectWSL()
+	if action == hostruntime.ActionInstallDistro {
+		status = waitForDistro(ctx, distro, status)
+	}
+	result = finishWSLInstall(action, distro, status)
+	if result.Outcome == "failed" {
+		diagnostics.Warn("WSL install did not complete", errors.New(result.Message), "action", action, "distro", distro, "registered", distroNames(status))
+	}
 	if action == hostruntime.ActionUpdateWSL && result.Outcome == "installed" {
 		application.updatesMu.Lock()
 		delete(application.toolUpdates, wslUpdateKey)
 		application.updatesMu.Unlock()
 	}
 	return result, nil
+}
+
+// wsl.exe can return before the distribution is registered (installer or elevation still finishing), so poll before reporting failure.
+func waitForDistro(ctx context.Context, distro string, status hostruntime.Readiness) hostruntime.Readiness {
+	deadline := time.Now().Add(2 * time.Minute)
+	for !containsDistro(status, distro) && time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return status
+		case <-time.After(5 * time.Second):
+		}
+		status = detectWSL()
+	}
+	return status
+}
+
+func distroNames(status hostruntime.Readiness) []string {
+	names := make([]string, 0, len(status.Distros))
+	for _, distro := range status.Distros {
+		names = append(names, distro.Name)
+	}
+	return names
 }
 
 func finishWSLInstall(action, distro string, status hostruntime.Readiness) WSLInstallResult {
@@ -97,7 +133,7 @@ func finishWSLInstall(action, distro string, status hostruntime.Readiness) WSLIn
 		if containsDistro(status, distro) {
 			result.Outcome, result.Message = "installed", fmt.Sprintf("%s is installed. Open it once (run: wsl -d %s) to create your Linux user before starting sessions in it.", distro, distro)
 		} else {
-			result.Outcome, result.Message = "failed", fmt.Sprintf("%s was not found after the install. Check the console output, restart Windows if asked, then press Refresh.", distro)
+			result.Outcome, result.Message = "failed", fmt.Sprintf("%s was not registered within two minutes of the install finishing. Check the console output (an install may still be running), restart Windows if asked, then press Refresh.", distro)
 		}
 	default:
 		if status.Installed {

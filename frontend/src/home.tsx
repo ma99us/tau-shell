@@ -405,6 +405,8 @@ function WSLRow({ actions }: { actions: ToolActions }) {
   };
   const installed = new Set(wsl.distros.map((distro) => distro.name.toLowerCase()));
   const available = (online ?? []).filter((name) => !installed.has(name.toLowerCase()));
+  // The remembered choice may be a distro that is now installed; fall back to what the select actually shows.
+  const selected = available.includes(choice) ? choice : available[0] ?? "";
   return <div className="tool-row" title={notes.join("\n") || undefined}>
     <span className={`status-dot ${ready && failed.length === 0 ? "online" : wsl.installed ? "warn" : ""}`} />
     <div className="tool-details">
@@ -418,10 +420,12 @@ function WSLRow({ actions }: { actions: ToolActions }) {
         {!wsl.installed && <button className="secondary-button tool-action" disabled={actions.wslBusy} title="Run wsl --install --no-distro (asks first)" onClick={() => actions.onWSLChange("wsl")}>{actions.wslBusy ? "Working..." : "Install WSL"}</button>}
         {wsl.installed && actions.updates.wsl && <button className="secondary-button tool-action" disabled={actions.wslBusy} title={`Run wsl --update to reach ${actions.updates.wsl} (asks first)`} onClick={() => actions.onWSLChange("update")}>{actions.wslBusy ? "Working..." : `Update to ${actions.updates.wsl}`}</button>}
         {wsl.installed && online === null && <button className="secondary-button tool-action" disabled={actions.wslBusy} title="List the distributions Microsoft offers" onClick={loadOnline}>Install a distribution...</button>}
-        {wsl.installed && online !== null && (available.length > 0 ? <>
-          <select aria-label="Distribution to install" value={choice} onChange={(event) => setChoice(event.target.value)}>{available.map((name) => <option key={name} value={name}>{name}</option>)}</select>
-          <button className="secondary-button tool-action" disabled={actions.wslBusy || !choice} title={`Run wsl --install -d ${choice} (asks first)`} onClick={() => actions.onWSLChange("distro", choice)}>Install</button>
-        </> : <span className="muted">Every offered distribution is already installed.</span>)}
+        {wsl.installed && online !== null && (online.length > 0 ? <>
+          <select aria-label="Distribution to install" value={selected} onChange={(event) => setChoice(event.target.value)}>{online.map((name) => installed.has(name.toLowerCase())
+            ? <option key={name} value={name} disabled className="distro-installed">{name} (installed)</option>
+            : <option key={name} value={name}>{name}</option>)}</select>
+          <button className="secondary-button tool-action" disabled={actions.wslBusy || !selected} title={`Run wsl --install -d ${selected} (asks first)`} onClick={() => actions.onWSLChange("distro", selected)}>Install</button>
+        {available.length === 0 && <span className="muted">Every offered distribution is already installed.</span>}</> : <span className="muted">No installable distributions were offered.</span>)}
         {wsl.installed && online !== null && <button className="secondary-button tool-action" disabled={actions.wslBusy} onClick={() => setOnline(null)}>Cancel</button>}
       </div>
     </div>

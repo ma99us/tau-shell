@@ -259,6 +259,10 @@ textarea:focus-visible,
   box-shadow: 0 0 8px var(--status-ok-glow);
 }
 
+.distro-installed {
+  color: var(--status-ok);
+}
+
 .status-dot.warn {
   background: var(--status-warn);
   box-shadow: 0 0 8px var(--status-warn-glow);
