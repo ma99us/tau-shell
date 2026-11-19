@@ -1,4 +1,5 @@
 import { Fragment, ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { useEscape } from "./useEscape";
 import { app, HarnessWidgets, ResolvedPreset, Session } from "./bridge";
 import { hasCueSignal, type SendPlan } from "./attention";
 import { QueuePanel, useQueueLength } from "./queuePanel";
@@ -102,6 +103,7 @@ export function HarnessToolbar({ session, widgets, modelSupported, send, onError
   const [presetError, setPresetError] = useState("");
   const [customModel, setCustomModel] = useState("");
   const [confirmClear, setConfirmClear] = useState(false);
+  useEscape(() => setConfirmClear(false), confirmClear);
   const queued = useQueueLength(session.id);
   const loadPresets = () => {
     app().GetPresets(session.id)

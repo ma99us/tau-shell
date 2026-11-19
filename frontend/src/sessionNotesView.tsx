@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useEscape } from "./useEscape";
 import { Session } from "./bridge";
 import { linkProblem, linkSegments, maxNotesLength, notesProblem, parseTags } from "./sessionNotes";
 
@@ -30,6 +31,7 @@ export function NotesDialog({ session, onClose, onSave }: { session: Session; on
   const [tagText, setTagText] = useState((session.tags ?? []).join(" "));
   const tags = parseTags(tagText);
   const trimmedLink = link.trim();
+  useEscape(onClose);
   const problem = linkProblem(trimmedLink) || notesProblem(notes, tags);
   const changed = trimmedLink !== (session.link ?? "") || notes.trim() !== (session.notes ?? "") || tags.join("\n") !== (session.tags ?? []).join("\n");
   return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="modal confirm-modal notes-modal">

@@ -13,7 +13,15 @@ import (
 	"github.com/ma99us/tau-shell/internal/quota"
 )
 
-const quotaCacheTTL = 5 * time.Minute
+const (
+	quotaCacheTTL = 5 * time.Minute
+	// A failed read is retried after quotaRetryTTL instead of hiding the widget
+	// for a whole cache period (the network or a sign-in is often not ready at
+	// app start), and the last good value stays visible meanwhile.
+	quotaRetryTTL = time.Minute
+)
+
+func quotaRetryStamp() time.Time { return time.Now().Add(quotaRetryTTL - quotaCacheTTL) }
 
 // GetCopilotQuota returns the Copilot premium-request quota, or nil when the
 // chip is disabled or the quota cannot be read (no gh, signed out, no plan).
@@ -33,15 +41,15 @@ func (application *App) GetCopilotQuota(refresh bool) *quota.Snapshot {
 		run = quota.GHRunner
 	}
 	snapshot, err := quota.Fetch(context.Background(), run, time.Now())
-	application.quotaAt = time.Now()
 	if err != nil {
+		application.quotaAt = quotaRetryStamp()
 		if !application.quotaLogged {
 			diagnostics.Warn("copilot quota unavailable", err)
 			application.quotaLogged = true
 		}
-		application.quotaValue = nil
-		return nil
+		return application.quotaValue
 	}
+	application.quotaAt = time.Now()
 	application.quotaLogged = false
 	application.quotaValue = &snapshot
 	return application.quotaValue
@@ -65,15 +73,15 @@ func (application *App) GetCodexQuota(refresh bool) *quota.CodexSnapshot {
 		run = quota.CodexAppServerRunner
 	}
 	snapshot, err := quota.FetchCodex(context.Background(), run, time.Now())
-	application.codexQuotaAt = time.Now()
 	if err != nil {
+		application.codexQuotaAt = quotaRetryStamp()
 		if !application.codexQuotaLogged {
 			diagnostics.Warn("Codex quota unavailable", err)
 			application.codexQuotaLogged = true
 		}
-		application.codexQuotaValue = nil
-		return nil
+		return application.codexQuotaValue
 	}
+	application.codexQuotaAt = time.Now()
 	application.codexQuotaLogged = false
 	application.codexQuotaValue = &snapshot
 	return application.codexQuotaValue
@@ -93,7 +101,6 @@ func (application *App) GetClaudeQuota(refresh bool) *quota.LiteLLMSnapshot {
 	if !refresh && !application.claudeQuotaAt.IsZero() && time.Since(application.claudeQuotaAt) < quotaCacheTTL {
 		return application.claudeQuotaValue
 	}
-	application.claudeQuotaAt = time.Now()
 	get, host := application.claudeQuotaGetter, "proxy"
 	var fetchErr error
 	if get == nil {
@@ -111,13 +118,14 @@ func (application *App) GetClaudeQuota(refresh bool) *quota.LiteLLMSnapshot {
 		snapshot, fetchErr = quota.FetchLiteLLM(ctx, get, host, time.Now())
 	}
 	if fetchErr != nil {
+		application.claudeQuotaAt = quotaRetryStamp()
 		if !application.claudeQuotaLogged && !errors.Is(fetchErr, quota.ErrLiteLLMUnavailable) {
 			diagnostics.Warn("Claude proxy quota unavailable", fetchErr)
 			application.claudeQuotaLogged = true
 		}
-		application.claudeQuotaValue = nil
-		return nil
+		return application.claudeQuotaValue
 	}
+	application.claudeQuotaAt = time.Now()
 	application.claudeQuotaLogged = false
 	application.claudeQuotaValue = &snapshot
 	return application.claudeQuotaValue

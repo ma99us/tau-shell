@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useEscape } from "./useEscape";
 import { app, Conversation, Session } from "./bridge";
 import { Icon } from "./icons";
 import { conversationDays, filterConversations } from "./conversations";
@@ -14,6 +15,7 @@ export function ConversationsDrawer({ session, busy, onResume, onClose, onError 
   const [list, setList] = useState<Conversation[] | null>(null);
   const [query, setQuery] = useState("");
   const [pending, setPending] = useState<Conversation | null>(null);
+  useEscape(() => setPending(null), pending !== null);
   const [note, setNote] = useState("");
   useEffect(() => {
     let cancelled = false;

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useEscape } from "./useEscape";
 import { app, AppUpdate } from "./bridge";
 import { parseMarkdown } from "./markdown";
 import { renderBlock } from "./fileDrawer";
@@ -15,6 +16,7 @@ export function UpdateDialog({ update, onClose, onError }: {
   const [progress, setProgress] = useState<Progress | null>(null);
   const [failure, setFailure] = useState("");
   const working = progress !== null && progress.phase !== "failed";
+  useEscape(onClose, !working);
 
   useEffect(() => {
     const runtime = window.runtime;

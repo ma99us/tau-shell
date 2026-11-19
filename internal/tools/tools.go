@@ -74,7 +74,10 @@ type InstallSource struct {
 	WingetID string `json:"wingetId,omitempty"`
 	// NpmPackage is used when no winget package exists: TauShell runs a
 	// confirmed `npm install --global <package>`.
-	NpmPackage      string          `json:"npmPackage,omitempty"`
+	NpmPackage string `json:"npmPackage,omitempty"`
+	// NpmFallback is a per-user npm install tried automatically when the winget
+	// package fails (for example a locked-down or fresh PC) and Node.js is usable.
+	NpmFallback     string          `json:"npmFallback,omitempty"`
 	Source          string          `json:"source,omitempty"`
 	ManagedStrategy ManagedStrategy `json:"managedStrategy,omitempty"`
 	VendorURL       string          `json:"vendorUrl"`
@@ -219,6 +222,7 @@ func harnessSpecs() []Spec {
 		switch {
 		case item.Install.WingetID != "":
 			spec.Install.WingetID, spec.Install.Source = item.Install.WingetID, "winget"
+			spec.Install.NpmFallback = item.Install.NpmFallback
 		case item.Install.NpmPackage != "":
 			spec.Install.NpmPackage, spec.Install.Source = item.Install.NpmPackage, "npm"
 		}

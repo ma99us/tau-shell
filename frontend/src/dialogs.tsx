@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useEscape } from "./useEscape";
 import { DialogRequest, Session, ShutdownProgress } from "./bridge";
 import appIcon from "./assets/appicon.png";
 
@@ -7,12 +8,7 @@ const dialogLabels: Record<DialogRequest["kind"], string> = { question: "CONFIRM
 export function AppDialog({ request, onAnswer }: { request: DialogRequest; onAnswer: (choice: string) => void }) {
   // Escape is the dialog's cancel button; a single-button dialog just closes with it.
   const cancel = request.cancelButton || (request.buttons.length === 1 ? request.buttons[0] : "");
-  useEffect(() => {
-    if (!cancel) return;
-    const onKey = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") onAnswer(cancel); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [request.id, cancel]);
+  useEscape(() => onAnswer(cancel), cancel !== "");
   const initial = request.buttons.includes(request.defaultButton) ? request.defaultButton : request.buttons[0];
   return <div className="modal-backdrop" role="alertdialog" aria-modal="true" aria-labelledby="app-dialog-title"><div className="modal confirm-modal">
     <div className="modal-heading"><div><p className="eyebrow">{dialogLabels[request.kind] ?? "NOTICE"}</p><h2 id="app-dialog-title">{request.title}</h2></div></div>
@@ -43,6 +39,7 @@ export function ShutdownPopup({ progress }: { progress: ShutdownProgress }) {
 export function RenameDialog({ session, onClose, onRename }: { session: Session; onClose: () => void; onRename: (name: string) => void }) {
   const [name, setName] = useState(session.name);
   const trimmed = name.trim();
+  useEscape(onClose);
   return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="modal confirm-modal">
     <div className="modal-heading"><div><p className="eyebrow">RENAME SESSION</p><h2>{session.name}</h2></div></div>
     <form onSubmit={(event) => { event.preventDefault(); if (trimmed) onRename(trimmed); }}>

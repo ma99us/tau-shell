@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useEscape } from "./useEscape";
 import { app, AppUpdate, CodexQuota, CopilotQuota, InstallResult, Session, SkillsView, SystemStatus, ToolStatus, WSLAction, WSLStatus } from "./bridge";
 import { UsageSummary, hasUsage, monthTooltip, usageText } from "./usage";
 import { GearIcon, HarnessIcon, RuntimeIcon, ToolIcon } from "./harnessIcons";
@@ -48,6 +49,7 @@ export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAl
 }) {
   const places = usePlaces(sessions.map((session) => session.id), true);
   const [freshSession, setFreshSession] = useState<Session | null>(null);
+  useEscape(() => setFreshSession(null), freshSession !== null);
   const [grouped, setGrouped] = useState(() => readGrouped(localStorage));
   const changeGrouped = (value: boolean) => {
     setGrouped(value);
@@ -94,7 +96,7 @@ export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAl
       }).finally(() => { loading = false; });
     };
     load();
-    const timer = window.setInterval(load, 300000);
+    const timer = window.setInterval(load, 60000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, []);
   const [codexQuota, setCodexQuota] = useState<CodexQuota | null>(null);
@@ -113,7 +115,7 @@ export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAl
       }).finally(() => { loading = false; });
     };
     load();
-    const timer = window.setInterval(load, 300000);
+    const timer = window.setInterval(load, 60000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, []);
   const [claudeQuota, setClaudeQuota] = useState<ClaudeQuota | null>(null);
@@ -140,7 +142,7 @@ export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAl
       }).finally(() => { loading = false; });
     };
     load();
-    const timer = window.setInterval(load, 300000);
+    const timer = window.setInterval(load, 60000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, []);
   const [resumeProgress, setResumeProgress] = useState("");

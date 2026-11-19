@@ -1,18 +1,22 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { app, LaunchPreview, Session, WSLStatus, WorktreeEntry, WorktreePlan } from "./bridge";
+import { useEscape } from "./useEscape";
+import { app, LaunchPreview, Session, ToolStatus, WSLStatus, WorktreeEntry, WorktreePlan } from "./bridge";
 import { HarnessIcon, RuntimeIcon } from "./harnessIcons";
 import { getHarnesses } from "./harnesses";
+import { toolUsable } from "./home";
 import { defaultDistro, isWindowsMount, wslChoices, wslHarnessSupported } from "./wslRuntime";
 
 function parseLaunchArgs(text: string): string[] {
   return text.split(/\r?\n/).map((arg) => arg.trim()).filter(Boolean);
 }
 
-export function CreateSession({ recentFolders, wsl, powershellUsable = true, clone, onClose, onCreated, onError }: {
+export function CreateSession({ recentFolders, wsl, powershellUsable = true, tools, clone, onClose, onCreated, onError }: {
   recentFolders: string[];
   // Shared WSL readiness; the runtime can only be chosen for a new session.
   wsl?: WSLStatus | null;
   powershellUsable?: boolean;
+  // Detected tool status; a harness that is missing or in a bad state is shown disabled.
+  tools?: ToolStatus[];
   // Clone mode: the folder is inherited and fixed; harness and arguments start from the original's.
   clone?: { source: Session; launchArgs: string[] };
   onClose: () => void;
@@ -29,6 +33,12 @@ export function CreateSession({ recentFolders, wsl, powershellUsable = true, clo
   const [runtime, setRuntime] = useState<"" | "wsl">(clone ? (clone.source.runtime === "wsl" ? "wsl" : "") : !powershellUsable && distros.length > 0 ? "wsl" : "");
   const [distro, setDistro] = useState(clone?.source.distro ?? (!powershellUsable ? defaultDistro(distros) : ""));
   const inWSL = runtime === "wsl";
+  // Detection describes the Windows host, so it says nothing about a WSL distro.
+  const unavailableReason = (id: string): string => {
+    const status = inWSL ? undefined : tools?.find((item) => item.id === id);
+    if (!status || toolUsable(status)) return "";
+    return !status.installed ? `${status.name} is not installed` : status.error || `${status.name} is not usable (see Home > Harnesses)`;
+  };
   const runtimeName = inWSL ? "wsl" : "";
   const [templateText, setTemplateText] = useState<string | null>(null);
   const [preview, setPreview] = useState<LaunchPreview | null>(null);
@@ -168,6 +178,13 @@ export function CreateSession({ recentFolders, wsl, powershellUsable = true, clo
       onCreated(session);
     } catch (err) { fail(err); } finally { setSaving(false); }
   };
+  useEscape(onClose);
+  // Start on the first usable harness when the default one is unavailable.
+  useEffect(() => {
+    if (clone || toolChosen.current || !unavailableReason(tool)) return;
+    const next = getHarnesses().find((item) => item.trusted && (!inWSL || wslHarnessSupported(item.id)) && !unavailableReason(item.id));
+    if (next) setTool(next.id);
+  }, [tools, inWSL]);
   return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="modal session-modal">
     <div className="modal-heading"><h2>{clone ? `Clone ${clone.source.name}` : "Start new AI session"}</h2><button className="icon-button" onClick={onClose}>x</button></div>
     <form onSubmit={(event) => void submit(event)}>
@@ -196,7 +213,7 @@ export function CreateSession({ recentFolders, wsl, powershellUsable = true, clo
       <div className="harness-field"><span className="harness-label" id="harness-label">AI harness</span>
         <div className="harness-picker" role="radiogroup" aria-labelledby="harness-label">
           {getHarnesses().filter((item) => item.trusted && (!inWSL || wslHarnessSupported(item.id))).map(({ id, name }) =>
-            <button key={id} type="button" role="radio" aria-checked={tool === id} className={`harness-option ${tool === id ? "selected" : ""}`} onClick={() => { toolChosen.current = true; setTool(id); }}>
+            <button key={id} type="button" role="radio" aria-checked={tool === id} disabled={!!unavailableReason(id)} title={unavailableReason(id) || undefined} className={`harness-option ${tool === id ? "selected" : ""} ${unavailableReason(id) ? "unavailable" : ""}`} onClick={() => { toolChosen.current = true; setTool(id); }}>
               <HarnessIcon tool={id} /><span className="harness-name">{name}</span>
             </button>)}
         </div>

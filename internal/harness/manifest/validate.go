@@ -254,8 +254,8 @@ func (item *Manifest) validateInstallAndBrand(fail func(string, string, ...any) 
 	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
 		return fail("install.vendor_url", "must be an https URL")
 	}
-	if !item.Builtin && (item.Install.WingetID != "" || item.Install.NpmPackage != "") {
-		return fail("install", "winget_id and npm_package are only for built-in harnesses; use vendor_url")
+	if !item.Builtin && (item.Install.WingetID != "" || item.Install.NpmPackage != "" || item.Install.NpmFallback != "") {
+		return fail("install", "winget_id, npm_package and npm_fallback are only for built-in harnesses; use vendor_url")
 	}
 	if !brandMarks[item.Brand.Mark] {
 		return fail("brand.mark", "must be claude, copilot or monogram")

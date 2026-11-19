@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useEscape } from "./useEscape";
 import { app, SecretInfo } from "./bridge";
 import { HomePanel, PanelFeedbackState } from "./homePanel";
 import { Icon } from "./icons";
@@ -18,6 +19,7 @@ export function SecretsPane({ onError, feedback, onFeedback, onDismissFeedback }
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [removing, setRemoving] = useState<SecretInfo | null>(null);
+  useEscape(() => setRemoving(null), removing !== null);
 
   const load = () => app().ListSecrets().then(setSecrets).catch((err) => { setSecrets([]); onError("ui.secrets-list", err); });
   useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);

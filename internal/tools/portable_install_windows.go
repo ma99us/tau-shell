@@ -23,7 +23,7 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/crypto/openpgp"
+	"github.com/ProtonMail/go-crypto/openpgp"
 )
 
 const (
@@ -218,7 +218,7 @@ func verifyNodeChecksumSignature(ctx context.Context, client *http.Client, versi
 	if len(keyring) == 0 {
 		return errors.New("could not retrieve any pinned Node.js release signing keys")
 	}
-	signer, err := openpgp.CheckDetachedSignature(keyring, bytes.NewReader(manifest), bytes.NewReader(signature))
+	signer, err := openpgp.CheckDetachedSignature(keyring, bytes.NewReader(manifest), bytes.NewReader(signature), nil)
 	if err != nil {
 		return fmt.Errorf("verify Node.js checksum signature: %w", err)
 	}

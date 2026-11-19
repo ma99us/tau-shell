@@ -66,6 +66,7 @@
     "Companions": null,
     "Install": {
       "wingetId": "Anthropic.ClaudeCode",
+      "npmFallback": "@anthropic-ai/claude-code",
       "source": "winget",
       "vendorUrl": "https://code.claude.com/docs/en/setup"
     }

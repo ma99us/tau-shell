@@ -162,6 +162,17 @@ func (installer Installer) Install(ctx context.Context, id ID) (InstallResult, e
 	} else {
 		runErr = installer.RunWinget(ctx, winget, args)
 	}
+	if runErr != nil && label == "winget" && spec.Install.NpmFallback != "" && installer.RunNpm != nil && installer.Detect != nil &&
+		!installer.Detect(ctx, spec).Usable() {
+		if node, found := Lookup(NodeJS); found && installer.Detect(ctx, node).Usable() {
+			fallback := []string{"install", "--global", spec.Install.NpmFallback}
+			if npmErr := installer.RunNpm(ctx, fallback); npmErr == nil {
+				label, runErr = "winget, then npm fallback", fmt.Errorf("winget: %w", runErr)
+			} else {
+				runErr = fmt.Errorf("%w; npm fallback failed: %v", runErr, npmErr)
+			}
+		}
+	}
 	var refreshErr error
 	if installer.RefreshPath != nil {
 		refreshErr = installer.RefreshPath()

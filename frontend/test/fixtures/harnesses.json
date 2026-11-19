@@ -74,7 +74,7 @@
     },
     "builtin": true,
     "path": "builtin/claude-code.yaml",
-    "hash": "ced6ea68192daf13bef1cf297eabe73e33ff19c3e954abfd582247f8d4716582"
+    "hash": "19b6226c8e53a264d2741af399b50814d1a83d43e0ffee020efcc91c1a120ac3"
   },
   {
     "id": "codex",

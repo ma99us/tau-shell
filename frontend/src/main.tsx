@@ -1,4 +1,5 @@
 import { Component, DragEvent, ErrorInfo, KeyboardEvent, MouseEvent, ReactNode, useEffect, useRef, useState } from "react";
+import { useEscape } from "./useEscape";
 import { createRoot } from "react-dom/client";
 import "@xterm/xterm/css/xterm.css";
 import { app, DialogRequest, InstallResult, Session, SessionEvent, ShutdownProgress, SkillsView, SystemStatus, ToolStatus, UpdateResult, WSLAction, WSLStatus } from "./bridge";
@@ -154,6 +155,9 @@ function App() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [closeRequest, setCloseRequest] = useState<Session | null>(null);
   const [deleteRequest, setDeleteRequest] = useState<Session | null>(null);
+  useEscape(() => setDeleteRequest(null), deleteRequest !== null);
+  useEscape(() => setCloseRequest(null), closeRequest !== null);
+  useEscape(() => setStopGroup(null), stopGroup !== null);
   const [worktreeChoice, setWorktreeChoice] = useState<WorktreeDeleteChoice>(noWorktreeChoice);
   const [menu, setMenu] = useState<{ x: number; y: number; session: Session } | null>(null);
   const [dialogs, setDialogs] = useState<DialogRequest[]>([]);
@@ -875,13 +879,13 @@ function App() {
           </section>
         </main>
       </div>
-      {dialogOpen && <CreateSession recentFolders={recentFolders} wsl={wsl} powershellUsable={!powershell || toolUsable(powershell)} onClose={() => setDialogOpen(false)} onCreated={(session) => {
+      {dialogOpen && <CreateSession recentFolders={recentFolders} wsl={wsl} powershellUsable={!powershell || toolUsable(powershell)} tools={status?.tools} onClose={() => setDialogOpen(false)} onCreated={(session) => {
         setSessions((current) => [...current, session]);
         setRecentFolders((current) => [session.workingDir, ...current.filter((folder) => folder.toLowerCase() !== session.workingDir.toLowerCase())].slice(0, 5));
         setDialogOpen(false);
         void launch(session, "start");
       }} onError={(failure) => showError("ui.create-session", failure)} />}
-      {cloneRequest && <CreateSession recentFolders={recentFolders} clone={cloneRequest} onClose={() => setCloneRequest(null)} onCreated={(copy) => void cloneCreated(copy)} onError={(failure) => showError("ui.duplicate-session", failure)} />}
+      {cloneRequest && <CreateSession recentFolders={recentFolders} tools={status?.tools} clone={cloneRequest} onClose={() => setCloneRequest(null)} onCreated={(copy) => void cloneCreated(copy)} onError={(failure) => showError("ui.duplicate-session", failure)} />}
       {menu && <SessionMenu x={menu.x} y={menu.y} session={menu.session} onClose={() => setMenu(null)}
         onDuplicate={() => { const target = menu.session; setMenu(null); void duplicateSession(target); }}
         onEditFile={() => { const target = menu.session; setMenu(null); app().OpenSessionFile(target.id).catch((err) => showError("ui.open-session-file", err)); }}

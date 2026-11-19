@@ -151,6 +151,8 @@ type Install struct {
 	VendorURL  string `yaml:"vendor_url"`
 	WingetID   string `yaml:"winget_id,omitempty"`
 	NpmPackage string `yaml:"npm_package,omitempty"`
+	// NpmFallback is installed with npm when the winget package fails.
+	NpmFallback string `yaml:"npm_fallback,omitempty"`
 }
 
 type Brand struct {

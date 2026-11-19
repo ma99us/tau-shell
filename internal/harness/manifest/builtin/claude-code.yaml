@@ -68,6 +68,7 @@ phone_answer: claude-permission
 install:
   vendor_url: https://code.claude.com/docs/en/setup
   winget_id: Anthropic.ClaudeCode
+  npm_fallback: "@anthropic-ai/claude-code"
 brand:
   mark: claude
   color: "#d97757"

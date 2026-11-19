@@ -462,6 +462,37 @@ func TestInstallerFailureButToolDetectedSucceedsWithNote(t *testing.T) {
 	}
 }
 
+func TestWingetFailureFallsBackToNpmWhenNodeIsUsable(t *testing.T) {
+	harness := &installHarness{wingetPath: `C:\winget.exe`, confirm: true, runErr: errors.New("exit status 1")}
+	installed := false
+	installer := harness.installer()
+	runNpm := installer.RunNpm
+	installer.RunNpm = func(ctx context.Context, args []string) error {
+		installed = true
+		return runNpm(ctx, args)
+	}
+	installer.Detect = func(_ context.Context, spec Spec) Status {
+		if spec.ID == NodeJS || installed {
+			status := usableStatus()
+			status.ExecutablePath = `C:\bin\` + string(spec.ID) + ".exe"
+			return status
+		}
+		return Status{Error: "claude was not found on PATH"}
+	}
+	harness.runErr = nil
+	installer.RunWinget = func(context.Context, string, []string) error { return errors.New("exit status 1") }
+	result, err := installer.Install(context.Background(), ClaudeCode)
+	if err != nil || result.Outcome != InstallSucceeded {
+		t.Fatalf("result = %+v, err = %v", result, err)
+	}
+	if strings.Join(harness.runNpmArgs, " ") != "install --global @anthropic-ai/claude-code" {
+		t.Fatalf("npm args = %v", harness.runNpmArgs)
+	}
+	if !strings.Contains(result.Message, "exit status 1") {
+		t.Fatalf("message hides the winget failure: %q", result.Message)
+	}
+}
+
 func TestInstallUnknownTool(t *testing.T) {
 	harness := &installHarness{wingetPath: `C:\winget.exe`, confirm: true}
 	if _, err := harness.installer().Install(context.Background(), ID("unknown")); err == nil {

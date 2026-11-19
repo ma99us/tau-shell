@@ -2101,28 +2101,34 @@ h3 {
 .file-tabs {
   display: flex;
   gap: 4px;
+  align-items: flex-end;
 }
 
 .file-tab {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 9px;
-  border: 0;
+  padding: 5px 14px;
+  border: 1px solid var(--border-muted);
   border-bottom: 2px solid transparent;
-  background: transparent;
-  color: var(--text-6);
+  border-radius: var(--radius-6) var(--radius-6) 0 0;
+  background: var(--bg-control-hover);
+  color: var(--text-4);
+  cursor: pointer;
   font-family: inherit;
   font-size: var(--fs-12);
   font-weight: 700;
 }
 
 .file-tab:hover {
-  color: var(--text-2);
+  color: var(--text-1);
+  border-color: var(--accent);
 }
 
 .file-tab.active {
+  border-color: var(--border-muted);
   border-bottom-color: var(--status-ok);
+  background: var(--accent-bg-4);
   color: var(--text-1);
 }
 
@@ -2726,8 +2732,14 @@ h3 {
   opacity: 1;
 }
 
-.harness-option:disabled:not(.selected) {
+.harness-option:disabled:not(.selected),
+.harness-option.unavailable {
   opacity: 0.45;
+}
+
+.harness-option.unavailable {
+  cursor: not-allowed;
+  filter: grayscale(1);
 }
 
 .harness-option.selected {

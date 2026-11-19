@@ -823,3 +823,10 @@ to include the custom app icon.
    `Snapshot.ResumeNote`; Restore hidden with Start fresh when Copilot has no
    `events.jsonl` for the session). It relies on Copilot's undocumented
    session-store layout and fails open if the store is missing.
+
+## Install fallbacks and dialog fixes
+
+- Managed Node.js install verifies `SHASUMS256.txt.sig` with `github.com/ProtonMail/go-crypto/openpgp`; the old `x/crypto/openpgp` rejected the Node release EdDSA key (algorithm 22) on fresh PCs. Verified live against nodejs.org.
+- A confirmed winget install that fails and leaves the tool undetected falls back to a per-user `npm install --global` when the manifest declares `install.npm_fallback` (Claude Code: `@anthropic-ai/claude-code`) and Node.js is usable. The result is still verified by re-detection and the winget failure stays in the message. Admin detection was not added; the fallback needs no elevation. Not verified on a fresh PC.
+- Home quotas keep the last good value on a failed read and retry after one minute (previously a failure hid the widget for five minutes).
+- Esc closes dialogs through `useEscape` (topmost only); the New/Clone dialog disables harnesses that detection reports missing or unusable (PowerShell runtime only).
