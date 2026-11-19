@@ -156,6 +156,7 @@ export type SystemStatus = {
   diagnosticsLogPath: string;
   wingetAvailable: boolean;
   npmAvailable: boolean;
+  adminStatus?: "elevated" | "available" | "standard" | "unknown";
   tools: ToolStatus[];
 };
 
@@ -356,6 +357,7 @@ type WailsApp = {
   GetSessionModel(sessionId: string): Promise<string>;
   GetSessionUsage(sessionId: string): Promise<SessionUsage>;
   GetUsageSummary(): Promise<UsageSummary>;
+  TakeSessionsClosedWithApp(): Promise<string[] | null>;
   GetCopilotQuota(refresh: boolean): Promise<CopilotQuota | null>;
   GetCodexQuota(refresh: boolean): Promise<CodexQuota | null>;
   GetClaudeQuota(refresh: boolean): Promise<ClaudeQuota | null>;

@@ -441,6 +441,23 @@ func (manager *Manager) PlaceAfter(ctx context.Context, id, afterID string) erro
 
 const autoResumeAllSetting = "auto_resume_all"
 
+// closedWithAppSetting holds the sessions that were running when TauShell
+// closed, so the next launch can resume them even without an auto-resume flag.
+const closedWithAppSetting = "closed_with_app"
+
+// TakeClosedWithApp returns the sessions that were running at the last close
+// and forgets them, so each close is acted on once.
+func (manager *Manager) TakeClosedWithApp(ctx context.Context) ([]string, error) {
+	value, err := manager.store.Setting(ctx, closedWithAppSetting)
+	if err != nil || value == "" {
+		return nil, err
+	}
+	if err := manager.store.SetSetting(ctx, closedWithAppSetting, ""); err != nil {
+		return nil, err
+	}
+	return strings.Split(value, ","), nil
+}
+
 // PlaceLast saves the display order with id after every other session. It reads
 // only the session files and the saved order, so it stays cheap enough to run
 // when a session is created. Sessions without a saved position keep their
@@ -805,6 +822,15 @@ func (manager *Manager) StopAll(ctx context.Context) error {
 		}
 	}
 	manager.mu.Unlock()
+	if len(sessions) > 0 {
+		ids := make([]string, 0, len(sessions))
+		for _, current := range sessions {
+			ids = append(ids, current.config.ID)
+		}
+		if err := manager.store.SetSetting(ctx, closedWithAppSetting, strings.Join(ids, ",")); err != nil {
+			diagnostics.Error("record sessions running at close failed", err)
+		}
+	}
 
 	var wait sync.WaitGroup
 	errorsOut := make(chan error, len(sessions))

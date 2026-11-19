@@ -60,6 +60,7 @@ Go extension (Delve) is required.
   release-build smoke test, and an end-to-end smoke test of the built ZIP
   (below). `cmd/taushell/frontend/dist` is generated and
   gitignored, so the frontend must be built before any Go build or test.
+- CI installs the WebView2 Evergreen runtime first when a runner lacks it (the smoke test needs it).
 - End-to-end smoke test: `./scripts/smoke-test.ps1 -Zip <zip> -Version <ver>`
   (or `-Exe <taushell.exe>`). It starts the built app in an isolated profile
   (`USERPROFILE`, `TEMP`, `APPDATA`) with `TAUSHELL_SMOKE_OUT` set; the app

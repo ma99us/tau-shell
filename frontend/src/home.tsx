@@ -218,6 +218,7 @@ export function Home({ sessions, workspaces, groupControls, loaded, autoResumeAl
         {status?.tools.filter((tool) => !isHarness(tool.id)).map((tool) => <ToolRow key={tool.id} tool={tool} actions={tools} />) ?? <div className="loading-card" role="status"><span className="spinner" aria-hidden="true" /><span className="muted">Detecting tools...</span></div>}
         <WSLRow actions={tools} />
         </div>
+        {status && <p className="muted panel-footnote">{adminFootnote(status.adminStatus)}</p>}
       </HomePanel>
       <HomePanel title="AI Harnesses" feedback={toolNoticeFeedback(tools, "harnesses", panelFeedback.harnesses)} onDismissFeedback={() => dismissToolFeedback(tools, "harnesses", onDismissPanelFeedback)}
         onFeedbackAction={() => openToolNoticeAction(tools, "harnesses")}>
@@ -358,6 +359,15 @@ export function Setup({ powershell, actions, onRecheck, onContinue, feedback, on
     <div className="modal-actions"><button className="secondary-button" onClick={onRecheck}>Re-check</button>
       <button className="text-button" onClick={onContinue}>Continue without PowerShell 7 or WSL</button></div>
   </div>;
+}
+
+function adminFootnote(admin: SystemStatus["adminStatus"]): string {
+  switch (admin) {
+    case "elevated": return "Local administrator: yes (TauShell is running elevated).";
+    case "available": return "Local administrator: available. TauShell is not elevated and never elevates itself; installers that need it ask Windows for approval.";
+    case "standard": return "Local administrator: not available. TauShell uses per-user installs only.";
+    default: return "Local administrator: could not be determined.";
+  }
 }
 
 // Mirrors the Go installer: winget when a package is declared, otherwise npm.

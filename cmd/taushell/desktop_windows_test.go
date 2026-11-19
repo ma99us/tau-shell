@@ -95,6 +95,10 @@ func (manager *closeTestManager) AutoResumeAll(context.Context) (bool, error) {
 	return false, errors.New("unexpected AutoResumeAll call")
 }
 
+func (manager *closeTestManager) TakeClosedWithApp(context.Context) ([]string, error) {
+	return nil, nil
+}
+
 func (manager *closeTestManager) SetAutoResumeAll(context.Context, bool) error {
 	return errors.New("unexpected SetAutoResumeAll call")
 }

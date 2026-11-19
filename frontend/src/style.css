@@ -3303,3 +3303,8 @@ input[readonly]:focus {
   height: 6px;
   cursor: row-resize;
 }
+
+.panel-footnote {
+  margin: 8px 0 0;
+  font-size: var(--fs-11);
+}

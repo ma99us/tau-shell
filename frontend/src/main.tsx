@@ -217,6 +217,11 @@ function App() {
         showError("ui.update-result", err);
       }
       const restore = new Set(updated?.sessions ?? []);
+      try {
+        for (const id of (await app().TakeSessionsClosedWithApp()) ?? []) restore.add(id);
+      } catch (err) {
+        showError("ui.auto-resume", err);
+      }
       const targets = sessions.filter((session) => (all || session.autoResume || restore.has(session.id)) && !session.runningHere && session.hasResumeId && !session.resumeNote);
       if (updated) {
         const unresumed = (updated.sessions ?? []).length - targets.filter((session) => restore.has(session.id)).length;

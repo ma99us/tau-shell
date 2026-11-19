@@ -113,6 +113,7 @@ type desktopSessionManager interface {
 	UpdateTags(id string, tags []string) error
 	AutoResumeAll(ctx context.Context) (bool, error)
 	SetAutoResumeAll(ctx context.Context, enabled bool) error
+	TakeClosedWithApp(ctx context.Context) ([]string, error)
 	PromptQueues(context.Context) (map[string][]string, error)
 	SetPromptQueue(ctx context.Context, id string, prompts []string) error
 	SetOrder(context.Context, []string) error
@@ -127,6 +128,7 @@ type SystemStatus struct {
 	DiagnosticsLogPath string         `json:"diagnosticsLogPath"`
 	WingetAvailable    bool           `json:"wingetAvailable"`
 	NpmAvailable       bool           `json:"npmAvailable"`
+	AdminStatus        string         `json:"adminStatus"`
 	Tools              []tools.Status `json:"tools"`
 }
 
@@ -268,8 +270,10 @@ func (application *App) GetSystemStatus() SystemStatus {
 		DiagnosticsLogPath: diagnostics.LogPath(),
 		WingetAvailable:    wingetErr == nil,
 		NpmAvailable:       npmAvailable,
+		AdminStatus:        detectAdminStatus(),
 		Tools:              toolStatuses,
 	}
+	diagnostics.Info("administrator status", "status", status.AdminStatus)
 	for _, tool := range status.Tools {
 		logToolStatus(tool)
 	}
@@ -660,6 +664,17 @@ func (application *App) GetAutoResumeAll() (enabled bool, err error) {
 		}
 	}()
 	return application.manager.AutoResumeAll(context.Background())
+}
+
+// TakeSessionsClosedWithApp returns the sessions that were running when
+// TauShell last closed (once), for the startup resume.
+func (application *App) TakeSessionsClosedWithApp() (ids []string, err error) {
+	defer func() {
+		if err != nil {
+			diagnostics.Error("read sessions closed with app failed", err)
+		}
+	}()
+	return application.manager.TakeClosedWithApp(context.Background())
 }
 
 // SetAutoResumeAll saves the global "resume all sessions on startup" preference.
