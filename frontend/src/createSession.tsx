@@ -33,6 +33,7 @@ export function CreateSession({ recentFolders, wsl, powershellUsable = true, too
   const [runtime, setRuntime] = useState<"" | "wsl">(clone ? (clone.source.runtime === "wsl" ? "wsl" : "") : !powershellUsable && distros.length > 0 ? "wsl" : "");
   const [distro, setDistro] = useState(clone?.source.distro ?? (!powershellUsable ? defaultDistro(distros) : ""));
   const inWSL = runtime === "wsl";
+  const noDistros = distros.length === 0;
   // Detection describes the Windows host, so it says nothing about a WSL distro.
   const unavailableReason = (id: string): string => {
     const status = inWSL ? undefined : tools?.find((item) => item.id === id);
@@ -218,10 +219,10 @@ export function CreateSession({ recentFolders, wsl, powershellUsable = true, too
             </button>)}
         </div>
       </div>
-      {(clone || distros.length > 0) && <div className="harness-field"><span className="harness-label" id="runtime-label">Runtime{clone && <span className="optional"> (inherited from the original, cannot be changed)</span>}</span>
+      {(clone || distros.length > 0 || !powershellUsable || wsl?.installed) && <div className="harness-field"><span className="harness-label" id="runtime-label">Runtime{clone && <span className="optional"> (inherited from the original, cannot be changed)</span>}</span>
         <div className="harness-picker runtime-picker" role="radiogroup" aria-labelledby="runtime-label">
-          <button type="button" role="radio" aria-checked={!inWSL} disabled={!!clone} className={`harness-option runtime-option ${!inWSL ? "selected" : ""}`} onClick={() => chooseRuntime("")}><RuntimeIcon kind="powershell" /><span className="harness-name">PowerShell</span></button>
-          <button type="button" role="radio" aria-checked={inWSL} disabled={!!clone} className={`harness-option runtime-option ${inWSL ? "selected" : ""}`} onClick={() => chooseRuntime("wsl")}><RuntimeIcon kind="wsl" /><span className="harness-name">WSL</span></button>
+          <button type="button" role="radio" aria-checked={!inWSL} disabled={!!clone || !powershellUsable} title={!clone && !powershellUsable ? "PowerShell 7 is not installed" : undefined} className={`harness-option runtime-option ${!inWSL ? "selected" : ""} ${!clone && !powershellUsable ? "unavailable" : ""}`} onClick={() => chooseRuntime("")}><RuntimeIcon kind="powershell" /><span className="harness-name">PowerShell</span></button>
+          <button type="button" role="radio" aria-checked={inWSL} disabled={!!clone || noDistros} title={!clone && noDistros ? "No WSL distro is installed" : undefined} className={`harness-option runtime-option ${inWSL ? "selected" : ""} ${!clone && noDistros ? "unavailable" : ""}`} onClick={() => chooseRuntime("wsl")}><RuntimeIcon kind="wsl" /><span className="harness-name">WSL</span></button>
           {inWSL && clone && <input className="distro-field" aria-label="WSL distro" title="WSL distro (inherited, cannot be changed)" readOnly value={distro} />}
           {inWSL && !clone && <select className="distro-field" aria-label="WSL distro" title="WSL distro" value={distro} onChange={(event) => setDistro(event.target.value)}>{distros.map((item) => <option key={item.name} value={item.name}>{item.name}{item.default ? " (default)" : ""}</option>)}</select>}
         </div>

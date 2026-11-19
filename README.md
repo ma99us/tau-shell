@@ -124,6 +124,8 @@ the original session's workspace and runtime. YAML records `runtime: wsl` and
 
 ## Install
 
+New here? Follow the [Getting Started guide](GETTING-STARTED.md).
+
 Download `TauShell-<version>-windows-x64.zip` from the
 [Releases page](https://github.com/ma99us/tau-shell/releases), extract it
 anywhere and run `taushell.exe`. There is no installer and no admin rights are
