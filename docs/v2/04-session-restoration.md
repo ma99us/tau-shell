@@ -59,11 +59,38 @@ and [handoff](21-engineering-handoff.md#recommended-next-actions).
 A session that has had several conversations (Start fresh rotates the ID) lists
 them under the History icon in the side rail. Resuming a chosen one runs the
 harness resume check, records the outgoing conversation's usage, swaps the saved
-`harness_session_id` (refused while running or when another session owns that
-ID) and restores. If the launch fails the previous ID is put back and the error
+`harness_session_id` (refused when another session owns that ID) and restores.
+On a running session the UI first warns that it will be closed; the host then
+stops it with the normal ladder (graceful exit, interrupt, forced termination)
+before switching. If the launch fails the previous ID is put back and the error
 is shown; success is still only claimed as far as the harness confirms it. Only
 conversations the usage ledger or the saved ID already knows are offered, and
 titles come from the harness's own files (Claude Code, Copilot CLI).
+
+The New conversation button (side rail, next to History) confirms, stops a
+running session the same way and starts fresh; the old conversation stays in
+History. The former Clear button, which sent `/clear` and left TauShell on the
+old ID, was removed.
+
+### Conversations the harness starts itself
+
+While a session runs (and once after it exits) the host looks for a newer
+conversation of the same folder in the harness's own files and records it as the
+saved ID, so History lists it and a plain Resume continues the latest one
+(`internal/sessionhost/conversation_track_windows.go`, `internal/harness/latest.go`).
+Detection covers Claude Code (`~/.claude/projects/<folder>/*.jsonl`), Copilot CLI
+(`~/.copilot/session-state/*/` matched by `cwd`), Codex and OpenCode (Windows
+home only); GSD has no reliable signal and is button-only. The ID is changed
+only by a compare-and-set against the launch token and the expected current ID,
+so a conversation chosen in History or a newer launch is never overwritten, and
+tracking pauses while the session is being closed to switch. Two candidates
+within 5 seconds of each other, or one already owned by another session, are not
+adopted. A conversation with no usage yet may not appear in History.
+Live check (2026-11-25, disposable folders, Windows): Claude Code `/clear` and
+Copilot CLI `/new` were adopted and both conversations listed; Resume on a
+running session switched back. Copilot CLI `/clear` keeps the same conversation
+ID, so it is not a new conversation to TauShell. Codex and OpenCode detection
+reuse the launch-time discovery and were not run live for this feature.
 
 ## Limits
 

@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ma99us/tau-shell/internal/conpty"
@@ -90,6 +91,9 @@ type managedSession struct {
 	resumeNote  string
 	// cleanup stops processes a forced exit left behind (WSL only); nil otherwise.
 	cleanup func() (int, error)
+	// switching is set while the session is closed to move to another conversation;
+	// conversation tracking must not record anything for it then.
+	switching atomic.Bool
 }
 
 type sessionProcess interface {
@@ -547,7 +551,30 @@ func (manager *Manager) Start(ctx context.Context, id string, restoring bool, co
 	return manager.start(ctx, id, restoring, false, columns, rows)
 }
 
+// stopForSwitch ends a running session before it is relaunched on another
+// conversation. The usual graceful-exit, interrupt, forced-termination ladder
+// applies, so nothing is cut short silently.
+func (manager *Manager) stopForSwitch(ctx context.Context, id string) error {
+	current := manager.get(id)
+	if current == nil || !current.isRunning() {
+		return nil
+	}
+	current.switching.Store(true)
+	if err := manager.stop(ctx, current); err != nil {
+		current.switching.Store(false)
+		return err
+	}
+	if current.isRunning() {
+		current.switching.Store(false)
+		return fmt.Errorf("session %q is still running; try again", id)
+	}
+	return nil
+}
+
 func (manager *Manager) StartFresh(ctx context.Context, id string, columns, rows int) (Snapshot, error) {
+	if err := manager.stopForSwitch(ctx, id); err != nil {
+		return Snapshot{}, err
+	}
 	// Capture the old conversation's unread tail before its ID is replaced.
 	manager.ingestSession(ctx, id, true)
 	return manager.start(ctx, id, false, true, columns, rows)
@@ -697,6 +724,7 @@ func (manager *Manager) start(ctx context.Context, id string, restoring, fresh b
 	if adapter.DiscoversSessionID() && runtime.HarnessSessionID == "" && discoveryNote == "" {
 		go manager.discoverSessionID(current, adapter, launchedAt, existingSessionIDs, runtime.LaunchToken)
 	}
+	manager.startConversationTracking(current, adapter, target.home, launchedAt, runtime.LaunchToken)
 	manager.publish(Event{Kind: EventState, SessionID: id, Session: current.snapshot()})
 	diagnostics.Info("session process started",
 		"session_id", id,

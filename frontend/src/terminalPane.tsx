@@ -16,7 +16,7 @@ import { VoiceButton } from "./voiceButton";
 import type { QueueHooks } from "./promptQueue";
 import { enqueuePrompt } from "./promptQueue";
 import { FileDrawer } from "./fileDrawer";
-import { ConversationsDrawer } from "./conversationsDrawer";
+import { ConversationsDrawer, NewConversationButton } from "./conversationsDrawer";
 import { reportFrontendFailure, isStoppedSessionError } from "./errors";
 import { Sep, sessionColorStyle, statusLabel } from "./sessionVisuals";
 import { isExpensiveModel } from "./modelTier";
@@ -432,9 +432,10 @@ export function TerminalPane({ session, visible, busy, harness, onSend, onNotice
       <div className="terminal-container" ref={container} />
       <div className="side-rail">
         <button className="text-button terminal-action icon-button" aria-pressed={filesOpen} title="Files: browse the project files (read-only)" aria-label="Files: browse the project files (read-only)" onClick={() => setDrawer(filesOpen ? null : "files")}><Icon name="files" /></button>
-        <button className="text-button terminal-action icon-button" aria-pressed={drawer === "history"} title="History: past conversations of this session" aria-label="History: past conversations of this session" onClick={() => setDrawer(drawer === "history" ? null : "history")}><Icon name="history" /></button>
         {session.runningHere && <VoiceButton sessionId={session.id} focus={() => terminalInstances.get(session.id)?.focus()} onError={onError} />}
         {harness && onSend && <HarnessToolbar session={session} widgets={harness.widgets} modelSupported={harness.modelSupported} send={onSend} onError={onError} />}
+        {(session.runningHere || session.hasResumeId) && <NewConversationButton session={session} busy={busy} onLaunch={onLaunch} />}
+        <button className="text-button terminal-action icon-button" aria-pressed={drawer === "history"} title="History: past conversations of this session" aria-label="History: past conversations of this session" onClick={() => setDrawer(drawer === "history" ? null : "history")}><Icon name="history" /></button>
       </div>
       {filesOpen && <FileDrawer session={session} onError={onError} onInsert={(path) => { const why = insertAtPrompt(session, /\s/.test(path) ? `"${path}" ` : `${path} `); if (why) onError(new Error(why)); }} />}
       {drawer === "history" && <ConversationsDrawer session={session} busy={busy} onResume={onResumeConversation} onClose={() => setDrawer(null)} onError={onError} />}

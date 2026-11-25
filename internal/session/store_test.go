@@ -152,6 +152,40 @@ func TestSetHarnessSessionIDChoosesConversationSafely(t *testing.T) {
 	}
 }
 
+func TestAdoptHarnessSessionIDFollowsTheLaunchSafely(t *testing.T) {
+	ctx := context.Background()
+	store, err := OpenStore(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	first, err := store.Begin(ctx, "agent", ClaudeCode, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := store.Begin(ctx, "other", ClaudeCode, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.AdoptHarnessSessionID(ctx, "agent", ClaudeCode, first.LaunchToken, first.HarnessSessionID, other.HarnessSessionID); !errors.Is(err, ErrHarnessSessionIDClaimed) {
+		t.Fatalf("expected a claimed conversation to be refused, got %v", err)
+	}
+	if _, err := store.AdoptHarnessSessionID(ctx, "agent", ClaudeCode, "stale-token", first.HarnessSessionID, "cleared"); !errors.Is(err, ErrHarnessLaunchChanged) {
+		t.Fatalf("expected a stale launch to be refused, got %v", err)
+	}
+	if _, err := store.AdoptHarnessSessionID(ctx, "agent", ClaudeCode, first.LaunchToken, "someone-else-changed-it", "cleared"); !errors.Is(err, ErrHarnessLaunchChanged) {
+		t.Fatalf("expected a changed current ID to be refused, got %v", err)
+	}
+	previous, err := store.AdoptHarnessSessionID(ctx, "agent", ClaudeCode, first.LaunchToken, first.HarnessSessionID, "cleared")
+	if err != nil || previous != first.HarnessSessionID {
+		t.Fatalf("previous = %q, err = %v", previous, err)
+	}
+	runtime, _ := store.Runtime(ctx, "agent")
+	if runtime.HarnessSessionID != "cleared" {
+		t.Fatalf("saved ID = %q", runtime.HarnessSessionID)
+	}
+}
+
 func TestBeginFreshReplacesSavedHarnessID(t *testing.T) {
 	store, err := OpenStore(filepath.Join(t.TempDir(), "state.db"))
 	if err != nil {

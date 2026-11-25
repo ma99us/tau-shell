@@ -101,9 +101,6 @@ func (manager *Manager) Conversations(ctx context.Context, id string) ([]Convers
 // and restores it. It only accepts a conversation this session has had, and
 // puts the previous ID back if the launch fails.
 func (manager *Manager) ResumeConversation(ctx context.Context, id, harnessSessionID string, columns, rows int) (Snapshot, error) {
-	if current := manager.get(id); current != nil && current.isRunning() {
-		return Snapshot{}, fmt.Errorf("session %q is running; stop it before choosing another conversation", id)
-	}
 	config, err := session.FindConfig(manager.configDirectory, id)
 	if err != nil {
 		return Snapshot{}, err
@@ -132,6 +129,11 @@ func (manager *Manager) ResumeConversation(ctx context.Context, id, harnessSessi
 		if err := adapter.CheckResumeIn(home, harnessSessionID); err != nil {
 			return Snapshot{}, err
 		}
+	}
+	// A running session is closed first (confirmed in the UI); the chosen
+	// conversation is already validated, so nothing is stopped for a bad pick.
+	if err := manager.stopForSwitch(ctx, id); err != nil {
+		return Snapshot{}, err
 	}
 	if chosen.Current {
 		return manager.start(ctx, id, true, false, columns, rows)

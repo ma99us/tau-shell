@@ -1,5 +1,4 @@
 import { Fragment, ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { useEscape } from "./useEscape";
 import { app, CommandItem, HarnessWidgets, ResolvedPreset, Session } from "./bridge";
 import { hasCueSignal, type SendPlan } from "./attention";
 import { QueuePanel, useQueueLength } from "./queuePanel";
@@ -111,8 +110,6 @@ export function HarnessToolbar({ session, widgets, modelSupported, send, onError
   const [modelNote, setModelNote] = useState("");
   const modelTimer = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(modelTimer.current), []);
-  const [confirmClear, setConfirmClear] = useState(false);
-  useEscape(() => setConfirmClear(false), confirmClear);
   const queued = useQueueLength(session.id);
   const loadPresets = () => {
     app().GetPresets(session.id)
@@ -192,12 +189,6 @@ export function HarnessToolbar({ session, widgets, modelSupported, send, onError
       </>}
     </ToolbarMenu>}
     <button className="text-button terminal-action icon-button" title="Compact: compact the conversation" aria-label="Compact: compact the conversation" onClick={() => send(widgets.compactText, true, widgets.compactText)}><Icon name="compact" /></button>
-    <button className="text-button terminal-action icon-button" title="Clear: clear the conversation (asks first)" aria-label="Clear: clear the conversation (asks first)" onClick={() => setConfirmClear(true)}><Icon name="clear" /></button>
-        {confirmClear && widgets.clearText && <div className="modal-backdrop"><div className="modal confirm-modal">
-          <div className="modal-heading"><div><p className="eyebrow">CLEAR CONVERSATION</p><h2>Clear the current context?</h2></div></div>
-          <p className="muted">This sends <strong>{widgets.clearText}</strong> to <strong>{session.name}</strong>. The harness will discard the current conversation context, and it cannot be brought back from within the harness.</p>
-          <div className="modal-actions"><button className="secondary-button" autoFocus onClick={() => setConfirmClear(false)}>Cancel</button><button className="danger-button" onClick={() => { setConfirmClear(false); send(widgets.clearText, true, widgets.clearText); }}>Clear context</button></div>
-        </div></div>}
       </div>;
 }
 

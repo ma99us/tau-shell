@@ -563,6 +563,67 @@ func (store *Store) SetHarnessSessionID(ctx context.Context, sessionID string, h
 	return runtime.HarnessSessionID, nil
 }
 
+// AdoptHarnessSessionID replaces the saved conversation ID of a launch that
+// started a different conversation itself (for example after /clear). It only
+// applies while this launch still owns the runtime row, and refuses an ID that
+// another session of the same harness has claimed. It returns the replaced ID.
+func (store *Store) AdoptHarnessSessionID(ctx context.Context, sessionID string, harness Harness, launchToken, expectedCurrent, harnessSessionID string) (string, error) {
+	if harnessSessionID == "" {
+		return "", errors.New("harness session ID is empty")
+	}
+	if launchToken == "" {
+		return "", ErrHarnessLaunchChanged
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	conn, err := store.db.Conn(ctx)
+	if err != nil {
+		return "", fmt.Errorf("adopt conversation for %q: %w", sessionID, err)
+	}
+	defer conn.Close()
+	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
+		return "", fmt.Errorf("lock conversation change for %q: %w", sessionID, err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_, _ = conn.ExecContext(context.Background(), "ROLLBACK")
+		}
+	}()
+	runtime, err := readRuntime(ctx, conn, sessionID)
+	if err != nil {
+		return "", err
+	}
+	if runtime.Harness != harness || runtime.LaunchToken != launchToken || runtime.HarnessSessionID != expectedCurrent {
+		return "", ErrHarnessLaunchChanged
+	}
+	if runtime.HarnessSessionID == harnessSessionID {
+		return harnessSessionID, nil
+	}
+	var claimed bool
+	if err := conn.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM session_runtime
+			WHERE harness = ? AND harness_session_id = ? AND session_id <> ?
+		)
+	`, harness, harnessSessionID, sessionID).Scan(&claimed); err != nil {
+		return "", fmt.Errorf("check conversation claim for %q: %w", sessionID, err)
+	}
+	if claimed {
+		return "", ErrHarnessSessionIDClaimed
+	}
+	if _, err := conn.ExecContext(ctx, `
+		UPDATE session_runtime SET harness_session_id = ?, updated_at = ? WHERE session_id = ? AND launch_token = ?
+	`, harnessSessionID, time.Now().UTC().Format(time.RFC3339Nano), sessionID, launchToken); err != nil {
+		return "", fmt.Errorf("save adopted conversation for %q: %w", sessionID, err)
+	}
+	if _, err := conn.ExecContext(ctx, "COMMIT"); err != nil {
+		return "", fmt.Errorf("commit adopted conversation for %q: %w", sessionID, err)
+	}
+	committed = true
+	return runtime.HarnessSessionID, nil
+}
+
 // HarnessSessionIDs returns every recorded harness conversation ID for tool.
 func (store *Store) HarnessSessionIDs(ctx context.Context, harness Harness) (map[string]bool, error) {
 	store.mu.Lock()

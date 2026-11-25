@@ -61,7 +61,9 @@ TauShell -> ConPTY -> wsl.exe -> AI harness inside a WSL2 distro (experimental)
   conversations. Harness-aware controls expose slash commands (add your own
   per harness in `~/.tau_shell/config.yaml`), model
   selection (ranked by the public MEI coding index when reachable),
-  compaction, confirmed conversation clearing and interruption.
+  compaction and interruption. A New conversation button restarts the session
+  on a fresh conversation (after a confirmation) and keeps the old one in
+  History, where Resume also works on a running session.
   Ctrl+Shift+P opens the command palette; Ctrl+1..9 and Ctrl+Tab switch tabs.
 - **Project context and one-click Git sync.** See the working folder, branch,
   uncommitted/unpushed markers and last recorded model. While a session is

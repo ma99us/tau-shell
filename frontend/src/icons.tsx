@@ -9,6 +9,7 @@ const paths: Record<string, ReactNode> = {
   model: <><rect x="6" y="6" width="12" height="12" rx="2" /><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3" /></>,
   compact: <><path d="M19.5 4.5 12.5 11.5" /><path d="M10 9l5 5-5.2 5.2H4.5V14Z" /><path d="M7.5 16.5l1.8-1.8M10 19l2-2" /></>,
   clear: <><path d="M4 7h16" /><path d="M9 7V4h6v3" /><path d="M6.5 7 7.5 20h9l1-13" /><path d="M10 11v5M14 11v5" /></>,
+  newConversation: <><path d="M4 5h16v11H9l-5 4Z" /><path d="M12 7.5v6M9 10.5h6" /></>,
   interrupt: <><rect x="6" y="6" width="12" height="12" rx="2" /></>,
   folder: <><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2h8.5A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5Z" /></>,
   folderOpen: <><path d="M3 18V6.5A1.5 1.5 0 0 1 4.5 5H9l2 2h7.5A1.5 1.5 0 0 1 20 8.5V10" /><path d="M3 18l2.5-7h16.2l-2.4 7Z" /></>,
