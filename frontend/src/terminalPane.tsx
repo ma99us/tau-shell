@@ -12,6 +12,7 @@ import { combineSignal, composeInjection, controlSendPlan, freshLogState, planSe
 import { SessionUsage, formatTokens, formatUSD, hasUsage, usageTooltip } from "./usage";
 import { HarnessIcon } from "./harnessIcons";
 import { HarnessToolbar, InterruptButton, sendNotice } from "./harnessActions";
+import { VoiceButton } from "./voiceButton";
 import type { QueueHooks } from "./promptQueue";
 import { enqueuePrompt } from "./promptQueue";
 import { FileDrawer } from "./fileDrawer";
@@ -75,6 +76,8 @@ const isEmptyClipboardError = (error: unknown) => /operation completed successfu
 function handleClipboardKey(event: globalThis.KeyboardEvent, terminal: Terminal, onError: (error: unknown) => void, onQueueDraft: () => boolean): boolean {
   // Ctrl+Enter moves the typed prompt into the queue instead of sending it; with nothing typed it passes through.
   if (event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey && event.key === "Enter") {
+    // xterm calls this for keydown, keypress and keyup; queue only once.
+    if (event.type !== "keydown") return false;
     if (!onQueueDraft()) return true;
     event.preventDefault();
     return false;
@@ -430,6 +433,7 @@ export function TerminalPane({ session, visible, busy, harness, onSend, onNotice
       <div className="side-rail">
         <button className="text-button terminal-action icon-button" aria-pressed={filesOpen} title="Files: browse the project files (read-only)" aria-label="Files: browse the project files (read-only)" onClick={() => setDrawer(filesOpen ? null : "files")}><Icon name="files" /></button>
         <button className="text-button terminal-action icon-button" aria-pressed={drawer === "history"} title="History: past conversations of this session" aria-label="History: past conversations of this session" onClick={() => setDrawer(drawer === "history" ? null : "history")}><Icon name="history" /></button>
+        {session.runningHere && <VoiceButton sessionId={session.id} focus={() => terminalInstances.get(session.id)?.focus()} onError={onError} />}
         {harness && onSend && <HarnessToolbar session={session} widgets={harness.widgets} modelSupported={harness.modelSupported} send={onSend} onError={onError} />}
       </div>
       {filesOpen && <FileDrawer session={session} onError={onError} onInsert={(path) => { const why = insertAtPrompt(session, /\s/.test(path) ? `"${path}" ` : `${path} `); if (why) onError(new Error(why)); }} />}

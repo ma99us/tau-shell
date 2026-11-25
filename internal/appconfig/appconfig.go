@@ -9,6 +9,8 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 
 	"github.com/ma99us/tau-shell/internal/skills"
 	"gopkg.in/yaml.v3"
@@ -77,14 +79,81 @@ func (m Mobile) validate() error {
 }
 
 type Config struct {
-	Version       int           `yaml:"version"`
-	Control       Control       `yaml:"control"`
-	Mobile        Mobile        `yaml:"mobile"`
-	Notifications Notifications `yaml:"notifications"`
-	Usage         Usage         `yaml:"usage"`
-	Quota         Quota         `yaml:"quota"`
-	Skills        Skills        `yaml:"skills"`
-	Appearance    Appearance    `yaml:"appearance"`
+	Version       int                  `yaml:"version"`
+	Control       Control              `yaml:"control"`
+	Mobile        Mobile               `yaml:"mobile"`
+	Notifications Notifications        `yaml:"notifications"`
+	Usage         Usage                `yaml:"usage"`
+	Quota         Quota                `yaml:"quota"`
+	Skills        Skills               `yaml:"skills"`
+	Appearance    Appearance           `yaml:"appearance"`
+	Commands      map[string][]Command `yaml:"commands"`
+}
+
+// Command is one user-defined Commands menu entry. Text may include
+// arguments. Submit defaults to true; false types the text without pressing
+// Enter so the user can finish the arguments.
+type Command struct {
+	Label  string `yaml:"label"`
+	Text   string `yaml:"text"`
+	Submit *bool  `yaml:"submit,omitempty"`
+}
+
+// ValidateCommands requires a label and text and rejects duplicate labels
+// (case-insensitive).
+func ValidateCommands(list []Command) error {
+	seen := map[string]bool{}
+	for index, command := range list {
+		label := strings.ToLower(strings.TrimSpace(command.Label))
+		if label == "" || strings.TrimSpace(command.Text) == "" {
+			return fmt.Errorf("command %d needs a label and text", index+1)
+		}
+		if seen[label] {
+			return fmt.Errorf("duplicate command label %q", command.Label)
+		}
+		seen[label] = true
+	}
+	return nil
+}
+
+const commandsExample = `
+# Favorite harness commands, added to each harness's Commands menu (all sessions
+# of that harness). Same label as a built-in replaces it. Changes show the next
+# time the menu opens. "submit: false" types the text so you can add arguments.
+# Harness ids: claude-code, copilot-cli, codex, opencode, gsd.
+commands:
+  # claude-code:
+  #   - label: Review PR
+  #     text: "/review 123"
+  # copilot-cli:
+  #   - label: Plan
+  #     text: "/plan "
+  #     submit: false
+`
+
+// EnsureCommandsExample appends the commented commands section to an existing
+// settings file that has none, then leaves the file alone. A missing file is
+// created from the full example first.
+func EnsureCommandsExample(path string) error {
+	if err := EnsureExample(path); err != nil {
+		return err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	if regexp.MustCompile(`(?m)^#?\s*commands:`).Match(data) {
+		return nil
+	}
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	_, writeErr := file.WriteString(commandsExample)
+	if closeErr := file.Close(); writeErr == nil {
+		writeErr = closeErr
+	}
+	return writeErr
 }
 
 // Quota controls optional Home screen quota chips. A nil flag means enabled.
@@ -215,6 +284,11 @@ func Load(path string) (Config, error) {
 	}
 	if err := parsed.Mobile.validate(); err != nil {
 		return Config{}, fmt.Errorf("%s: %w", filepath.Base(path), err)
+	}
+	for harness, list := range parsed.Commands {
+		if err := ValidateCommands(list); err != nil {
+			return Config{}, fmt.Errorf("%s: commands.%s: %w", filepath.Base(path), harness, err)
+		}
 	}
 	return parsed, nil
 }

@@ -3,6 +3,7 @@ package appconfig
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -138,5 +139,40 @@ func TestEnsureExampleNeverOverwritesAndParses(t *testing.T) {
 	}
 	if data, _ := os.ReadFile(path); string(data) != "version: 1\n" {
 		t.Fatal("existing file was overwritten")
+	}
+}
+
+func TestCommandsPerHarness(t *testing.T) {
+	path := filepath.Join(t.TempDir(), FileName)
+	if err := os.WriteFile(path, []byte("version: 1\ncommands:\n  codex:\n    - label: Plan\n      text: '/plan '\n      submit: false\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	config, err := Load(path)
+	if err != nil || len(config.Commands["codex"]) != 1 || *config.Commands["codex"][0].Submit {
+		t.Fatalf("commands = %+v, %v", config.Commands, err)
+	}
+	bad := filepath.Join(t.TempDir(), FileName)
+	os.WriteFile(bad, []byte("commands:\n  codex:\n    - label: A\n"), 0o600)
+	if _, err := Load(bad); err == nil {
+		t.Fatal("command without text was accepted")
+	}
+}
+
+func TestEnsureCommandsExampleAppendsOnce(t *testing.T) {
+	path := filepath.Join(t.TempDir(), FileName)
+	if err := os.WriteFile(path, []byte("version: 1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if err := EnsureCommandsExample(path); err != nil {
+			t.Fatal(err)
+		}
+	}
+	data, _ := os.ReadFile(path)
+	if strings.Count(string(data), "\ncommands:\n") != 1 {
+		t.Fatalf("appended more than once:\n%s", data)
+	}
+	if _, err := Load(path); err != nil {
+		t.Fatal(err)
 	}
 }

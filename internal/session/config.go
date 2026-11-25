@@ -17,6 +17,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/ma99us/tau-shell/internal/appconfig"
 	"github.com/ma99us/tau-shell/internal/fsutil"
 	"github.com/ma99us/tau-shell/internal/harness/manifest"
 	"github.com/ma99us/tau-shell/internal/presets"
@@ -99,10 +100,16 @@ type Config struct {
 	// Presets are session-level prompt presets merged over the global
 	// prompts.yaml entries by name.
 	Presets []presets.Preset `yaml:"presets,omitempty"`
+	// Commands are favorite slash commands shown in the Commands menu after
+	// the harness's built-in ones; the same label replaces a built-in entry.
+	Commands []Command `yaml:"commands,omitempty"`
 	// Worktree is present only when TauShell created working_dir as a git
 	// worktree for this session; only then may TauShell offer to remove it.
 	Worktree *WorktreeConfig `yaml:"worktree,omitempty"`
 }
+
+// Command is a user-defined Commands menu entry (see appconfig.Command).
+type Command = appconfig.Command
 
 // WorktreeName is the TauShell-managed worktree's name, or "" when the session
 // does not own a worktree.
@@ -312,6 +319,9 @@ func (config Config) validateRest() error {
 	}
 	if err := presets.Validate(config.Presets); err != nil {
 		return fmt.Errorf("presets: %w", err)
+	}
+	if err := appconfig.ValidateCommands(config.Commands); err != nil {
+		return fmt.Errorf("commands: %w", err)
 	}
 	if err := ValidateLaunchArgs(config.Tool, config.LaunchArgs); err != nil {
 		return err

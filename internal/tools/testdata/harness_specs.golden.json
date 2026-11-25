@@ -47,6 +47,30 @@
           "text": "/cost"
         },
         {
+          "label": "Resume a conversation",
+          "text": "/resume"
+        },
+        {
+          "label": "Create CLAUDE.md",
+          "text": "/init"
+        },
+        {
+          "label": "Open memory files",
+          "text": "/memory"
+        },
+        {
+          "label": "Check installation",
+          "text": "/doctor"
+        },
+        {
+          "label": "Usage insights report",
+          "text": "/insights"
+        },
+        {
+          "label": "Insights tips",
+          "text": "/insights Then reply with the 5 most useful, concrete tips for improving my workflow, as a short bullet list. Do not open the HTML report."
+        },
+        {
           "label": "Help",
           "text": "/help"
         }
@@ -105,6 +129,22 @@
         {
           "label": "Show status",
           "text": "/status"
+        },
+        {
+          "label": "New conversation",
+          "text": "/new"
+        },
+        {
+          "label": "Show git diff",
+          "text": "/diff"
+        },
+        {
+          "label": "Review changes",
+          "text": "/review"
+        },
+        {
+          "label": "Create AGENTS.md",
+          "text": "/init"
         }
       ],
       "models": [
@@ -175,6 +215,22 @@
           "text": "/usage"
         },
         {
+          "label": "Review changes",
+          "text": "/diff"
+        },
+        {
+          "label": "Run code review",
+          "text": "/review"
+        },
+        {
+          "label": "Resume a session",
+          "text": "/resume"
+        },
+        {
+          "label": "Chronicle tips",
+          "text": "/chronicle tips"
+        },
+        {
           "label": "Help",
           "text": "/help"
         }
@@ -242,6 +298,18 @@
         {
           "label": "Choose model",
           "text": "/model"
+        },
+        {
+          "label": "Background jobs",
+          "text": "/jobs"
+        },
+        {
+          "label": "Subagents",
+          "text": "/subagent"
+        },
+        {
+          "label": "Help",
+          "text": "/help"
         }
       ],
       "models": [],
@@ -296,6 +364,22 @@
         {
           "label": "Choose model",
           "text": "/models"
+        },
+        {
+          "label": "Switch agent",
+          "text": "/agents"
+        },
+        {
+          "label": "Resume a session",
+          "text": "/sessions"
+        },
+        {
+          "label": "Show file changes",
+          "text": "/diff"
+        },
+        {
+          "label": "Create AGENTS.md",
+          "text": "/init"
         },
         {
           "label": "Help",

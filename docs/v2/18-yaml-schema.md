@@ -109,12 +109,33 @@ empty and the harness is not waiting for input; `submit` is no longer used. See 
 The [V1 UI design](../v1/08-UI-Design.md#10-harness-widgets) is historical
 context.
 
-Skill library presets (from `tau-shell.yaml`) accept an extra `skill: <name>`
-field and appear only while that skill is available and enabled. Layering is
-library < global < session, by name.
+## Command shortcuts
 
-The isolated local prototype (ignored `spikes/session-config/` folder) records the earlier validation of strict YAML parsing and the separate runtime-state boundary.
+The Commands menu lists the harness manifest's built-in `widgets.commands`, then
+your `commands:` for that harness in `~/.tau_shell/config.yaml` (all sessions of
+that harness), then a session YAML's own `commands:` list. A later entry with
+the same label (case-insensitive) replaces an earlier one. "Edit commands..." in
+the menu opens `config.yaml`; if the file has no `commands:` section it appends
+a commented one (nothing existing is changed). Both files are re-read each time
+the menu opens, so edits show without restarting the session or TauShell. An
+unreadable or invalid file leaves the built-in list in place.
 
+```yaml
+commands:
+  claude-code:
+    - label: Review PR
+      text: "/review 123"      # text may include arguments
+  copilot-cli:
+    - label: Plan
+      text: "/plan "
+      submit: false            # optional; true by default. false = type only, finish the arguments yourself
+```
+
+Harness ids are the manifest ids (`claude-code`, `copilot-cli`, `codex`,
+`opencode`, `gsd`). Each entry needs a `label` and `text`; labels must be unique
+per list. Commands are plain text sent through the same guarded path as
+built-in ones and are not validated against the harness. Not verified in a real
+window.
 ## Harness manifests (`~/.tau_shell/harnesses/*.yaml`)
 
 User-added harnesses are declarative YAML manifests; the schema, readers and

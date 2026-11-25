@@ -400,6 +400,23 @@ func TestConfigPresetsAreValidated(t *testing.T) {
 	}
 }
 
+func TestConfigCommandsAreValidated(t *testing.T) {
+	workingDir := filepath.ToSlash(t.TempDir())
+	base := "id: test-session\nname: Test\ntool: copilot-cli\nworking_dir: " + workingDir + "\n"
+	config, err := ParseConfig(base + "commands:\n  - label: Plan\n    text: \"/plan \"\n    submit: false\n")
+	if err != nil || len(config.Commands) != 1 || config.Commands[0].Submit == nil || *config.Commands[0].Submit {
+		t.Fatalf("valid commands: %+v, %v", config.Commands, err)
+	}
+	for name, body := range map[string]string{
+		"duplicate": "commands:\n  - label: A\n    text: /x\n  - label: a\n    text: /y\n",
+		"no text":   "commands:\n  - label: A\n",
+	} {
+		if _, err := ParseConfig(base + body); err == nil {
+			t.Fatalf("%s commands were accepted", name)
+		}
+	}
+}
+
 func TestConfigRuntimeAndWSLValidation(t *testing.T) {
 	windowsDir := filepath.ToSlash(t.TempDir())
 	base := "id: wsl-session\nname: WSL\ntool: claude-code\nworking_dir: %s\n%s"

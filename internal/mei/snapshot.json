@@ -1,0 +1,302 @@
+{
+  "fetched_at": "2026-11-23T14:54:31Z",
+  "entries": [
+    {
+      "rank": 1,
+      "name": "Fable 5.2",
+      "vendor": "anthropic",
+      "slug": "fable-5.2",
+      "id": "claude-fable-5-2",
+      "score": 67.23247939891417,
+      "cost": 7.708002794504844,
+      "tokens": 1.3604568075655743,
+      "confidence": "confident"
+    },
+    {
+      "rank": 2,
+      "name": "4 Neon",
+      "vendor": "google",
+      "slug": "4-neon",
+      "id": "gemini-neon-4",
+      "score": 67.02216943993211,
+      "cost": 3.1478022627674203,
+      "tokens": 0.8439315322850228
+    },
+    {
+      "rank": 3,
+      "name": "6.2 Astra",
+      "vendor": "openai",
+      "slug": "6.2-astra",
+      "id": "gpt-astra-6-2",
+      "score": 65.96721786526425,
+      "cost": 3.6803991318736204,
+      "tokens": 0.3973557248466858
+    },
+    {
+      "rank": 4,
+      "name": "Opus 5.5",
+      "vendor": "anthropic",
+      "slug": "opus-5.5",
+      "id": "claude-opus-5-5",
+      "score": 62.8202073704612,
+      "cost": 5.595761352641115,
+      "tokens": 1.522896110391402,
+      "confidence": "confident"
+    },
+    {
+      "rank": 5,
+      "name": "4 Carbon",
+      "vendor": "google",
+      "slug": "4-carbon",
+      "id": "gemini-carbon-4",
+      "score": 61.59306307481416,
+      "cost": 3.467479856512265,
+      "tokens": 1.01443511994254
+    },
+    {
+      "rank": 6,
+      "name": "6.2 Sol",
+      "vendor": "openai",
+      "slug": "6.2-sol",
+      "id": "gpt-sol-6-2",
+      "score": 60.789085801365005,
+      "cost": 0.7462247697088756,
+      "tokens": 0.29786806313043457
+    },
+    {
+      "rank": 7,
+      "name": "Sonnet 5.5",
+      "vendor": "anthropic",
+      "slug": "sonnet-5.5",
+      "id": "claude-sonnet-5-5",
+      "score": 59.96426136559362,
+      "cost": 4.18042012163016,
+      "tokens": 2.447150241995155,
+      "confidence": "confident"
+    },
+    {
+      "rank": 8,
+      "name": "4 Hydrogen",
+      "vendor": "google",
+      "slug": "4-hydrogen",
+      "id": "gemini-hydrogen-4",
+      "score": 58.85084793659273,
+      "cost": 2.1819926016605953,
+      "tokens": 1.082054500738063
+    },
+    {
+      "rank": 9,
+      "name": "6.1 Terra",
+      "vendor": "openai",
+      "slug": "6.1-terra",
+      "id": "gpt-terra-6-1",
+      "score": 55.438417135604155,
+      "cost": 1.0395055292631177,
+      "tokens": 1.0585076092076098
+    },
+    {
+      "rank": 10,
+      "name": "4-Max",
+      "vendor": "alibaba",
+      "slug": "4-max",
+      "id": "qwen-max-4",
+      "score": 54.77548962456367,
+      "cost": 12.396127415356357,
+      "tokens": 1.2006941554961692
+    },
+    {
+      "rank": 11,
+      "name": "Wonder Full",
+      "vendor": "meta",
+      "slug": "wonder-full",
+      "id": "muse-wonder-full",
+      "score": 53.41038252705053,
+      "cost": 2.585352335163921,
+      "tokens": 0.6797777906142266
+    },
+    {
+      "rank": 12,
+      "name": "K3.1 Pro",
+      "vendor": "moonshot",
+      "slug": "k3.1-pro",
+      "id": "kimi-pro-k3-1",
+      "score": 52.43254667395489,
+      "cost": 1.7361890716374009,
+      "tokens": 0.5970418793928214
+    },
+    {
+      "rank": 13,
+      "name": "Wonder",
+      "vendor": "meta",
+      "slug": "wonder",
+      "id": "muse-wonder",
+      "score": 52.359227186850006,
+      "cost": 2.9882566406164184,
+      "tokens": 0.778724239538491,
+      "confidence": "confident"
+    },
+    {
+      "rank": 14,
+      "name": "V4.1 Flash",
+      "vendor": "deepseek",
+      "slug": "v4.1-flash",
+      "id": "flash-v4-1-1017",
+      "score": 49.96912552736733,
+      "cost": 0.1872476159121415,
+      "tokens": 1.2226038345208192
+    },
+    {
+      "rank": 15,
+      "name": "Ember",
+      "vendor": "meta",
+      "slug": "ember",
+      "id": "muse-ember",
+      "score": 48.517105068808945,
+      "cost": 0.07923319491223768,
+      "tokens": 0.6879220807934203
+    },
+    {
+      "rank": 16,
+      "name": "Haiku 5.5",
+      "vendor": "anthropic",
+      "slug": "haiku-5.5",
+      "id": "claude-haiku-5-5",
+      "score": 47.765745870895856,
+      "cost": 0.7101579315112986,
+      "tokens": 1.5931758081685314,
+      "confidence": "confident"
+    },
+    {
+      "rank": 17,
+      "name": "Hy4",
+      "vendor": "tencent",
+      "slug": "hy4",
+      "id": "hy-4",
+      "score": 47.40206446721148,
+      "cost": 0.5973912624259086,
+      "tokens": 0.9938973898686867
+    },
+    {
+      "rank": 18,
+      "name": "Grok 4.7",
+      "vendor": "xai",
+      "slug": "grok-4.7",
+      "id": "grok-4-7",
+      "score": 46.789203734574905,
+      "cost": 5.496064195967697,
+      "tokens": 0.7594686889851704,
+      "confidence": "confident"
+    },
+    {
+      "rank": 19,
+      "name": "GLM 5.3",
+      "vendor": "z-ai",
+      "slug": "glm-5.3",
+      "id": "glm-5-3",
+      "score": 45.98776738380467,
+      "cost": 3.0059584417341942,
+      "tokens": 1.4088251811631267,
+      "confidence": "confident"
+    },
+    {
+      "rank": 20,
+      "name": "Inkling 2 Small",
+      "vendor": "thinking-machines",
+      "slug": "inkling-2-small",
+      "id": "inkling-small-2",
+      "score": 43.57148212324261,
+      "cost": 0.8640862409513858,
+      "tokens": 2.3778979502314055
+    },
+    {
+      "rank": 21,
+      "name": "V2.6-Pro",
+      "vendor": "xiaomi",
+      "slug": "v2.6-pro",
+      "id": "mimo-pro-v2-6",
+      "score": 43.45158955855786,
+      "cost": 0.19997455107562118,
+      "tokens": 0.838411053997388
+    },
+    {
+      "rank": 22,
+      "name": "M3.1 Flash",
+      "vendor": "minimax",
+      "slug": "m3.1-flash",
+      "id": "minimax-flash-m3-1",
+      "score": 43.29737917556986,
+      "cost": 0.365605535622633,
+      "tokens": 2.5573343599706195
+    },
+    {
+      "rank": 23,
+      "name": "V2.6-Flash",
+      "vendor": "xiaomi",
+      "slug": "v2.6-flash",
+      "id": "mimo-flash-v2-6",
+      "score": 40.897881157357794,
+      "cost": 0.08975702880783108,
+      "tokens": 1.1338395526281284
+    },
+    {
+      "rank": 24,
+      "name": "6 Luna",
+      "vendor": "openai",
+      "slug": "6-luna",
+      "id": "gpt-luna-6",
+      "score": 40.55014228760048,
+      "cost": 0.08400777568952832,
+      "tokens": 0.49573548272799595
+    },
+    {
+      "rank": 25,
+      "name": "Large 4",
+      "vendor": "mistral",
+      "slug": "large-4",
+      "id": "mistral-large-4",
+      "score": 39.536489447510114,
+      "cost": 1.345143900382088,
+      "tokens": 0.8921745138903265
+    },
+    {
+      "rank": 26,
+      "name": "5 Preview",
+      "vendor": "stepfun",
+      "slug": "5-preview",
+      "id": "step-5-preview",
+      "score": 38.13182482217901,
+      "cost": 1.1358806406207995,
+      "tokens": 1.5808052158975894
+    },
+    {
+      "rank": 27,
+      "name": "Inkling 2 Mini",
+      "vendor": "thinking-machines",
+      "slug": "inkling-2-mini",
+      "id": "inkling-mini-2",
+      "score": 35.80113067041246,
+      "cost": 1.014489465283187,
+      "tokens": 3.9792486730860004
+    },
+    {
+      "rank": 28,
+      "name": "Hy4 Flash",
+      "vendor": "tencent",
+      "slug": "hy4-flash",
+      "id": "hy-flash-4",
+      "score": 34.76123808384476,
+      "cost": 0.024903522151991576,
+      "tokens": 0.7236806032580432
+    },
+    {
+      "rank": 29,
+      "name": "Beam 1.0",
+      "vendor": "reflection",
+      "slug": "beam-1.0",
+      "id": "beam-1-0",
+      "score": 30.91443522010137,
+      "cost": 0.25655350645712705,
+      "tokens": 0.2700260705785417
+    }
+  ]
+}

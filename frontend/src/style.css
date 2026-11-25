@@ -1465,6 +1465,27 @@ h3 {
   flex-direction: column;
 }
 
+.side-rail .voice-button {
+  margin-top: auto;
+}
+
+.voice-button.listening {
+  color: var(--danger-text-2);
+  animation: voice-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes voice-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--danger-text-4); }
+  50% { box-shadow: 0 0 0 5px transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-button.listening {
+    animation: none;
+    box-shadow: 0 0 0 2px var(--danger-text-4);
+  }
+}
+
 .side-rail .terminal-action {
   width: 30px;
   padding: 0;
@@ -1914,10 +1935,35 @@ h3 {
   border-top: 1px solid var(--bg-elevated);
 }
 
+.toolbar-popover-head {
+  padding: 6px 8px;
+  color: var(--text-3);
+  font-size: var(--fs-12);
+}
+
 .toolbar-popover-note {
   padding: 7px 9px;
   color: var(--text-8);
   font-size: var(--fs-12);
+}
+
+.toolbar-popover .model-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toolbar-popover .model-badges {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+
+.toolbar-popover .model-score {
+  color: var(--text-3);
+}
+
+.toolbar-popover .model-status {
+  white-space: normal;
 }
 
 .toolbar-popover-note.error {

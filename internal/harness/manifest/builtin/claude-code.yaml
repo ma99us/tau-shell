@@ -31,6 +31,12 @@ widgets:
     - { label: Clear conversation, text: "/clear" }
     - { label: Show context usage, text: "/context" }
     - { label: Show cost, text: "/cost" }
+    - { label: Resume a conversation, text: "/resume" }
+    - { label: Create CLAUDE.md, text: "/init" }
+    - { label: Open memory files, text: "/memory" }
+    - { label: Check installation, text: "/doctor" }
+    - { label: Usage insights report, text: "/insights" }
+    - { label: Insights tips, text: "/insights Then reply with the 5 most useful, concrete tips for improving my workflow, as a short bullet list. Do not open the HTML report." }
     - { label: Help, text: "/help" }
   models: ["default", "sonnet", "opus", "haiku"]
   interrupt_keys: ["\x1b"]

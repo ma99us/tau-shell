@@ -13,6 +13,7 @@ import (
 
 	"github.com/ma99us/tau-shell/internal/session"
 	"github.com/ma99us/tau-shell/internal/sessionhost"
+	"github.com/ma99us/tau-shell/internal/tools"
 	"github.com/ma99us/tau-shell/internal/usage"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -709,5 +710,17 @@ func TestDuplicateSessionCopiesDefinitionWithUniqueName(t *testing.T) {
 	config, err = session.FindConfig(application.configDirectory, other.ID)
 	if err != nil || config.Tool != session.CopilotCLI || len(config.LaunchArgs) != 1 || config.WorkingDir != source.WorkingDir {
 		t.Fatalf("overridden copy: %+v, %v", config, err)
+	}
+}
+
+func TestMergeCommandsReplacesByLabelAndAppends(t *testing.T) {
+	no := false
+	items := mergeCommands(
+		[]tools.Command{{Label: "Compact", Text: "/compact"}, {Label: "Clear", Text: "/clear"}},
+		[]session.Command{{Label: "compact", Text: "/compact keep tests"}},
+		[]session.Command{{Label: "Plan", Text: "/plan ", Submit: &no}},
+	)
+	if len(items) != 3 || items[0].Text != "/compact keep tests" || !items[0].Custom || items[1].Custom || items[2].Submit {
+		t.Fatalf("items = %+v", items)
 	}
 }

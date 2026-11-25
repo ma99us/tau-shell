@@ -639,6 +639,43 @@ suggested IDs live in `internal/tools/tools.go` (`Widgets.Models`) and are only
 suggestions: a custom ID can be entered, and availability depends on the
 account.
 
+### Command shortcuts and panel titles
+
+The Commands menu merges the manifest's `widgets.commands`, then `commands:` per harness id in `~/.tau_shell/config.yaml`, then the session YAML's `commands:` (`GetCommands` in `cmd/taushell/presets_windows.go`); both files are re-read each time the menu opens, and "Edit commands..." opens `config.yaml` (`OpenCommandsFile`). See [`18-yaml-schema`](18-yaml-schema.md#command-shortcuts). The built-in lists were extended from the harnesses' own answers to a one-shot "most useful slash commands" prompt, plus `/insights` and `/chronicle tips` on request. Verified from the command line: `/insights` (Claude Code) generates a report, and `/insights` with trailing instructions returns tips. `/chronicle tips` is interactive-only (`copilot -p` refuses it), and the Codex additions (`/new`, `/diff`, `/review`, `/init`) could not be confirmed (HTTP 403 from the API). Not verified: the menu typing these into a live session. The Prompts, Queue, Commands and Model fly-outs now carry a heading like the Files and History drawers (`ToolbarMenu` `heading` prop).
+
+### Voice typing button
+
+A mic button at the bottom of the session side rail focuses the terminal and presses Win+H through `SendInput` (`ToggleVoiceTyping` in `cmd/taushell/voice_windows.go`, `frontend/src/voiceButton.tsx`). The Windows Voice typing panel stays visible and TauShell cannot read its listening state; the pulse only shows that TauShell toggled it. Verified: type check, token check, build, and the `SendInput` call succeeds. Not verified: the button in a real window.
+
+### MEI-ranked model menu
+
+The Model menu lists "Top coding models (MEI)" (first 8, with score and cost
+badges), then other models, then the custom ID form. Code: `internal/mei`
+(fetch, parse, cache, snapshot), `internal/models` (matcher, per-harness probes,
+probe cache) and `cmd/taushell/models_windows.go` (`ListModels`,
+`RefreshModels`).
+
+- MEI (https://git-aarvin.github.io/mei/) has no JSON API; TauShell parses the
+  ranking table in the page HTML. The fetch is background-only (at startup and
+  hourly checks, refreshed daily), https to that host only, 10 s timeout, 2 MB cap.
+  A page that does not validate (too few rows, bad numbers, changed layout) never
+  replaces good data. Failures back off 1h, 3h, 12h, then daily.
+- MEI may be offline at any time. Data order: cache (any age, shown as "as of
+  <date>", flagged stale after 72 h) -> embedded snapshot
+  (`internal/mei/snapshot.json`, regenerate with
+  `$env:MEI_UPDATE_SNAPSHOT='1'; go test ./internal/mei -run TestGenerateSnapshot`)
+  -> unranked manifest list. The menu always renders and sending always works.
+  There is no setting to turn the fetch off yet.
+- Availability probes (daily, background): Codex `debug models` and OpenCode
+  `models --verbose` replace the manifest list; Claude Code `settings.json` pins
+  and Copilot CLI `recentModelIds` are added to it. GSD uses the manifest list only.
+- Matching MEI names to harness ids is heuristic; an ambiguous model stays
+  unranked. Ranking is relative: small gaps are not meaningful.
+- Verified: Go tests (parser failures, fetch failures, matcher, probes, bridge with
+  no data), frontend unit tests, and live probes through installed Codex (9 models),
+  OpenCode (60) and Claude Code. Not verified: the menu in a real window, and that
+  the OpenCode picker selects the intended provider when names repeat.
+
 Verified on Copilot CLI 1.0.104 through the real session manager and ConPTY
 (rendered with pyte): `/model auto` and `/model claude-haiku-5.5` both changed
 the model and the footer, and bare `/model` opened the picker. Claude Code's

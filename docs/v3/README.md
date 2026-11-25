@@ -50,6 +50,8 @@ against the current code.
 
 Built after planning: [IDE integration](features/12-ide-integration.md) (open the project in VS Code, JetBrains, Visual Studio, Cursor or Eclipse from the top bar).
 
+Unranked future idea: [voice prompting](features/13-voice-prompting.md) (try Windows Voice typing first, then local Whisper).
+
 Unranked future idea: [harness conformance suite and common harness improvements](features/11-harness-conformance-and-common-improvements.md) (built on the [v2 harness research](../v2/28-harness-capability-research.md)).
 
 Already implemented and therefore not ranked: fleet restore (Resume All and auto resume),

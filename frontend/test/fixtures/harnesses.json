@@ -41,7 +41,7 @@
     },
     "builtin": true,
     "path": "builtin/copilot-cli.yaml",
-    "hash": "9114f1616b1319efffa7969aa3250991937a0024b4dc7a02b636c88204a34c0b"
+    "hash": "eeebab817d59674ba3e46ceb5f1ea1e6d6aa1c6ce65ce7d67a657288a7a82bfa"
   },
   {
     "id": "claude-code",
@@ -74,7 +74,7 @@
     },
     "builtin": true,
     "path": "builtin/claude-code.yaml",
-    "hash": "19b6226c8e53a264d2741af399b50814d1a83d43e0ffee020efcc91c1a120ac3"
+    "hash": "a9b08fa4bee1e929b133017d2a2f4fc1759ec3f103b5d9c293d31cd30a7de3e9"
   },
   {
     "id": "codex",
@@ -90,7 +90,7 @@
     },
     "builtin": true,
     "path": "builtin/codex.yaml",
-    "hash": "09e8fb4fa5ca29b20ec4b538c854be1b2494e2d2879dd0f5187520d54960ee10"
+    "hash": "3bbb82230f52b7e257aceb5e3c26ce7749c0acfc9a0a185be4bde6c640d01df8"
   },
   {
     "id": "opencode",
@@ -105,7 +105,7 @@
     },
     "builtin": true,
     "path": "builtin/opencode.yaml",
-    "hash": "7114946e827808d1b3238f50faebfe252bcebf5b8d665b2e047bd4185a20c016"
+    "hash": "8522d456ae848c2c36f1df9d4f20a92a9cf6a77f8db1f2358366acdbc002f6ad"
   },
   {
     "id": "gsd",
@@ -121,6 +121,6 @@
     },
     "builtin": true,
     "path": "builtin/gsd.yaml",
-    "hash": "7996cc91322f7858d997bed61a54a3cc0d4b038574686d42c1a416c763aec9a3"
+    "hash": "90d8a4f78d1df57ab16d25a77a54ae5ca6273b04c24ec57893a373c1b0691d9b"
   }
 ]

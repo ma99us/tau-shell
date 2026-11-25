@@ -86,6 +86,27 @@ export type ToolStatus = {
   install: { wingetId?: string; npmPackage?: string; managedStrategy?: "node-lts" | "portable-git"; source?: string; vendorUrl: string };
 };
 
+export type ModelOption = {
+  id: string;
+  label: string;
+  ranked: boolean;
+  rank?: number;
+  meiName?: string;
+  score: number;
+  cost: number;
+  tokens: number;
+  confidence?: string;
+};
+
+export type ModelMenu = {
+  options: ModelOption[];
+  ranking: { source: "cache" | "snapshot" | "none"; asOf?: string; stale: boolean; error?: string };
+  probing: boolean;
+  probeError?: string;
+};
+
+export type CommandItem = { label: string; text: string; submit: boolean; custom?: boolean };
+
 export type HarnessWidgets = {
   commands: { label: string; text: string }[];
   models: string[];
@@ -267,6 +288,8 @@ type WailsApp = {
   InstallTool(id: string): Promise<InstallResult>;
   OpenToolSetupPage(id: string): Promise<void>;
   GetPresets(sessionId: string): Promise<ResolvedPreset[] | null>;
+  GetCommands(sessionId: string): Promise<CommandItem[] | null>;
+  OpenCommandsFile(): Promise<void>;
   OpenPresetsFile(): Promise<void>;
   LogFrontendFailure(source: string, message: string, stack: string): Promise<void>;
   LogTerminalPointerEvent(id: string, event: "pointerdown" | "mousedown"): Promise<void>;
@@ -340,6 +363,9 @@ type WailsApp = {
   ListProjectDir(sessionId: string, rel: string, showAll: boolean): Promise<ProjectListing>;
   ReadProjectFile(sessionId: string, rel: string): Promise<ProjectFile>;
   ListConversations(sessionId: string): Promise<Conversation[]>;
+  ListModels(harnessId: string): Promise<ModelMenu>;
+  ToggleVoiceTyping(): Promise<void>;
+  RefreshModels(harnessId: string): Promise<ModelMenu>;
   GetWorkspaces(): Promise<Record<string, WorkspaceGroup>>;
   ListSecrets(): Promise<SecretInfo[]>;
   SetSecret(name: string, value: string): Promise<void>;

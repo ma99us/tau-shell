@@ -24,6 +24,8 @@ import (
 	"github.com/ma99us/tau-shell/internal/control"
 	"github.com/ma99us/tau-shell/internal/diagnostics"
 	"github.com/ma99us/tau-shell/internal/harness"
+	"github.com/ma99us/tau-shell/internal/mei"
+	"github.com/ma99us/tau-shell/internal/models"
 	"github.com/ma99us/tau-shell/internal/quota"
 	hostruntime "github.com/ma99us/tau-shell/internal/runtime"
 	"github.com/ma99us/tau-shell/internal/session"
@@ -49,6 +51,8 @@ var sessionIDPattern = regexp.MustCompile(`[^a-z0-9]+`)
 
 type App struct {
 	controlServer          *control.Server
+	meiStore               *mei.Store
+	modelProbes            *models.Service
 	controlMu              sync.Mutex
 	controlAudit           *control.AuditLog
 	queuedPrompts          int32
@@ -209,6 +213,8 @@ func runDesktop() error {
 func (application *App) startup(ctx context.Context) {
 	application.ctx = ctx
 	application.initAttention()
+	application.initModels()
+	application.startModelRanking(ctx)
 	diagnostics.Info("desktop UI ready", "webview2_version", application.webViewVersion)
 	application.manager.StartPriceUpdates(ctx)
 	application.startToolUpdateChecks(ctx)

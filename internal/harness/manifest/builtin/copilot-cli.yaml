@@ -31,6 +31,10 @@ widgets:
     - { label: Clear conversation, text: "/clear" }
     - { label: Show context usage, text: "/context" }
     - { label: Show usage, text: "/usage" }
+    - { label: Review changes, text: "/diff" }
+    - { label: Run code review, text: "/review" }
+    - { label: Resume a session, text: "/resume" }
+    - { label: Chronicle tips, text: "/chronicle tips" }
     - { label: Help, text: "/help" }
   models: ["auto", "claude-sonnet-5.5", "claude-opus-5.5", "claude-haiku-5.5"]
   # A single Esc was verified not to stop Copilot CLI; it needs Esc twice.

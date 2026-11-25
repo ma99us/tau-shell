@@ -33,6 +33,9 @@ widgets:
     - { label: Compact conversation, text: "/compact" }
     - { label: New conversation, text: "/new" }
     - { label: Choose model, text: "/model" }
+    - { label: Background jobs, text: "/jobs" }
+    - { label: Subagents, text: "/subagent" }
+    - { label: Help, text: "/help" }
   interrupt_keys: ["\x1b"]
   compact_text: "/compact"
   clear_text: "/new"

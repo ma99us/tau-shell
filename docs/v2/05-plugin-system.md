@@ -83,7 +83,7 @@ To add another harness, follow [`23-adding-a-harness.md`](23-adding-a-harness.md
 
 An adapter's `Spec.Widgets` (`internal/tools/tools.go`) declares the
 quality-of-life actions TauShell may offer for a running session: slash
-`Commands`, suggested `Models` for `/model <id>`, the `InterruptKeys` pressed in
+`Commands` (extendable per harness in `~/.tau_shell/config.yaml` or per session, see [`18-yaml-schema`](18-yaml-schema.md#command-shortcuts)), suggested `Models` for `/model <id>`, the `InterruptKeys` pressed in
 order (Copilot CLI needs Esc twice; Claude Code one Esc), and the `CompactText`
 command. The UI shows a widget only for adapters that declare it, and the
 Model menu additionally requires the `--model` capability probe. These are
@@ -95,7 +95,7 @@ submission, so the per-preset `submit` flag no longer applies. A harness without
 `/model <id>` (OpenCode) declares `model_picker` (the picker command, here
 `/models`); each `models` entry is then typed into the picker search box and
 confirmed with Enter (and a second Enter that accepts the default reasoning variant when the model has variants), and only with an empty composer. The
-lists are tied to the tested version range. Codex 0.166.0's declared command
+lists are the fallback: the Model menu merges them with models the installed harness reports and ranks them with MEI data when available (see the engineering handoff). The lists are tied to the tested version range. Codex 0.166.0's declared command
 widgets are limited to `/compact` and `/status`; its live test also verified
 single-Esc interruption, opening the model picker, switching to another
 available model, and successful compaction. `/new` and `/help` are not exposed

@@ -58,8 +58,10 @@ TauShell -> ConPTY -> wsl.exe -> AI harness inside a WSL2 distro (experimental)
   as free. A Home quota chip also shows Copilot allowance where available.
 - **A practical session toolbar.** Browse project files, preview text,
   Markdown and images, insert paths into prompts, and revisit past
-  conversations. Harness-aware controls expose slash commands, model
-  selection, compaction, confirmed conversation clearing and interruption.
+  conversations. Harness-aware controls expose slash commands (add your own
+  per harness in `~/.tau_shell/config.yaml`), model
+  selection (ranked by the public MEI coding index when reachable),
+  compaction, confirmed conversation clearing and interruption.
   Ctrl+Shift+P opens the command palette; Ctrl+1..9 and Ctrl+Tab switch tabs.
 - **Project context and one-click Git sync.** See the working folder, branch,
   uncommitted/unpushed markers and last recorded model. While a session is

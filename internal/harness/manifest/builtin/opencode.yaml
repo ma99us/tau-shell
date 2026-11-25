@@ -32,6 +32,10 @@ widgets:
     - { label: Compact conversation, text: "/compact" }
     - { label: New conversation, text: "/new" }
     - { label: Choose model, text: "/models" }
+    - { label: Switch agent, text: "/agents" }
+    - { label: Resume a session, text: "/sessions" }
+    - { label: Show file changes, text: "/diff" }
+    - { label: Create AGENTS.md, text: "/init" }
     - { label: Help, text: "/help" }
   # OpenCode has no "/model <id>": /models opens a picker, which TauShell filters by
   # typing the entry and choosing the first match.

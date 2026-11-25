@@ -9,11 +9,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
+	"github.com/ma99us/tau-shell/internal/appconfig"
 	"github.com/ma99us/tau-shell/internal/diagnostics"
 	"github.com/ma99us/tau-shell/internal/harness/manifest"
 	"github.com/ma99us/tau-shell/internal/presets"
 	"github.com/ma99us/tau-shell/internal/session"
+	"github.com/ma99us/tau-shell/internal/tools"
 	"github.com/ma99us/tau-shell/internal/usage"
 	"golang.org/x/sys/windows"
 )
@@ -54,6 +57,75 @@ func (application *App) GetPresets(sessionID string) (resolved []presets.Resolve
 		WorkingDir: config.WorkingDir,
 		Skills:     available,
 	}), nil
+}
+
+// CommandItem is one entry of the Commands menu.
+type CommandItem struct {
+	Label  string `json:"label"`
+	Text   string `json:"text"`
+	Submit bool   `json:"submit"`
+	// Custom marks entries from the session YAML.
+	Custom bool `json:"custom,omitempty"`
+}
+
+// GetCommands returns the harness's built-in command shortcuts, then the
+// `commands` for that harness in ~/.tau_shell/config.yaml (all sessions), then
+// the session YAML's own `commands`. Both files are read on every call, so
+// edits show the next time the menu opens. A later entry replaces an earlier
+// one with the same label.
+func (application *App) GetCommands(sessionID string) (items []CommandItem, err error) {
+	defer func() {
+		if err != nil {
+			diagnostics.Error("load command shortcuts failed", err, "session_id", sessionID)
+		}
+	}()
+	config, err := session.FindConfig(application.configDirectory, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	settings, err := appconfig.Load(application.settingsPath())
+	if err != nil {
+		return nil, err
+	}
+	var builtin []tools.Command
+	if spec, ok := tools.Lookup(tools.ID(config.Tool)); ok && spec.Widgets != nil {
+		builtin = spec.Widgets.Commands
+	}
+	return mergeCommands(builtin, settings.Commands[string(config.Tool)], config.Commands), nil
+}
+
+// OpenCommandsFile adds the commented commands section to the app settings
+// file when it has none, then opens it in the default editor.
+func (application *App) OpenCommandsFile() (err error) {
+	defer func() {
+		if err != nil {
+			diagnostics.Error("open command shortcuts file failed", err)
+		}
+	}()
+	return application.openEditableFile(application.settingsPath(), appconfig.EnsureCommandsExample)
+}
+
+func mergeCommands(builtin []tools.Command, layers ...[]session.Command) []CommandItem {
+	items := make([]CommandItem, 0, len(builtin))
+	for _, command := range builtin {
+		items = append(items, CommandItem{Label: command.Label, Text: command.Text, Submit: true})
+	}
+	for _, custom := range layers {
+		for _, command := range custom {
+			item := CommandItem{Label: command.Label, Text: command.Text, Submit: command.Submit == nil || *command.Submit, Custom: true}
+			replaced := false
+			for index := range items {
+				if strings.EqualFold(items[index].Label, command.Label) {
+					items[index], replaced = item, true
+					break
+				}
+			}
+			if !replaced {
+				items = append(items, item)
+			}
+		}
+	}
+	return items
 }
 
 // GetGitBranch returns the session working directory's current git branch,

@@ -1,9 +1,11 @@
 import { Fragment, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useEscape } from "./useEscape";
-import { app, HarnessWidgets, ResolvedPreset, Session } from "./bridge";
+import { app, CommandItem, HarnessWidgets, ResolvedPreset, Session } from "./bridge";
 import { hasCueSignal, type SendPlan } from "./attention";
 import { QueuePanel, useQueueLength } from "./queuePanel";
 import { Icon } from "./icons";
+import { costBadge, fallbackMenu, rankingStatus, scoreBadge, splitModels, topModelCount } from "./modelMenu";
+import type { ModelMenu, ModelOption } from "./bridge";
 
 // What to do with text bound for the harness, given what its own UI is showing.
 //  - "blocked": a permission/selection prompt is open; typed text could answer it.
@@ -62,9 +64,10 @@ export function fuzzyScore(query: string, text: string): number {
   return 100 + gaps;
 }
 
-function ToolbarMenu({ label, title, disabled, up, className, onOpen, children }: {
+function ToolbarMenu({ label, title, heading, disabled, up, className, onOpen, children }: {
   label: ReactNode;
   title: string;
+  heading?: string;
   disabled?: boolean;
   up?: boolean;
   className?: string;
@@ -84,7 +87,7 @@ function ToolbarMenu({ label, title, disabled, up, className, onOpen, children }
   return <div className="toolbar-menu" ref={root}>
     <button className={`text-button terminal-action icon-button${className ? ` ${className}` : ""}`} aria-haspopup="menu" aria-expanded={open} disabled={disabled} title={title} aria-label={title}
       onClick={() => { if (!open) onOpen?.(); setOpen(!open); }}>{label}</button>
-    {open && <div className={`toolbar-popover ${up ? "up" : ""}`} role="menu">{children(() => setOpen(false))}</div>}
+    {open && <div className={`toolbar-popover ${up ? "up" : ""}`} role="menu">{heading && <div className="toolbar-popover-head"><strong>{heading}</strong></div>}{children(() => setOpen(false))}</div>}
   </div>;
 }
 
@@ -101,7 +104,13 @@ export function HarnessToolbar({ session, widgets, modelSupported, send, onError
 }) {
   const [presets, setPresets] = useState<ResolvedPreset[] | null>(null);
   const [presetError, setPresetError] = useState("");
+  const [commands, setCommands] = useState<CommandItem[] | null>(null);
+  const loadCommands = () => { app().GetCommands(session.id).then((list) => setCommands(list ?? null)).catch(() => setCommands(null)); };
   const [customModel, setCustomModel] = useState("");
+  const [modelMenu, setModelMenu] = useState<ModelMenu | null>(null);
+  const [modelNote, setModelNote] = useState("");
+  const modelTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(modelTimer.current), []);
   const [confirmClear, setConfirmClear] = useState(false);
   useEscape(() => setConfirmClear(false), confirmClear);
   const queued = useQueueLength(session.id);
@@ -117,8 +126,24 @@ export function HarnessToolbar({ session, widgets, modelSupported, send, onError
     else send(`/model ${id}`, true, `/model ${id}`);
     close();
   };
+  const loadModels = (refresh = false) => {
+    window.clearTimeout(modelTimer.current);
+    const request = refresh ? app().RefreshModels(session.tool) : app().ListModels(session.tool);
+    request
+      .then((menu) => {
+        setModelMenu(menu);
+        setModelNote(refresh ? "Refreshed." : "");
+        if (menu.probing) modelTimer.current = window.setTimeout(() => loadModels(), 3000);
+      })
+      .catch(() => { setModelMenu(fallbackMenu(widgets.models)); setModelNote(refresh ? "Refresh failed; showing the built-in list." : ""); });
+  };
+  const modelRow = (option: ModelOption, close: () => void) => <button role="menuitem" key={option.id} onClick={() => sendModel(option.id, close)}
+    title={option.ranked ? `${option.meiName ?? option.label}: MEI rank ${option.rank}, score ${option.score.toFixed(1)}, cost ${option.cost}x. ${option.confidence ?? ""} Relative ranking; small gaps are not meaningful.` : option.id}>
+    <span className="model-name">{option.label}</span>
+    {option.ranked && <small className="model-badges"><span className="model-score">{scoreBadge(option)}</span>{costBadge(option) && <span className="model-cost">{costBadge(option)}</span>}</small>}
+  </button>;
   return <div className="harness-actions">
-    <ToolbarMenu label={<Icon name="prompts" />} title="Prompts: send a saved prompt" onOpen={loadPresets}>
+    <ToolbarMenu heading="Prompt presets" label={<Icon name="prompts" />} title="Prompts: send a saved prompt" onOpen={loadPresets}>
       {(close) => <>
         {presetError && <div className="toolbar-popover-note error">{presetError}</div>}
         {presets === null && <div className="toolbar-popover-note">Loading...</div>}
@@ -132,18 +157,34 @@ export function HarnessToolbar({ session, widgets, modelSupported, send, onError
         <button role="menuitem" onClick={() => { app().OpenPresetsFile().catch(onError); close(); }}>Edit presets...</button>
       </>}
     </ToolbarMenu>
-    {hasCueSignal(session.tool) && <ToolbarMenu className={queued > 0 ? "queue-nonempty" : undefined} label={<><Icon name="queue" />{queued > 0 && <span className="icon-badge">{queued}</span>}</>} title={queued > 0 ? `Queue (${queued}): prompts to send when the harness is idle` : "Queue: prompts to send when the harness is idle"} onOpen={loadPresets}>
+    {hasCueSignal(session.tool) && <ToolbarMenu heading="Queued prompts" className={queued > 0 ? "queue-nonempty" : undefined} label={<><Icon name="queue" />{queued > 0 && <span className="icon-badge">{queued}</span>}</>} title={queued > 0 ? `Queue (${queued}): prompts to send when the harness is idle` : "Queue: prompts to send when the harness is idle"} onOpen={loadPresets}>
       {() => <QueuePanel session={session} presets={presets} />}
     </ToolbarMenu>}
-    <ToolbarMenu up label={<Icon name="commands" />} title="Commands: send a harness slash command">
-      {(close) => widgets.commands.map((command) => <button role="menuitem" key={command.text} title={command.text}
-        onClick={() => { send(command.text, true, command.text); close(); }}>{command.label}<small>{command.text}</small></button>)}
+    <ToolbarMenu up heading="Command shortcuts" label={<Icon name="commands" />} title="Commands: send a harness slash command" onOpen={loadCommands}>
+      {(close) => <>
+        {(commands ?? widgets.commands.map((command): CommandItem => ({ ...command, submit: true }))).map((command) => <button role="menuitem" key={command.label} title={command.text}
+          onClick={() => { send(command.text, command.submit, command.text); close(); }}>{command.label}<small>{command.text}</small></button>)}
+        <hr />
+        <button role="menuitem" title="Opens ~/.tau_shell/config.yaml. Add harness commands under commands:; changes show the next time this menu opens." onClick={() => { app().OpenCommandsFile().catch(onError); close(); }}>Edit commands...</button>
+      </>}
     </ToolbarMenu>
-    {modelSupported && <ToolbarMenu up label={<Icon name="model" />} title="Model: ask the harness to switch model (sends /model)">
+    {modelSupported && <ToolbarMenu up heading="Popular models" label={<Icon name="model" />} title="Model: ask the harness to switch model (sends /model)" onOpen={() => loadModels()}>
       {(close) => <>
         <button role="menuitem" onClick={() => { send(widgets.modelPicker ?? "/model", true, widgets.modelPicker ?? "/model"); close(); }}>Open the harness model picker<small>{widgets.modelPicker ?? "/model"}</small></button>
         <hr />
-        {widgets.models.map((model) => <button role="menuitem" key={model} onClick={() => sendModel(model, close)}>{model}</button>)}
+        {(() => {
+          const menu = modelMenu ?? fallbackMenu(widgets.models);
+          const { top, other, hidden } = splitModels(menu.options, topModelCount);
+          return <>
+            {top.length > 0 && <div className="toolbar-popover-note">Top coding models (MEI)</div>}
+            {top.map((option) => modelRow(option, close))}
+            {top.length > 0 && other.length > 0 && <div className="toolbar-popover-note">Other models</div>}
+            {other.map((option) => modelRow(option, close))}
+            {hidden > 0 && <div className="toolbar-popover-note">{hidden} more; use the custom ID below.</div>}
+            <div className="toolbar-popover-note model-status">{menu.probing ? "Checking installed models... " : ""}{rankingStatus(menu)}{modelNote ? ` ${modelNote}` : ""}</div>
+            <button role="menuitem" onClick={() => loadModels(true)}>Refresh ranking and models</button>
+          </>;
+        })()}
         <form className="toolbar-popover-form" onSubmit={(event) => { event.preventDefault(); sendModel(customModel, close); }}>
           <input value={customModel} onChange={(event) => setCustomModel(event.target.value)} placeholder={widgets.modelPicker ? "Search text" : "Custom model ID"} aria-label={widgets.modelPicker ? "Model search text" : "Custom model ID"} />
           <button type="submit" disabled={!customModel.trim()}>Send</button>

@@ -45,3 +45,7 @@ The file preview colors code with highlight.js (BSD-3-Clause License, Copyright 
 ## go-qrcode
 
 The pairing QR code is drawn with github.com/skip2/go-qrcode (MIT License, Copyright (c) 2014 Tom Harwood), <https://github.com/skip2/go-qrcode>.
+
+## Models Engineering Index (MEI)
+
+The Model menu ranks coding models using the public Models Engineering Index, <https://git-aarvin.github.io/mei/> (project by Aarvin; its repository declares the 0BSD license). TauShell reads the published page, may be offline from it, and ships a small dated snapshot as a fallback.
