@@ -157,7 +157,7 @@ export function HarnessToolbar({ session, widgets, modelSupported, send, onError
     {hasCueSignal(session.tool) && <ToolbarMenu heading="Queued prompts" className={queued > 0 ? "queue-nonempty" : undefined} label={<><Icon name="queue" />{queued > 0 && <span className="icon-badge">{queued}</span>}</>} title={queued > 0 ? `Queue (${queued}): prompts to send when the harness is idle` : "Queue: prompts to send when the harness is idle"} onOpen={loadPresets}>
       {() => <QueuePanel session={session} presets={presets} />}
     </ToolbarMenu>}
-    <ToolbarMenu up heading="Command shortcuts" label={<Icon name="commands" />} title="Commands: send a harness slash command" onOpen={loadCommands}>
+    <ToolbarMenu heading="Command shortcuts" label={<Icon name="commands" />} title="Commands: send a harness slash command" onOpen={loadCommands}>
       {(close) => <>
         {(commands ?? widgets.commands.map((command): CommandItem => ({ ...command, submit: true }))).map((command) => <button role="menuitem" key={command.label} title={command.text}
           onClick={() => { send(command.text, command.submit, command.text); close(); }}>{command.label}<small>{command.text}</small></button>)}
@@ -165,7 +165,7 @@ export function HarnessToolbar({ session, widgets, modelSupported, send, onError
         <button role="menuitem" title="Opens ~/.tau_shell/config.yaml. Add harness commands under commands:; changes show the next time this menu opens." onClick={() => { app().OpenCommandsFile().catch(onError); close(); }}>Edit commands...</button>
       </>}
     </ToolbarMenu>
-    {modelSupported && <ToolbarMenu up heading="Popular models" label={<Icon name="model" />} title="Model: ask the harness to switch model (sends /model)" onOpen={() => loadModels()}>
+    {modelSupported && <ToolbarMenu heading="Popular models" label={<Icon name="model" />} title="Model: ask the harness to switch model (sends /model)" onOpen={() => loadModels()}>
       {(close) => <>
         <button role="menuitem" onClick={() => { send(widgets.modelPicker ?? "/model", true, widgets.modelPicker ?? "/model"); close(); }}>Open the harness model picker<small>{widgets.modelPicker ?? "/model"}</small></button>
         <hr />
